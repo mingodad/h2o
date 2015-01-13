@@ -88,7 +88,7 @@ static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static SSL_CTX *ssl_ctx;
 
-#if H2O_USE_LIBUV
+#if H2O_USE_LIBUV2
 
 static void on_accept(uv_stream_t *listener, int status)
 {
@@ -173,7 +173,7 @@ static int create_listener(void)
         return -1;
     }
 
-    sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
+    sock = h2o_evloop_socket_create(ctx.loop, fd, &addr, sizeof(addr), H2O_SOCKET_FLAG_IS_ACCEPT);
     h2o_socket_read_start(sock, on_accept);
 
     return 0;
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
     h2o_reproxy_register(hostconf);
 #endif
 
-#if H2O_USE_LIBUV
+#if H2O_USE_LIBUV2
     uv_loop_t loop;
     uv_loop_init(&loop);
     h2o_context_init(&ctx, &loop, &config);
@@ -250,7 +250,7 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-#if H2O_USE_LIBUV
+#if H2O_USE_LIBUV2
     uv_run(ctx.loop, UV_RUN_DEFAULT);
 #else
     while (h2o_evloop_run(ctx.loop) == 0)

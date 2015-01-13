@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="h2o" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="h2o" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="h2o" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+			<Target title="Profile">
+				<Option output="h2o" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+					<Add option="-pg" />
+					<Add option="-g" />
+				</Compiler>
+				<Linker>
+					<Add option="-pg" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-mtune=native" />
+			<Add option="-D_GNU_SOURCE=1" />
+			<Add option="-DWITH_LUA=1" />
+			<Add directory="include" />
+			<Add directory="deps/picohttpparser" />
+			<Add directory="deps/yoml" />
+			<Add directory="deps/klib" />
+			<Add directory="../../../../local/luajit/include/luajit-2.0" />
+		</Compiler>
+		<Linker>
+			<Add option="-L../../../../local/luajit/lib" />
+			<Add library="ssl" />
+			<Add library="crypto" />
+			<Add library="pthread" />
+			<Add library="m" />
+			<Add library="dl" />
+			<Add library="yaml" />
+			<Add library="z" />
+			<Add library="luajit-5.1" />
+		</Linker>
+		<Unit filename="deps/klib/bgzf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/bgzf.h" />
+		<Unit filename="deps/klib/kbit.h" />
+		<Unit filename="deps/klib/kbtree.h" />
+		<Unit filename="deps/klib/kgraph.h" />
+		<Unit filename="deps/klib/khash.h" />
+		<Unit filename="deps/klib/khmm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/khmm.h" />
+		<Unit filename="deps/klib/klist.h" />
+		<Unit filename="deps/klib/kmath.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/kmath.h" />
+		<Unit filename="deps/klib/knetfile.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/knetfile.h" />
+		<Unit filename="deps/klib/knhx.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/knhx.h" />
+		<Unit filename="deps/klib/kopen.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/ksa.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/kseq.h" />
+		<Unit filename="deps/klib/kson.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/kson.h" />
+		<Unit filename="deps/klib/ksort.h" />
+		<Unit filename="deps/klib/kstring.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/kstring.h" />
+		<Unit filename="deps/klib/ksw.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/ksw.h" />
+		<Unit filename="deps/klib/kthread.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/klib/kurl.h" />
+		<Unit filename="deps/klib/kvec.h" />
+		<Unit filename="deps/picohttpparser/picohttpparser.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yoml/yoml-parser.h" />
+		<Unit filename="deps/yoml/yoml.h" />
+		<Unit filename="include/h2o.h" />
+		<Unit filename="include/h2o/configurator.h" />
+		<Unit filename="include/h2o/http1.h" />
+		<Unit filename="include/h2o/http1client.h" />
+		<Unit filename="include/h2o/http2.h" />
+		<Unit filename="include/h2o/linklist.h" />
+		<Unit filename="include/h2o/memory.h" />
+		<Unit filename="include/h2o/serverutil.h" />
+		<Unit filename="include/h2o/socket.h" />
+		<Unit filename="include/h2o/socket/evloop.h" />
+		<Unit filename="include/h2o/socket/uv-binding.h" />
+		<Unit filename="include/h2o/socketpool.h" />
+		<Unit filename="include/h2o/string_.h" />
+		<Unit filename="include/h2o/timeout.h" />
+		<Unit filename="include/h2o/token.h" />
+		<Unit filename="include/h2o/version.h" />
+		<Unit filename="include/h2o/websocket.h" />
+		<Unit filename="lib/common/http1client.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/memory.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/serverutil.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/socket.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/socket/evloop.c.h" />
+		<Unit filename="lib/common/socket/evloop/epoll.c.h" />
+		<Unit filename="lib/common/socket/evloop/kqueue.c.h" />
+		<Unit filename="lib/common/socket/evloop/select.c.h" />
+		<Unit filename="lib/common/socket/uv-binding.c.h" />
+		<Unit filename="lib/common/socketpool.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/string.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/timeout.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/core/config.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/core/configurator.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/core/context.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/core/headers.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/core/request.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/core/token.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/core/token_table.h" />
+		<Unit filename="lib/core/util.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/access_log.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/chunked.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/configurator/access_log.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/configurator/expires.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/configurator/file.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/configurator/proxy.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/expires.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/file.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/mimemap.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/proxy.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/http1.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/http2/connection.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/http2/frame.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/http2/hpack.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/http2/hpack_huffman_table.h" />
+		<Unit filename="lib/http2/hpack_static_table.h" />
+		<Unit filename="lib/http2/internal.h" />
+		<Unit filename="lib/http2/stream.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/sq_h2o.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<lib_finder disable_auto="1" />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

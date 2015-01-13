@@ -44,6 +44,13 @@ extern "C" {
 #include "h2o/timeout.h"
 #include "h2o/version.h"
 
+
+#ifdef WITH_LUA
+#include "lauxlib.h"
+#include "lua.h"
+#include "lualib.h"
+#endif // WITH_LUA
+
 #ifndef H2O_MAX_HEADERS
 # define H2O_MAX_HEADERS 100
 #endif
@@ -96,7 +103,7 @@ typedef struct st_h2o_handler_t {
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
 } h2o_handler_t;
- 
+
 /**
  * basic structure of a filter (an object that MAY modify a response)
  * The filters should register themselves to h2o_context_t::filters.
@@ -268,6 +275,10 @@ struct st_h2o_context_t {
         struct timeval tv_at;
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
+
+#ifdef WITH_LUA
+    lua_State * L;
+#endif // WITH_LUA
 };
 
 /**

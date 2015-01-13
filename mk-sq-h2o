@@ -1,0 +1,32 @@
+MYCC=${1:-gcc}
+$MYCC -O2 -g -Wall -Wno-unused-function  \
+    -D_GNU_SOURCE -Iinclude -Ideps/yoml -Ideps/picohttpparser -Ideps/klib \
+    CMakeFiles/h2o.dir/deps/picohttpparser/picohttpparser.c.o \
+    CMakeFiles/h2o.dir/lib/access_log.c.o \
+    CMakeFiles/h2o.dir/lib/chunked.c.o \
+    CMakeFiles/h2o.dir/lib/context.c.o \
+    CMakeFiles/h2o.dir/lib/config.c.o \
+    CMakeFiles/h2o.dir/lib/configurator.c.o \
+    CMakeFiles/h2o.dir/lib/configurator/access_log.c.o \
+    CMakeFiles/h2o.dir/lib/configurator/file.c.o \
+    CMakeFiles/h2o.dir/lib/configurator/proxy.c.o \
+    CMakeFiles/h2o.dir/lib/file.c.o CMakeFiles/h2o.dir/lib/headers.c.o \
+    CMakeFiles/h2o.dir/lib/http1.c.o \
+    CMakeFiles/h2o.dir/lib/http1client.c.o \
+    CMakeFiles/h2o.dir/lib/http2/connection.c.o \
+    CMakeFiles/h2o.dir/lib/http2/frame.c.o \
+    CMakeFiles/h2o.dir/lib/http2/hpack.c.o \
+    CMakeFiles/h2o.dir/lib/http2/stream.c.o \
+    CMakeFiles/h2o.dir/lib/memory.c.o \
+    CMakeFiles/h2o.dir/lib/mimemap.c.o \
+    CMakeFiles/h2o.dir/lib/proxy.c.o \
+    CMakeFiles/h2o.dir/lib/request.c.o \
+    CMakeFiles/h2o.dir/lib/socket.c.o \
+    CMakeFiles/h2o.dir/lib/socketpool.c.o \
+    CMakeFiles/h2o.dir/lib/string.c.o \
+    CMakeFiles/h2o.dir/lib/timeout.c.o \
+    CMakeFiles/h2o.dir/lib/token.c.o \
+    CMakeFiles/h2o.dir/lib/util.c.o \
+    CMakeFiles/h2o.dir/lib/serverutil.c.o \
+    src/sq_h2o.c  -o sq_h2o \
+    -rdynamic -lssl -lcrypto -lyaml -lpthread -ldl

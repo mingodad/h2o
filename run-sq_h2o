@@ -1,0 +1,2 @@
+ulimit -n 4096
+./sq_h2o --conf=examples/h2o/h2o-dad.conf
