@@ -165,3 +165,27 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
 
     return logger;
 }
+
+void register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_handler_ptr on_req)
+{
+    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
+    h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
+    handler->on_req = on_req;
+#if DEBUG
+    size_t j;
+    printf("register_handler : %s : %s\n", hostconf->hostname.base, path);
+    for (j = 0; j != hostconf->paths.size; ++j) {
+        printf("Paths : %s : %s\n", hostconf->hostname.base, hostconf->paths.entries[j].path.base);
+    }
+#endif
+}
+
+void register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_req_handler_ptr on_req)
+{
+    size_t i;
+    //printf("register_handler : %s : %d\n", path, (uint)globalconf->hosts.size);
+    for (i = 0; i != globalconf->hosts.size; ++i) {
+        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
+        register_handler_on_host(hostconf, path, on_req);
+    }
+}

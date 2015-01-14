@@ -1,6 +1,26 @@
 print("Lua thread starting ...")
 local str_format = string.format
 
+--per thread initialization
+function h2oOnThreadStart(ctx)
+	ctx:register_handler_global("/LUA/")
+	--ctx:register_handler_on_host("/LUA/", "www.example.com")
+end
+
+--per thread finalization
+function h2oOnThreadEnd(ctx)
+end
+
+--per request call
+function h2oManageRequest(req)
+	local host = req:host() --also req:authority()
+	local path = req:path()
+	if path:find("/LUA/", 1, true) then
+		return myLuaRequestHandler(req, host, path)
+	end
+	return 0
+end
+
 local page_template = [==[
 <html>
 <body>
@@ -27,14 +47,14 @@ local function sendForm(req, name, form_name)
 	req:send(page, "text/html")
 end
 
-function h2o_manage_request(req)
+
+function myLuaRequestHandler(req, host, path)
 	
 	local method = req:method()
+	local name = path:match("/LUA/(.+)")
 	if method == "GET" then
-		local name = req:path():match("/lua/(.+)")
 		sendForm(req, name .. " GET", "")
 	elseif method == "POST" then
-		local name = req:path():match("/lua/(.+)")
 		sendForm(req, name .. " POST", req:entity())	
 	end
 	

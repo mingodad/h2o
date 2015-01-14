@@ -1076,54 +1076,6 @@ static void setup_configurators(struct config_t *conf)
     h2o_proxy_register_configurator(&conf->globalconf);
 }
 
-static void register_handler(h2o_globalconf_t *globalconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
-{
-    size_t i, j;
-
-    //printf("register_handler : %s : %d\n", path, (uint)globalconf->hosts.size);
-    for (i = 0; i != globalconf->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
-        printf("register_handler : %s : %s\n", hostconf->hostname.base, path);
-        h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
-        h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
-        handler->on_req = on_req;
-        for (j = 0; j != hostconf->paths.size; ++j) {
-            printf("Paths : %s : %s\n", hostconf->hostname.base, hostconf->paths.entries[j].path.base);
-        }
-    }
-}
-
-static int mylua_handler(h2o_handler_t *self, h2o_req_t *req)
-{
-    //printf("===Request path = %s\n", req->path.base);
-#ifdef WITH_LUA
-    h2o_lua_handle_request(req);
-#endif // WITH_LUA
-
-    return 0;
-}
-
-static int myroot_handler(h2o_handler_t *self, h2o_req_t *req)
-{
-    static h2o_generator_t generator = { NULL, NULL };
-    //printf("hello_handler : %s : %d\n", req->method.base, (uint)req->method.len);
-    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
-        return -1;
-    //printf("===Request path = %s\n", req->path.base);
-    size_t body_size = 1024;
-    h2o_iovec_t body;
-    body.base = h2o_mem_alloc_pool(&req->pool, body_size);
-    req->res.content_length = body.len = snprintf(body.base, body_size, "Hello %.*s", (int)req->path.len, req->path.base);
-    req->res.status = 200;
-    req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-    h2o_start_response(req, &generator);
-    h2o_send(req, &body, 1, 1);
-
-    return 0;
-}
-
-
 int main(int argc, char **argv)
 {
     struct config_t config = {
@@ -1261,10 +1213,11 @@ int main(int argc, char **argv)
         }
     }
 
+#ifdef WITH_LUA
     //register custom global handlers after reading the config file
-    register_handler(&config.globalconf, "/hello", myroot_handler);
-    register_handler(&config.globalconf, "/lua", mylua_handler);
-
+    register_handler_global(&config.globalconf, "/C/", my_h2o_c_handler);
+    //register_handler_global(&config.globalconf, "/LUA/", my_h2o_lua_handler);
+#endif // WITH_LUA
     setup_signal_handlers();
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());

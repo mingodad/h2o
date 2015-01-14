@@ -1,2 +1,0 @@
-print("Lua thread ending ...")
-

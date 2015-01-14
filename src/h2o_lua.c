@@ -1,7 +1,15 @@
-static const char REQUEST_METATABLE[] = "h2o_request";
+
+static pthread_mutex_t h2o_lua_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static const char H2O_REQUEST_METATABLE[] = "_h2o_request";
 #define CHECK_H2O_REQUEST() \
     h2o_req_t *req = *(h2o_req_t **) \
-    luaL_checkudata(L, 1, REQUEST_METATABLE)
+    luaL_checkudata(L, 1, H2O_REQUEST_METATABLE)
+
+static const char H2O_CONTEXT_METATABLE[] = "_h2o_context";
+#define CHECK_H2O_CONTEXT() \
+    h2o_context_t *ctx = *(h2o_context_t **) \
+    luaL_checkudata(L, 1, H2O_CONTEXT_METATABLE)
 
 static int show_errors_on_stdout = 1;
 //printf("%s:%d:%d\n", __FILE__,__LINE__, lua_gettop(L));
@@ -145,6 +153,7 @@ static int lua_h2o_req_send(lua_State *L)
 
 static const luaL_reg reqFunctions[] = {
     LUA_REG_REQ_GET_STR_FUNC(authority),
+    {"host", lua_h2o_req_get_str_authority},
     LUA_REG_REQ_GET_STR_FUNC(method),
     LUA_REG_REQ_GET_STR_FUNC(path),
     LUA_REG_REQ_GET_STR_FUNC(path_normalized),
@@ -162,6 +171,83 @@ static const luaL_reg reqFunctions[] = {
     { NULL, NULL }
 };
 
+static int h2o_lua_call_with_context(h2o_context_t *ctx, const char *func_name)
+{
+    lua_State *L = ctx->L;
+    int result = 0;
+    if(L)
+    {
+        int saved_top = lua_gettop(L);
+        lua_pushcfunction(L, traceback);  /* push traceback function */
+        int error_func = lua_gettop(L);
+
+        lua_getglobal(L, func_name);
+        if(lua_isfunction(L,-1)) {
+            *(h2o_context_t **)lua_newuserdata(L, sizeof (h2o_context_t *)) = ctx;
+            luaL_getmetatable(L, H2O_CONTEXT_METATABLE);
+            lua_setmetatable(L, -2);
+
+            if(lua_pcall(L, 1, 1, error_func)) {
+                size_t error_len;
+                const char *error_msg = lua_tolstring(L, -1, &error_len);
+                if(show_errors_on_stdout) printf("%s\n", error_msg);
+                //write_error_message(conn, error_msg, error_len);
+                result = 0;
+            } else {
+                result = lua_toboolean(L, -1) ? 1 : 0;
+            }
+        };
+        lua_settop(L, saved_top);
+    }
+
+    return result;
+}
+
+static int my_h2o_lua_handler(h2o_handler_t *self, h2o_req_t *req);
+
+static int lua_h2o_context_register_handler_on_host(lua_State *L)
+{
+    CHECK_H2O_CONTEXT();
+    h2o_iovec_t host;
+    const char *path = luaL_checkstring(L, 2);
+    host.base = luaL_checklstring(L, 3, &host.len);
+    int result = 0;
+
+    size_t i;
+    h2o_globalconf_t *globalconf = ctx->globalconf;
+    //exclusive access to prevent multiple threads changing at the same time
+    pthread_mutex_lock(&h2o_lua_mutex);
+    for (i = 0; i != globalconf->hosts.size; ++i) {
+        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
+        if(h2o_lcstris(hostconf->hostname.base, hostconf->hostname.len, host.base, host.len))
+        {
+            register_handler_on_host(hostconf, path, my_h2o_lua_handler);
+            result = 1;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&h2o_lua_mutex);
+    lua_pushboolean(L, result);
+    return 1;
+}
+
+static int lua_h2o_context_register_handler_global(lua_State *L)
+{
+    CHECK_H2O_CONTEXT();
+    const char *path = luaL_checkstring(L, 2);
+    //exclusive access to prevent multiple threads changing at the same time
+    pthread_mutex_lock(&h2o_lua_mutex);
+    register_handler_global(ctx->globalconf, path, my_h2o_lua_handler);
+    pthread_mutex_unlock(&h2o_lua_mutex);
+    return 0;
+}
+
+static const luaL_reg contextFunctions[] = {
+    {"register_handler_on_host", lua_h2o_context_register_handler_on_host},
+    {"register_handler_global", lua_h2o_context_register_handler_global},
+    { NULL, NULL }
+};
+
 int
 #if defined(_WIN32)
 __declspec(dllexport)
@@ -170,12 +256,22 @@ luaopen_h2o(lua_State *L)
 {
     int i;
     /* Create the metatable and put it on the stack. */
-    luaL_newmetatable(L, REQUEST_METATABLE);
+    luaL_newmetatable(L, H2O_REQUEST_METATABLE);
     lua_newtable(L);
 	for (i=0; reqFunctions[i].name; i++)
 	{
 		lua_pushcfunction(L, reqFunctions[i].func);
 		lua_setfield(L, -2, reqFunctions[i].name);
+	}
+	lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
+
+    luaL_newmetatable(L, H2O_CONTEXT_METATABLE);
+    lua_newtable(L);
+	for (i=0; contextFunctions[i].name; i++)
+	{
+		lua_pushcfunction(L, contextFunctions[i].func);
+		lua_setfield(L, -2, contextFunctions[i].name);
 	}
 	lua_setfield(L, -2, "__index");
     lua_pop(L, 1);
@@ -231,14 +327,18 @@ static void h2o_lua_open_libs(h2o_context_t *ctx) {
 
         //int saved_top = lua_gettop(L);
         (void) luaL_dofile(L, "h2o-on-thread-start.lua");
+        h2o_lua_call_with_context(ctx, "h2oOnThreadStart");
         //lua_settop(L, saved_top);
     }
 }
 
 static void h2o_lua_close_libs(h2o_context_t *ctx) {
     lua_State *L = ctx->L;
-    (void) luaL_dofile(L, "h2o-on-thread-end.lua");
-    lua_close(L);
+    if(L)
+    {
+        h2o_lua_call_with_context(ctx, "h2oOnThreadEnd");
+        lua_close(L);
+    }
 }
 
 
@@ -252,10 +352,10 @@ static int h2o_lua_handle_request(h2o_req_t *req)
         lua_pushcfunction(L, traceback);  /* push traceback function */
         int error_func = lua_gettop(L);
 
-        lua_getglobal(L, "h2o_manage_request");
+        lua_getglobal(L, "h2oManageRequest");
         if(lua_isfunction(L,-1)) {
             *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
-            luaL_getmetatable(L, REQUEST_METATABLE);
+            luaL_getmetatable(L, H2O_REQUEST_METATABLE);
             lua_setmetatable(L, -2);
 
             if(lua_pcall(L, 1, 1, error_func)) {
@@ -273,3 +373,31 @@ static int h2o_lua_handle_request(h2o_req_t *req)
 
     return result;
 }
+
+static int my_h2o_lua_handler(h2o_handler_t *self, h2o_req_t *req)
+{
+    //printf("===Request path = %s\n", req->path.base);
+    h2o_lua_handle_request(req);
+    return 0;
+}
+
+static int my_h2o_c_handler(h2o_handler_t *self, h2o_req_t *req)
+{
+    static h2o_generator_t generator = { NULL, NULL };
+    //printf("hello_handler : %s : %d\n", req->method.base, (uint)req->method.len);
+    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+        return -1;
+    //printf("===Request path = %s\n", req->path.base);
+    size_t body_size = 1024;
+    h2o_iovec_t body;
+    body.base = h2o_mem_alloc_pool(&req->pool, body_size);
+    req->res.content_length = body.len = snprintf(body.base, body_size, "Hello %.*s", (int)req->path.len, req->path.base);
+    req->res.status = 200;
+    req->res.reason = "OK";
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    h2o_start_response(req, &generator);
+    h2o_send(req, &body, 1, 1);
+
+    return 0;
+}
+
