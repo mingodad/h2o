@@ -27,18 +27,19 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     h2o_hpack_header_table_t header_table;
     h2o_req_t req;
     h2o_iovec_t in;
-    int r, allow_psuedo;
+    int r, pseudo_headers_map;
+    size_t content_length;
+    const char *err_desc;
 
     memset(&header_table, 0, sizeof(header_table));
     header_table.hpack_capacity = 4096;
 
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
-    allow_psuedo = 1;
     in = first_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t *)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+                                &err_desc);
     ok(r == 0);
-    ok(allow_psuedo == 1);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method.len == 3);
@@ -53,11 +54,10 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
 
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
-    allow_psuedo = 1;
     in = second_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t *)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+                                &err_desc);
     ok(r == 0);
-    ok(allow_psuedo == 0);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method.len == 3);
@@ -67,18 +67,17 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(req.scheme.len == 4);
     ok(memcmp(req.scheme.base, H2O_STRLIT("http")) == 0);
     ok(req.headers.size == 1);
-    ok(h2o_lcstris(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
+    ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("no-cache")));
 
     h2o_mem_clear_pool(&req.pool);
 
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
-    allow_psuedo = 1;
     in = third_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t *)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+                                &err_desc);
     ok(r == 0);
-    ok(allow_psuedo == 0);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method.len == 3);
@@ -88,7 +87,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(req.scheme.len == 5);
     ok(memcmp(req.scheme.base, H2O_STRLIT("https")) == 0);
     ok(req.headers.size == 1);
-    ok(h2o_lcstris(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
+    ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("custom-value")));
 
     h2o_hpack_dispose_header_table(&header_table);
@@ -113,6 +112,8 @@ static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res
 void test_lib__http2__hpack(void)
 {
     h2o_mem_pool_t pool;
+    const char *err_desc;
+
     h2o_mem_init_pool(&pool);
 
     note("decode_int");
@@ -164,7 +165,7 @@ void test_lib__http2__hpack(void)
         in = h2o_iovec_init(
             H2O_STRLIT("\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0d\x63\x75\x73\x74\x6f\x6d\x2d\x68\x65\x61\x64\x65\x72"));
         const uint8_t *p = (const uint8_t *)in.base;
-        r = decode_header(&pool, &result, &header_table, &p, p + in.len);
+        r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name->len == 10);
         ok(strcmp(result.name->base, "custom-key") == 0);
@@ -185,7 +186,7 @@ void test_lib__http2__hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x04\x0c\x2f\x73\x61\x6d\x70\x6c\x65\x2f\x70\x61\x74\x68"));
         const uint8_t *p = (const uint8_t *)in.base;
-        r = decode_header(&pool, &result, &header_table, &p, p + in.len);
+        r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name == &H2O_TOKEN_PATH->buf);
         ok(result.value->len == 12);
@@ -205,7 +206,7 @@ void test_lib__http2__hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x10\x08\x70\x61\x73\x73\x77\x6f\x72\x64\x06\x73\x65\x63\x72\x65\x74"));
         const uint8_t *p = (const uint8_t *)in.base;
-        r = decode_header(&pool, &result, &header_table, &p, p + in.len);
+        r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name->len == 8);
         ok(strcmp(result.name->base, "password") == 0);
@@ -226,7 +227,7 @@ void test_lib__http2__hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x82"));
         const uint8_t *p = (const uint8_t *)in.base;
-        r = decode_header(&pool, &result, &header_table, &p, p + in.len);
+        r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name == &H2O_TOKEN_METHOD->buf);
         ok(result.value->len == 3);

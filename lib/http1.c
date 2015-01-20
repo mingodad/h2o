@@ -50,6 +50,17 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
 static void reqread_on_read(h2o_socket_t *sock, int status);
 
+static int is_msie(h2o_req_t *req)
+{
+    ssize_t cursor = h2o_find_header(&req->headers, H2O_TOKEN_USER_AGENT, -1);
+    if (cursor == -1)
+        return 0;
+    if (h2o_strstr(req->headers.entries[cursor].value.base, req->headers.entries[cursor].value.len, H2O_STRLIT("; MSIE ")) ==
+        SIZE_MAX)
+        return 0;
+    return 1;
+}
+
 static void init_request(h2o_http1_conn_t *conn, int reinit)
 {
     if (reinit)
@@ -223,8 +234,10 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
         size_t i;
         h2o_vector_reserve(pool, (h2o_vector_t *)headers, sizeof(h2o_header_t), len);
         for (i = 0; i != len; ++i) {
-            const h2o_token_t *name_token = h2o_lookup_token(src[i].name, src[i].name_len);
-            if (name_token != NULL) {
+            const h2o_token_t *name_token;
+            /* convert to lower-case in-place */
+            h2o_strtolower((char *)src[i].name, src[i].name_len);
+            if ((name_token = h2o_lookup_token(src[i].name, src[i].name_len)) != NULL) {
                 if (name_token->is_init_header_special) {
                     if (name_token == H2O_TOKEN_HOST) {
                         host->base = (char *)src[i].value;
@@ -491,7 +504,7 @@ static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_a
 {
     size_t len = sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\ncontent-length: \r\n\r\n") + 3 +
                  strlen(req->res.reason) + H2O_TIMESTR_RFC1123_LEN + server_name_and_connection_len +
-                 sizeof("18446744073709551615") - 1;
+                 sizeof("18446744073709551615") - 1 + sizeof("cache-control: private") - 1;
     const h2o_header_t *header, *end;
 
     for (header = req->res.headers.entries, end = header + req->res.headers.size; header != end; ++header)
@@ -521,8 +534,19 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
     }
 
     { /* flatten the normal headers */
-        const h2o_header_t *header = req->res.headers.entries, *end = header + req->res.headers.size;
-        for (; header != end; ++header) {
+        size_t i;
+        for (i = 0; i != req->res.headers.size; ++i) {
+            const h2o_header_t *header = req->res.headers.entries + i;
+            if (header->name == &H2O_TOKEN_VARY->buf) {
+                /* replace Vary with Cache-Control: private; see the following URLs to understand why this is necessary
+                 * - http://blogs.msdn.com/b/ieinternals/archive/2009/06/17/vary-header-prevents-caching-in-ie.aspx
+                 * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
+                 */
+                if (is_msie(req)) {
+                    static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("private")}};
+                    header = &cache_control_private;
+                }
+            }
             memcpy(dst, header->name->base, header->name->len);
             dst += header->name->len;
             *dst++ = ':';

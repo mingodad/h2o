@@ -85,8 +85,9 @@ typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_token_t {
     h2o_iovec_t buf;
     char http2_static_table_name_index; /* non-zero if any */
-    char is_connection_specific;
+    char proxy_should_drop;
     char is_init_header_special;
+    char http2_should_reject;
 } h2o_token_t;
 
 #include "h2o/token.h"
@@ -229,6 +230,10 @@ struct st_h2o_globalconf_t {
          * specified by this property in order to limit the resources allocated to a single connection.
          */
         size_t max_concurrent_requests_per_connection;
+        /**
+         * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
+         */
+        size_t max_streams_for_priority;
     } http2;
 
     size_t _num_config_slots;
@@ -660,7 +665,16 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 
 /* built-in generators */
 
-enum { H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1 };
+enum {
+    /**
+     * enforces the http1 protocol handler to close the connection after sending the response
+     */
+    H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1,
+    /**
+     * if set, does not flush the registered response headers
+     */
+    H2O_SEND_ERROR_KEEP_HEADERS = 0x2
+};
 
 /**
  * sends the given string as the response
@@ -776,6 +790,7 @@ void h2o_file_register_configurator(h2o_globalconf_t *conf);
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
     int use_keepalive;
+    int preserve_host;
     uint64_t keepalive_timeout;
 } h2o_proxy_config_vars_t;
 
@@ -788,12 +803,12 @@ typedef struct st_h2o_proxy_location_t {
 /**
  * delegates the request to given server, rewriting the path as specified
  */
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream);
+int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream, int preserve_host);
 /**
  * delegates the request to given server, rewriting the path as specified
  */
 int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream,
-                             h2o_socketpool_t *sockpool);
+                             h2o_socketpool_t *sockpool, int preserve_host);
 /**
  * registers the reverse proxy handler to the context
  */

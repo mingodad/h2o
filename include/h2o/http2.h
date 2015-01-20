@@ -70,9 +70,14 @@ typedef struct st_h2o_hpack_header_table_t {
     size_t hpack_max_capacity; /* the value set by SETTINGS_HEADER_TABLE_SIZE */
 } h2o_hpack_header_table_t;
 
+#define H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS 1
+#define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
+#define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
+#define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
+
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
-int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src,
-                            size_t len);
+int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
+                            int *pseudo_header_exists_map, size_t *content_length, const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
 int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size,
                               h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name);
@@ -169,7 +174,6 @@ typedef struct st_h2o_http2_window_t {
 
 typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_IDLE,
-    H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_BODY,
     H2O_HTTP2_STREAM_STATE_REQ_PENDING,
@@ -180,12 +184,13 @@ typedef enum enum_h2o_http2_stream_state_t {
 
 struct st_h2o_http2_stream_t {
     uint32_t stream_id;
-    int is_half_closed;
     h2o_ostream_t _ostr_final;
     h2o_http2_stream_state_t state;
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
-    h2o_buffer_t *_req_body;
+    h2o_buffer_t *_req_headers;      /* used if CONTINUATION frame is expected */
+    h2o_buffer_t *_req_body;         /* NULL unless request body IS expected */
+    size_t _expected_content_length; /* SIZE_MAX if unknown */
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
     /* references governed by connection.c for handling various things */
@@ -211,6 +216,7 @@ struct st_h2o_http2_conn_t {
     uint32_t max_open_stream_id;
     uint32_t max_processed_stream_id;
     uint32_t num_responding_streams;
+    uint32_t num_steams_for_priority;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
     h2o_http2_conn_state_t state;
@@ -303,7 +309,8 @@ inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_htt
 {
     assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
     assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
-    stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
+    stream->state = H2O_HTTP2_STREAM_STATE_RECV_HEADERS;
+    --conn->num_steams_for_priority;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
 }
 
