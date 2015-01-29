@@ -1,6 +1,7 @@
+MYLUAJIT=$HOME/local/luajit
 MYCC=${1:-gcc}
 $MYCC -O2 -g -Wall -Wno-unused-function  \
-    -DWITH_LUA -I$HOME/local/luajit/include/luajit-2.0\
+    -DWITH_LUA -I$MYLUAJIT/include/luajit-2.1\
     -D_GNU_SOURCE -Iinclude -Ideps/yoml -Ideps/picohttpparser -Ideps/klib \
     -DH2O_ROOT="\"/usr/local\"" -DH2O_USE_EPOLL \
     CMakeFiles/h2o.dir/deps/picohttpparser/picohttpparser.c.o \
@@ -34,5 +35,5 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     CMakeFiles/h2o.dir/lib/http2/hpack.c.o \
     CMakeFiles/h2o.dir/lib/http2/stream.c.o \
     CMakeFiles/h2o.dir/lib/http2/scheduler.c.o \
-    src/sq_h2o.c  -o sq_h2o \
-    -rdynamic -L$HOME/local/luajit/lib -lluajit-5.1 -lssl -lcrypto -lyaml -lpthread -ldl
+    src/sq_h2o.c  -o h2o_lua \
+    -rdynamic -L$MYLUAJIT/lib -lluajit-5.1 -lssl -lcrypto -lyaml -lpthread -ldl -lm

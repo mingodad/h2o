@@ -1,10 +1,22 @@
 print("Lua thread starting ...")
+
+local ffi = require("ffi")
+ffi.cdef[[
+int myprintf ( const char * format, ... );
+]]
+
+ffi.C.myprintf("Hello %s!\n", "world")
+
 local str_format = string.format
+
+local lua_prefix = "/LUA/"
+local after_lua_prefix_len = #lua_prefix + 1
 
 --per thread initialization
 function h2oOnThreadStart(ctx)
-	ctx:register_handler_global("/LUA/")
-	--ctx:register_handler_on_host("/LUA/", "www.example.com")
+	ctx:register_handler_global(lua_prefix)
+	--ctx:register_handler_on_host(lua_prefix, "www.example.com")
+	ctx:sort_handler_global()
 end
 
 --per thread finalization
@@ -15,10 +27,14 @@ end
 function h2oManageRequest(req)
 	local host = req:host() --also req:authority()
 	local path = req:path()
-	if path:find("/LUA/", 1, true) then
+	--ffi.C.myprintf("The path: %s\n", path)
+	if path:find(lua_prefix, 1, true) then
+		if path:find("hello/", after_lua_prefix_len, true) then
+			return myLuaRequestHandlerHello(req, host, path)
+		end
 		return myLuaRequestHandler(req, host, path)
 	end
-	return 0
+	return 1
 end
 
 local page_template = [==[
@@ -33,6 +49,12 @@ local page_template = [==[
 </html>
 ]==]
 
+function myLuaRequestHandlerHello(req, host, path)
+	local name = path:sub(after_lua_prefix_len)
+	req:send("Hello " .. name, "text/html")
+	return 0
+end
+
 local function sendForm(req, name, form_name)
 	local greeting = str_format("Hello %s", name)
 	local page =str_format(page_template, greeting, form_name)
@@ -46,7 +68,6 @@ local function sendForm(req, name, form_name)
 	--req:send(page, 1)
 	req:send(page, "text/html")
 end
-
 
 function myLuaRequestHandler(req, host, path)
 	

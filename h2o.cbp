@@ -7,7 +7,7 @@
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="Debug">
-				<Option output="h2o" prefix_auto="1" extension_auto="1" />
+				<Option output="h2o_lua" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -16,7 +16,7 @@
 				</Compiler>
 			</Target>
 			<Target title="Release">
-				<Option output="h2o" prefix_auto="1" extension_auto="1" />
+				<Option output="h2o_lua" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Release/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -28,7 +28,7 @@
 				</Linker>
 			</Target>
 			<Target title="Profile">
-				<Option output="h2o" prefix_auto="1" extension_auto="1" />
+				<Option output="h2o_lua" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -47,6 +47,7 @@
 			<Add option="-mtune=native" />
 			<Add option="-D_GNU_SOURCE=1" />
 			<Add option="-DWITH_LUA=1" />
+			<Add option="-DH2O_USE_EPOLL=1" />
 			<Add directory="include" />
 			<Add directory="deps/picohttpparser" />
 			<Add directory="deps/yoml" />
@@ -229,8 +230,16 @@
 		<Unit filename="lib/http2/hpack_huffman_table.h" />
 		<Unit filename="lib/http2/hpack_static_table.h" />
 		<Unit filename="lib/http2/internal.h" />
+		<Unit filename="lib/http2/scheduler.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/http2/stream.c">
 			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/h2o_lua.c">
+			<Option compilerVar="CC" />
+			<Option compile="0" />
+			<Option link="0" />
 		</Unit>
 		<Unit filename="src/sq_h2o.c">
 			<Option compilerVar="CC" />

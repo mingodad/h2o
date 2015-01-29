@@ -172,6 +172,17 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
     return logger;
 }
 
+static int sort_from_longer_paths(const h2o_pathconf_t *x, const h2o_pathconf_t *y)
+{
+    size_t xlen = x->path.len, ylen = y->path.len;
+    if (xlen < ylen)
+        return 1;
+    else if (xlen > ylen)
+        return -1;
+    /* apply strcmp for stable sort */
+    return strcmp(x->path.base, y->path.base);
+}
+
 void register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_handler_ptr on_req)
 {
     size_t j, i;
@@ -202,5 +213,16 @@ void register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_
     for (i = 0; i != globalconf->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
         register_handler_on_host(hostconf, path, on_req);
+    }
+}
+
+void sort_handler_global(h2o_globalconf_t *globalconf)
+{
+    size_t i;
+    //printf("register_handler : %s : %d\n", path, (uint)globalconf->hosts.size);
+    for (i = 0; i != globalconf->hosts.size; ++i) {
+        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
+        qsort(hostconf->paths.entries, hostconf->paths.size, sizeof(hostconf->paths.entries[0]),
+          (void *)sort_from_longer_paths);
     }
 }

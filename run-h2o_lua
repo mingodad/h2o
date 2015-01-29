@@ -1,0 +1,2 @@
+ulimit -n 4096
+./h2o_lua --conf=examples/h2o/h2o-dad.conf

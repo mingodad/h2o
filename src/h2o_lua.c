@@ -1,3 +1,22 @@
+typedef void *(*clib_getsym_func_ptr)(void *cl, const char *name);
+extern clib_getsym_func_ptr set_lj_clib_get_sym(clib_getsym_func_ptr funcPtr);
+
+static clib_getsym_func_ptr old_clib_getsym_func_ptr;
+
+void *my_clib_getsym_func(void *cl, const char *name)
+{
+    void *funcPtr= NULL ;
+    //printf("my_clib_getsym_func => %s\n", name);
+    if(strcmp(name, "myprintf") == 0)
+    {
+        funcPtr = printf;
+    }
+    else
+    {
+        funcPtr = (*old_clib_getsym_func_ptr)(cl, name);
+    }
+    return funcPtr;
+}
 
 static pthread_mutex_t h2o_lua_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -242,9 +261,20 @@ static int lua_h2o_context_register_handler_global(lua_State *L)
     return 0;
 }
 
+static int lua_h2o_context_sort_handler_global(lua_State *L)
+{
+    CHECK_H2O_CONTEXT();
+    //exclusive access to prevent multiple threads changing at the same time
+    pthread_mutex_lock(&h2o_lua_mutex);
+    sort_handler_global(ctx->globalconf);
+    pthread_mutex_unlock(&h2o_lua_mutex);
+    return 0;
+}
+
 static const luaL_reg contextFunctions[] = {
     {"register_handler_on_host", lua_h2o_context_register_handler_on_host},
     {"register_handler_global", lua_h2o_context_register_handler_global},
+    {"sort_handler_global", lua_h2o_context_sort_handler_global},
     { NULL, NULL }
 };
 
@@ -254,6 +284,7 @@ __declspec(dllexport)
 #endif /* _WIN32 */
 luaopen_h2o(lua_State *L)
 {
+    old_clib_getsym_func_ptr = set_lj_clib_get_sym(my_clib_getsym_func);
     int i;
     /* Create the metatable and put it on the stack. */
     luaL_newmetatable(L, H2O_REQUEST_METATABLE);
