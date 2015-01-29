@@ -14,9 +14,11 @@ local after_lua_prefix_len = #lua_prefix + 1
 
 --per thread initialization
 function h2oOnThreadStart(ctx)
-	ctx:register_handler_global(lua_prefix)
+	local added = ctx:register_handler_global(lua_prefix)
 	--ctx:register_handler_on_host(lua_prefix, "www.example.com")
-	ctx:sort_handler_global()
+	if added then
+		ctx:sort_handler_global()
+	end
 end
 
 --per thread finalization

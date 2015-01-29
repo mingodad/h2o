@@ -254,11 +254,13 @@ static int lua_h2o_context_register_handler_global(lua_State *L)
 {
     CHECK_H2O_CONTEXT();
     const char *path = luaL_checkstring(L, 2);
+    int result = 0;
     //exclusive access to prevent multiple threads changing at the same time
     pthread_mutex_lock(&h2o_lua_mutex);
-    register_handler_global(ctx->globalconf, path, my_h2o_lua_handler);
+    result = register_handler_global(ctx->globalconf, path, my_h2o_lua_handler);
     pthread_mutex_unlock(&h2o_lua_mutex);
-    return 0;
+    lua_pushboolean(L, result);
+    return 1;
 }
 
 static int lua_h2o_context_sort_handler_global(lua_State *L)

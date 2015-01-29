@@ -183,7 +183,7 @@ static int sort_from_longer_paths(const h2o_pathconf_t *x, const h2o_pathconf_t 
     return strcmp(x->path.base, y->path.base);
 }
 
-void register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_handler_ptr on_req)
+int register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_handler_ptr on_req)
 {
     size_t j, i;
     //printf("register_handler_on_host : %s : %s\n", hostconf->hostname.base, path);
@@ -195,7 +195,7 @@ void register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req
             for (i = 0; i != pc->handlers.size; ++i) {
                 if(pc->handlers.entries[i]->on_req == on_req)
                 {
-                    return; //already exists
+                    return 0; //already exists
                 }
             }
 
@@ -204,16 +204,19 @@ void register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
     h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
     handler->on_req = on_req;
+    return 1;
 }
 
-void register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_req_handler_ptr on_req)
+int register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_req_handler_ptr on_req)
 {
     size_t i;
+    int result = 0;
     //printf("register_handler : %s : %d\n", path, (uint)globalconf->hosts.size);
     for (i = 0; i != globalconf->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
-        register_handler_on_host(hostconf, path, on_req);
+        result += register_handler_on_host(hostconf, path, on_req);
     }
+    return result;
 }
 
 void sort_handler_global(h2o_globalconf_t *globalconf)
