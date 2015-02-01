@@ -310,11 +310,19 @@ static int lua_h2o_lua_mutex_unlock(lua_State *L)
     return 1;
 }
 
+static int lua_h2o_usleep(lua_State *L)
+{
+    unsigned int usec = luaL_checkinteger(L, 1);
+    lua_pushinteger(L, usleep(usec));
+    return 1;
+}
+
 static const luaL_reg h2o_lib[] =
 {
 	{"mutex_trylock",	lua_h2o_lua_mutex_trylock},
 	{"mutex_lock",	    lua_h2o_lua_mutex_lock},
 	{"mutex_unlock",	lua_h2o_lua_mutex_unlock},
+	{"usleep",      	lua_h2o_usleep},
 	{NULL,	NULL}
 };
 

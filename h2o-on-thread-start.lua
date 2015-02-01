@@ -23,6 +23,9 @@ function h2oOnThreadStart(ctx)
 		if added then
 			ctx:sort_handler_global()
 		end
+
+		h2olib.usleep(1000); --sleep a bit to allow other threads to be created and skip this code block
+		h2olib.mutex_unlock()
 	end
 end
 
