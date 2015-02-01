@@ -1,3 +1,14 @@
+static pthread_mutex_t h2o_lua_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void check_h2o_lua_mutex_isLocked(lua_State *L)
+{
+    if(pthread_mutex_trylock(&h2o_lua_mutex) == 0)
+    {
+        pthread_mutex_unlock(&h2o_lua_mutex);
+        luaL_error(L, "You should aquire h2olib.mutex_[try]lock to use this function !");
+    }
+}
+
 typedef void *(*clib_getsym_func_ptr)(void *cl, const char *name);
 extern clib_getsym_func_ptr set_lj_clib_get_sym(clib_getsym_func_ptr funcPtr);
 
@@ -17,8 +28,6 @@ void *my_clib_getsym_func(void *cl, const char *name)
     }
     return funcPtr;
 }
-
-static pthread_mutex_t h2o_lua_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static const char H2O_REQUEST_METATABLE[] = "_h2o_request";
 #define CHECK_H2O_REQUEST() \
@@ -235,7 +244,8 @@ static int lua_h2o_context_register_handler_on_host(lua_State *L)
     size_t i;
     h2o_globalconf_t *globalconf = ctx->globalconf;
     //exclusive access to prevent multiple threads changing at the same time
-    pthread_mutex_lock(&h2o_lua_mutex);
+    check_h2o_lua_mutex_isLocked(L);
+    //pthread_mutex_lock(&h2o_lua_mutex);
     for (i = 0; i != globalconf->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
         if(h2o_lcstris(hostconf->hostname.base, hostconf->hostname.len, host.base, host.len))
@@ -245,7 +255,7 @@ static int lua_h2o_context_register_handler_on_host(lua_State *L)
             break;
         }
     }
-    pthread_mutex_unlock(&h2o_lua_mutex);
+    //pthread_mutex_unlock(&h2o_lua_mutex);
     lua_pushboolean(L, result);
     return 1;
 }
@@ -256,9 +266,10 @@ static int lua_h2o_context_register_handler_global(lua_State *L)
     const char *path = luaL_checkstring(L, 2);
     int result = 0;
     //exclusive access to prevent multiple threads changing at the same time
-    pthread_mutex_lock(&h2o_lua_mutex);
+    check_h2o_lua_mutex_isLocked(L);
+    //pthread_mutex_lock(&h2o_lua_mutex);
     result = register_handler_global(ctx->globalconf, path, my_h2o_lua_handler);
-    pthread_mutex_unlock(&h2o_lua_mutex);
+    //pthread_mutex_unlock(&h2o_lua_mutex);
     lua_pushboolean(L, result);
     return 1;
 }
@@ -267,9 +278,10 @@ static int lua_h2o_context_sort_handler_global(lua_State *L)
 {
     CHECK_H2O_CONTEXT();
     //exclusive access to prevent multiple threads changing at the same time
-    pthread_mutex_lock(&h2o_lua_mutex);
+    //pthread_mutex_lock(&h2o_lua_mutex);
+    check_h2o_lua_mutex_isLocked(L);
     sort_handler_global(ctx->globalconf);
-    pthread_mutex_unlock(&h2o_lua_mutex);
+    //pthread_mutex_unlock(&h2o_lua_mutex);
     return 0;
 }
 
@@ -278,6 +290,32 @@ static const luaL_reg contextFunctions[] = {
     {"register_handler_global", lua_h2o_context_register_handler_global},
     {"sort_handler_global", lua_h2o_context_sort_handler_global},
     { NULL, NULL }
+};
+
+static int lua_h2o_lua_mutex_trylock(lua_State *L)
+{
+    lua_pushinteger(L, pthread_mutex_trylock(&h2o_lua_mutex));
+    return 1;
+}
+
+static int lua_h2o_lua_mutex_lock(lua_State *L)
+{
+    lua_pushinteger(L, pthread_mutex_lock(&h2o_lua_mutex));
+    return 1;
+}
+
+static int lua_h2o_lua_mutex_unlock(lua_State *L)
+{
+    lua_pushinteger(L, pthread_mutex_unlock(&h2o_lua_mutex));
+    return 1;
+}
+
+static const luaL_reg h2o_lib[] =
+{
+	{"mutex_trylock",	lua_h2o_lua_mutex_trylock},
+	{"mutex_lock",	    lua_h2o_lua_mutex_lock},
+	{"mutex_unlock",	lua_h2o_lua_mutex_unlock},
+	{NULL,	NULL}
 };
 
 int
@@ -308,6 +346,8 @@ luaopen_h2o(lua_State *L)
 	}
 	lua_setfield(L, -2, "__index");
     lua_pop(L, 1);
+
+    luaL_openlib(L, "h2olib", h2o_lib, 0);
 
     return 1;
 }

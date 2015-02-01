@@ -1,5 +1,7 @@
 print("Lua thread starting ...")
 
+local h2olib = require("h2olib")
+
 local ffi = require("ffi")
 ffi.cdef[[
 int myprintf ( const char * format, ... );
@@ -14,10 +16,13 @@ local after_lua_prefix_len = #lua_prefix + 1
 
 --per thread initialization
 function h2oOnThreadStart(ctx)
-	local added = ctx:register_handler_global(lua_prefix)
-	--ctx:register_handler_on_host(lua_prefix, "www.example.com")
-	if added then
-		ctx:sort_handler_global()
+	if(h2olib.mutex_trylock() == 0) then
+		print("Registering lua handler")
+		local added = ctx:register_handler_global(lua_prefix)
+		--added = ctx:register_handler_on_host(lua_prefix, "www.example.com")
+		if added then
+			ctx:sort_handler_global()
+		end
 	end
 end
 
@@ -71,10 +76,12 @@ local function sendForm(req, name, form_name)
 	req:send(page, "text/html")
 end
 
+local lua_path_re = lua_prefix .. "(.+)"
+
 function myLuaRequestHandler(req, host, path)
 	
 	local method = req:method()
-	local name = path:match("/LUA/(.+)")
+	local name = path:match(lua_path_re)
 	if method == "GET" then
 		sendForm(req, name .. " GET", "")
 	elseif method == "POST" then
