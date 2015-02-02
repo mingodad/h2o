@@ -659,6 +659,8 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz);
 
 typedef int (*on_req_handler_ptr)(h2o_handler_t *, h2o_req_t *);
 int register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_handler_ptr on_req);
+int register_handler_on_host_by_host(h2o_globalconf_t *globalconf,
+                                     const char *host, const char *path, on_req_handler_ptr on_req);
 int register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_req_handler_ptr on_req);
 void sort_handler_global(h2o_globalconf_t *globalconf);
 

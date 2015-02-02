@@ -207,6 +207,22 @@ int register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_
     return 1;
 }
 
+int register_handler_on_host_by_host(h2o_globalconf_t *globalconf,
+                                     const char *host, const char *path, on_req_handler_ptr on_req)
+{
+    int result = 0;
+    size_t i;
+    for (i = 0; i != globalconf->hosts.size; ++i) {
+        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
+        if(strcmp(host, hostconf->hostname.base) == 0)
+        {
+            result = register_handler_on_host(hostconf, path, on_req);
+            break;
+        }
+    }
+    return result;
+}
+
 int register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_req_handler_ptr on_req)
 {
     size_t i;

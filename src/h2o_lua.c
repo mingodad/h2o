@@ -236,26 +236,11 @@ static int my_h2o_lua_handler(h2o_handler_t *self, h2o_req_t *req);
 static int lua_h2o_context_register_handler_on_host(lua_State *L)
 {
     CHECK_H2O_CONTEXT();
-    h2o_iovec_t host;
-    const char *path = luaL_checkstring(L, 2);
-    host.base = luaL_checklstring(L, 3, &host.len);
-    int result = 0;
-
-    size_t i;
-    h2o_globalconf_t *globalconf = ctx->globalconf;
-    //exclusive access to prevent multiple threads changing at the same time
     check_h2o_lua_mutex_isLocked(L);
-    //pthread_mutex_lock(&h2o_lua_mutex);
-    for (i = 0; i != globalconf->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
-        if(h2o_lcstris(hostconf->hostname.base, hostconf->hostname.len, host.base, host.len))
-        {
-            register_handler_on_host(hostconf, path, my_h2o_lua_handler);
-            result = 1;
-            break;
-        }
-    }
-    //pthread_mutex_unlock(&h2o_lua_mutex);
+    const char *path = luaL_checkstring(L, 2);
+    const char *host = luaL_checkstring(L, 3);
+    h2o_globalconf_t *globalconf = ctx->globalconf;
+    int result = register_handler_on_host_by_host(globalconf, host, path, my_h2o_lua_handler);
     lua_pushboolean(L, result);
     return 1;
 }
@@ -263,14 +248,22 @@ static int lua_h2o_context_register_handler_on_host(lua_State *L)
 static int lua_h2o_context_register_handler_global(lua_State *L)
 {
     CHECK_H2O_CONTEXT();
-    const char *path = luaL_checkstring(L, 2);
-    int result = 0;
     //exclusive access to prevent multiple threads changing at the same time
     check_h2o_lua_mutex_isLocked(L);
-    //pthread_mutex_lock(&h2o_lua_mutex);
-    result = register_handler_global(ctx->globalconf, path, my_h2o_lua_handler);
-    //pthread_mutex_unlock(&h2o_lua_mutex);
+    const char *path = luaL_checkstring(L, 2);
+    int result = register_handler_global(ctx->globalconf, path, my_h2o_lua_handler);
     lua_pushboolean(L, result);
+    return 1;
+}
+
+static int lua_h2o_context_register_host(lua_State *L)
+{
+    CHECK_H2O_CONTEXT();
+    //exclusive access to prevent multiple threads changing at the same time
+    check_h2o_lua_mutex_isLocked(L);
+    const char *host = luaL_checkstring(L, 2);
+    h2o_hostconf_t *result = h2o_config_register_host(ctx->globalconf, host);
+    lua_pushboolean(L, result != NULL);
     return 1;
 }
 
@@ -278,16 +271,15 @@ static int lua_h2o_context_sort_handler_global(lua_State *L)
 {
     CHECK_H2O_CONTEXT();
     //exclusive access to prevent multiple threads changing at the same time
-    //pthread_mutex_lock(&h2o_lua_mutex);
     check_h2o_lua_mutex_isLocked(L);
     sort_handler_global(ctx->globalconf);
-    //pthread_mutex_unlock(&h2o_lua_mutex);
     return 0;
 }
 
 static const luaL_reg contextFunctions[] = {
     {"register_handler_on_host", lua_h2o_context_register_handler_on_host},
     {"register_handler_global", lua_h2o_context_register_handler_global},
+    {"register_host", lua_h2o_context_register_host},
     {"sort_handler_global", lua_h2o_context_sort_handler_global},
     { NULL, NULL }
 };
