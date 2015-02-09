@@ -50,6 +50,9 @@
 #include "h2o/http2.h"
 #include "h2o/serverutil.h"
 
+/* simply use a large value, and let the kernel clip it to the internal max */
+#define H2O_SOMAXCONN (128) //(65536)
+
 struct listener_configurator_t {
     h2o_configurator_t super;
     size_t num_global_listeners;
@@ -598,7 +601,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     }
     /* add new listener */
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || fcntl(fd, F_SETFD, FD_CLOEXEC) != 0 ||
-        bind(fd, (void *)sun, sizeof(*sun)) != 0 || listen(fd, SOMAXCONN) != 0) {
+        bind(fd, (void *)sun, sizeof(*sun)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
         if (fd != -1)
             close(fd);
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
@@ -638,7 +641,7 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 #endif
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
-    if (listen(fd, SOMAXCONN) != 0)
+    if (listen(fd, H2O_SOMAXCONN) != 0)
         goto Error;
 
     return fd;
@@ -955,7 +958,9 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, int status)
 {
     struct listener_ctx_t *ctx = listener->data;
-    int num_accepts = 16;
+    size_t num_accepts = conf.max_connections / 16 / conf.num_threads;
+    if (num_accepts < 8)
+        num_accepts = 8;
 
     if (status == -1) {
         return;
@@ -1005,6 +1010,10 @@ static void update_listener_state(struct listener_ctx_t *listeners)
 #include "h2o_lua.c"
 #endif // WITH_LUA
 
+#ifdef WITH_SQUILU
+#include "h2o_squilu.c"
+#endif // WITH_SQUILU
+
 static void *run_loop(void *_unused)
 {
     h2o_evloop_t *loop;
@@ -1019,6 +1028,10 @@ static void *run_loop(void *_unused)
 #ifdef WITH_LUA
     h2o_lua_open_libs(&ctx);
 #endif // WITH_LUA
+
+#ifdef WITH_SQUILU
+    h2o_squilu_open_libs(&ctx);
+#endif // WITH_SQUILU
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
@@ -1061,6 +1074,9 @@ static void *run_loop(void *_unused)
 #ifdef WITH_LUA
     h2o_lua_close_libs(&ctx);
 #endif // WITH_LUA
+#ifdef WITH_SQUILU
+    h2o_squilu_close_libs(&ctx);
+#endif // WITH_SQUILU
     return NULL;
 }
 
@@ -1244,6 +1260,7 @@ int main(int argc, char **argv)
     register_handler_global(&conf.globalconf, "/C/", my_h2o_c_handler);
     //register_handler_global(&config.globalconf, "/LUA/", my_h2o_lua_handler);
 #endif // WITH_LUA
+
     setup_signal_handlers();
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());

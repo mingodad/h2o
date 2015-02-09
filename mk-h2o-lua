@@ -11,7 +11,9 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     CMakeFiles/h2o.dir/lib/common/socket.c.o \
     CMakeFiles/h2o.dir/lib/common/socketpool.c.o \
     CMakeFiles/h2o.dir/lib/common/string.c.o \
+    CMakeFiles/h2o.dir/lib/common/time.c.o \
     CMakeFiles/h2o.dir/lib/common/timeout.c.o \
+    CMakeFiles/h2o.dir/lib/common/url.c.o \
     CMakeFiles/h2o.dir/lib/core/config.c.o \
     CMakeFiles/h2o.dir/lib/core/configurator.c.o \
     CMakeFiles/h2o.dir/lib/core/context.c.o \

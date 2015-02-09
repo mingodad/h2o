@@ -1,3 +1,9 @@
+typedef struct {
+    h2o_generator_t super;
+    int h2o_generator_idx, h2o_generator_lua_cb_proceed_idx,
+            h2o_generator_lua_cb_data_idx, h2o_generator_lua_cb_stop_idx;
+} lua_generator_t;
+
 static pthread_mutex_t h2o_lua_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void check_h2o_lua_mutex_isLocked(lua_State *L)
@@ -72,7 +78,7 @@ LUA_H2O_REQ_GET_STR(authority)
 LUA_H2O_REQ_GET_STR(method)
 LUA_H2O_REQ_GET_STR(path)
 LUA_H2O_REQ_GET_STR(path_normalized)
-LUA_H2O_REQ_GET_STR(scheme)
+//LUA_H2O_REQ_GET_STR(scheme)
 LUA_H2O_REQ_GET_STR(entity)
 LUA_H2O_REQ_GET_STR(upgrade)
 
@@ -86,6 +92,20 @@ LUA_H2O_REQ_GET_STR(upgrade)
 LUA_H2O_REQ_GET_INT(version)
 LUA_H2O_REQ_GET_INT(bytes_sent)
 LUA_H2O_REQ_GET_INT(http1_is_persistent)
+
+static int lua_h2o_req_get_str_scheme(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    lua_pushlstring(L, req->scheme->name.base, req->scheme->name.len);
+    return 1;
+}
+
+static int lua_h2o_req_get_int_default_port(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    lua_pushinteger(L, req->scheme->default_port);
+    return 1;
+}
 
 static int lua_h2o_req_get_set_header(lua_State *L)
 {
@@ -176,6 +196,123 @@ static int lua_h2o_req_send(lua_State *L)
     return 0;
 }
 
+static void do_lua_generator_proceed(h2o_generator_t *generator, h2o_req_t *req)
+{
+printf("%d:%s\n", __LINE__, __FILE__);
+    lua_generator_t *self = (lua_generator_t *)generator;
+
+    lua_State *L = req->conn->ctx->L;
+    if(L)
+    {
+printf("%d:%s\n", __LINE__, __FILE__);
+        int saved_top = lua_gettop(L);
+        lua_pushcfunction(L, traceback);  /* push traceback function */
+        int error_func = lua_gettop(L);
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_proceed_idx);
+
+        if(lua_isfunction(L,-1)) {
+printf("%d:%s\n", __LINE__, __FILE__);
+            *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
+            luaL_getmetatable(L, H2O_REQUEST_METATABLE);
+            lua_setmetatable(L, -2);
+
+            if(self->h2o_generator_lua_cb_data_idx)
+            {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_data_idx);
+            }
+
+            if(lua_pcall(L, self->h2o_generator_lua_cb_data_idx ? 2 : 1, 0, error_func)) {
+printf("%d:%s\n", __LINE__, __FILE__);
+                size_t error_len;
+                const char *error_msg = lua_tolstring(L, -1, &error_len);
+                if(show_errors_on_stdout) printf("%s\n", error_msg);
+                //write_error_message(conn, error_msg, error_len);
+            }
+        }
+        lua_settop(L, saved_top);
+    }
+printf("%d:%s\n", __LINE__, __FILE__);
+}
+
+static void do_lua_generator_stop(h2o_generator_t *generator, h2o_req_t *req)
+{
+printf("%d:%s\n", __LINE__, __FILE__);
+    lua_generator_t *self = (lua_generator_t *)generator;
+
+    lua_State *L = req->conn->ctx->L;
+    if(L)
+    {
+printf("%d:%s\n", __LINE__, __FILE__);
+        int saved_top = lua_gettop(L);
+        lua_pushcfunction(L, traceback);  /* push traceback function */
+        int error_func = lua_gettop(L);
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_stop_idx);
+
+        if(lua_isfunction(L,-1)) {
+printf("%d:%s\n", __LINE__, __FILE__);
+            *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
+            luaL_getmetatable(L, H2O_REQUEST_METATABLE);
+            lua_setmetatable(L, -2);
+
+            if(self->h2o_generator_lua_cb_data_idx)
+            {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_data_idx);
+            }
+
+            if(lua_pcall(L, self->h2o_generator_lua_cb_data_idx ? 2 : 1, 0, error_func)) {
+printf("%d:%s\n", __LINE__, __FILE__);
+                size_t error_len;
+                const char *error_msg = lua_tolstring(L, -1, &error_len);
+                if(show_errors_on_stdout) printf("%s\n", error_msg);
+                //write_error_message(conn, error_msg, error_len);
+            }
+        }
+
+        luaL_unref(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_proceed_idx);
+        luaL_unref(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_stop_idx);
+        if(self->h2o_generator_lua_cb_data_idx)
+        {
+            luaL_unref(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_data_idx);
+        }
+        luaL_unref(L, LUA_REGISTRYINDEX, self->h2o_generator_idx);
+
+        lua_settop(L, saved_top);
+    }
+printf("%d:%s\n", __LINE__, __FILE__);
+}
+
+static int lua_h2o_req_start_response(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+
+    if (lua_type(L, 2) != LUA_TFUNCTION) luaL_error(L, "function to proceed expected");
+    if (lua_type(L, 3) != LUA_TFUNCTION) luaL_error(L, "function to stop expected");
+
+    lua_generator_t *lg = (lua_generator_t*)lua_newuserdata(L, sizeof(lua_generator_t));
+    lg->super.proceed = do_lua_generator_proceed;
+    lg->super.stop = do_lua_generator_stop;
+
+    lua_pushvalue(L, 2);
+    lg->h2o_generator_lua_cb_proceed_idx = luaL_ref(L, LUA_REGISTRYINDEX);
+    lua_pushvalue(L, 3);
+    lg->h2o_generator_lua_cb_stop_idx = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    if(lua_gettop(L) > 3) {
+        lua_pushvalue(L, 4);
+        lg->h2o_generator_lua_cb_data_idx = luaL_ref(L, LUA_REGISTRYINDEX);
+    } else {
+        lg->h2o_generator_lua_cb_data_idx = 0;
+    }
+    lg->h2o_generator_idx = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    h2o_start_response(req, (h2o_generator_t*)lg);
+    //trying to call send without seting req->reazon segfaults
+    //h2o_send(req, NULL, 0, 0);
+    return 0;
+}
+
 #define LUA_REG_REQ_GET_STR_FUNC(name) { #name, lua_h2o_req_get_str_##name }
 #define LUA_REG_REQ_GET_INT_FUNC(name) { #name, lua_h2o_req_get_int_##name }
 
@@ -186,6 +323,7 @@ static const luaL_reg reqFunctions[] = {
     LUA_REG_REQ_GET_STR_FUNC(path),
     LUA_REG_REQ_GET_STR_FUNC(path_normalized),
     LUA_REG_REQ_GET_STR_FUNC(scheme),
+    LUA_REG_REQ_GET_INT_FUNC(default_port),
     LUA_REG_REQ_GET_STR_FUNC(entity),
     LUA_REG_REQ_GET_STR_FUNC(upgrade),
     LUA_REG_REQ_GET_INT_FUNC(version),
@@ -193,6 +331,7 @@ static const luaL_reg reqFunctions[] = {
     LUA_REG_REQ_GET_INT_FUNC(http1_is_persistent),
     {"header", lua_h2o_req_get_set_header},
     {"send", lua_h2o_req_send},
+    {"start_response", lua_h2o_req_start_response},
     {"response_status", lua_h2o_req_set_int_response_status},
     {"response_reason", lua_h2o_req_set_str_response_reason},
     {"response_content_length", lua_h2o_req_set_int_response_content_length},
@@ -224,7 +363,7 @@ static int h2o_lua_call_with_context(h2o_context_t *ctx, const char *func_name)
             } else {
                 result = lua_toboolean(L, -1) ? 1 : 0;
             }
-        };
+        }
         lua_settop(L, saved_top);
     }
 

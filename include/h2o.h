@@ -53,6 +53,10 @@ extern "C" {
 #include "lualib.h"
 #endif // WITH_LUA
 
+#ifdef WITH_SQUILU
+#include "squirrel.h"
+#endif // WITH_SQUILU
+
 #ifndef H2O_MAX_HEADERS
 #define H2O_MAX_HEADERS 100
 #endif
@@ -315,6 +319,9 @@ struct st_h2o_context_t {
 #ifdef WITH_LUA
     lua_State * L;
 #endif // WITH_LUA
+#ifdef WITH_SQUILU
+    HSQUIRRELVM sq_vm;
+#endif // WITH_SQUILU
 };
 
 /**

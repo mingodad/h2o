@@ -14,11 +14,15 @@ local str_format = string.format
 local lua_prefix = "/LUA/"
 local after_lua_prefix_len = #lua_prefix + 1
 
+local lua2_prefix = "/LUA2/"
+local after_lua2_prefix_len = #lua2_prefix + 1
+
 --per thread initialization
 function h2oOnThreadStart(ctx)
 	if(h2olib.mutex_trylock() == 0) then
 		print("Registering lua handler")
 		local added = ctx:register_handler_global(lua_prefix)
+		added = ctx:register_handler_global(lua2_prefix) or added
 		--added = ctx:register_handler_on_host(lua_prefix, "www.example.com")
 		if added then
 			ctx:sort_handler_global()
@@ -43,6 +47,11 @@ function h2oManageRequest(req)
 			return myLuaRequestHandlerHello(req, host, path)
 		end
 		return myLuaRequestHandler(req, host, path)
+	elseif path:find(lua2_prefix, 1, true) then
+		if path:find("hello2/", after_lua2_prefix_len, true) then
+			return myLua2RequestHandlerHello(req, host, path)
+		end
+		return myLua2RequestHandler(req, host, path)
 	end
 	return 1
 end
@@ -62,6 +71,20 @@ local page_template = [==[
 function myLuaRequestHandlerHello(req, host, path)
 	local name = path:sub(after_lua_prefix_len)
 	req:send("Hello " .. name, "text/html")
+	return 0
+end
+
+function myLua2RequestHandlerHelloProceed(req, data)
+	local name = data.path:sub(after_lua2_prefix_len)
+	req:send("Hello " .. name, "text/html")
+	return 0
+end
+
+function myLua2RequestHandlerHelloStop(req, data)
+end
+
+function myLua2RequestHandlerHello(req, host, path)
+	req:start_response(myLua2RequestHandlerHelloProceed, myLua2RequestHandlerHelloStop, {hosr=host, path=path})
 	return 0
 end
 
@@ -128,5 +151,31 @@ function myLuaRequestHandler(req, host, path)
 	print("----Rquest bytes_sent", req:bytes_sent())
 	print("----Rquest http1_is_persistent", req:http1_is_persistent())
 	]]
+	return 0
+end
+
+local lua2_path_re = lua2_prefix .. "(.+)"
+
+function myLua2RequestHandlerProceed(req, data)
+	
+	print("======myLua2RequestHandlerProceed")
+	local method = req:method()
+	local name = data.path:match(lua2_path_re)
+	if method == "GET" then
+		sendForm(req, name .. " GET", "")
+	elseif method == "POST" then
+		sendForm(req, name .. " POST", req:entity())	
+	end
+	return 0
+end
+
+function myLua2RequestHandlerStop(req, data)
+	print("======myLua2RequestHandlerStop")
+end
+
+function myLua2RequestHandler(req, host, path)
+	print("======myLua2RequestHandler")
+	req:start_response(myLua2RequestHandlerProceed, myLua2RequestHandlerStop, {hosr=host, path=path})
+	print("======myLua2RequestHandler----")
 	return 0
 end

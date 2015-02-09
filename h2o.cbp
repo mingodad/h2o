@@ -52,7 +52,7 @@
 			<Add directory="deps/picohttpparser" />
 			<Add directory="deps/yoml" />
 			<Add directory="deps/klib" />
-			<Add directory="../../../../local/luajit/include/luajit-2.0" />
+			<Add directory="../../../../local/luajit/include/luajit-2.1" />
 		</Compiler>
 		<Linker>
 			<Add option="-L../../../../local/luajit/lib" />
@@ -160,7 +160,13 @@
 		<Unit filename="lib/common/string.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/common/time.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/common/timeout.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/url.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/core/config.c">
@@ -237,6 +243,11 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/h2o_lua.c">
+			<Option compilerVar="CC" />
+			<Option compile="0" />
+			<Option link="0" />
+		</Unit>
+		<Unit filename="src/h2o_squilu.c">
 			<Option compilerVar="CC" />
 			<Option compile="0" />
 			<Option link="0" />
