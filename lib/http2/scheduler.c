@@ -37,6 +37,11 @@ static void queue_init(h2o_http2_scheduler_queue_t *queue)
         h2o_linklist_init_anchor(queue->anchors + i);
 }
 
+static int queue_is_empty(h2o_http2_scheduler_queue_t *queue)
+{
+    return queue->bits == 0;
+}
+
 static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_queue_node_t *node, uint16_t weight)
 {
     /* holds 257 entries of offsets (multiplied by 65536) where nodes with weights between 1..257 should go into
@@ -186,11 +191,24 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
 
     /* move dependents to parent */
     if (!h2o_linklist_is_empty(&ref->node._all_refs)) {
+        /* proportionally distribute the weight to the children (draft-16 5.3.4) */
+        uint32_t total_weight = 0, factor;
+        h2o_linklist_t *link;
+        for (link = ref->node._all_refs.next; link != &ref->node._all_refs; link = link->next) {
+            h2o_http2_scheduler_openref_t *child_ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, link);
+            total_weight += child_ref->weight;
+        }
+        assert(total_weight != 0);
+        factor = ((uint32_t)ref->weight * 65536 + total_weight / 2) / total_weight;
         do {
             h2o_http2_scheduler_openref_t *child_ref =
                 H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, ref->node._all_refs.next);
-            /* TODO draft-16 5.3.4 says the weight of the closed parent should be distributed proportionally to the children */
-            h2o_http2_scheduler_rebind(child_ref, ref->node._parent, h2o_http2_scheduler_get_weight(child_ref), 0);
+            uint16_t weight = (child_ref->weight * factor / 32768 + 1) / 2;
+            if (weight < 1)
+                weight = 1;
+            else if (weight > 256)
+                weight = 256;
+            h2o_http2_scheduler_rebind(child_ref, ref->node._parent, weight, 0);
         } while (!h2o_linklist_is_empty(&ref->node._all_refs));
     }
 
@@ -232,6 +250,8 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
 {
     assert(h2o_http2_scheduler_is_open(ref));
     assert(&ref->node != new_parent);
+    assert(1 <= weight);
+    assert(weight <= 256);
 
     /* do nothing if there'd be no change at all */
     if (ref->node._parent == new_parent && ref->weight == weight && !exclusive)
@@ -273,8 +293,9 @@ void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
     incr_active_cnt(&ref->node);
 }
 
-static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg, size_t *num_touched)
+static int proceed(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg)
 {
+Redo:
     if (node->_queue == NULL)
         return 0;
 
@@ -283,27 +304,26 @@ static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb
         return 0;
 
     h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _queue_node, drr_node);
-    int bail_out = 0;
-    if (ref->_self_is_active) {
-        /* call the callbacks */
-        int still_is_active;
-        assert(ref->_active_cnt != 0);
-        bail_out = cb(ref, &still_is_active, cb_arg);
-        ++*num_touched;
-        if (still_is_active) {
-            queue_set(node->_queue, &ref->_queue_node, ref->weight);
-        } else {
-            ref->_self_is_active = 0;
-            if (--ref->_active_cnt != 0) {
-                queue_set(node->_queue, &ref->_queue_node, ref->weight);
-            } else if (ref->node._parent != NULL) {
-                decr_active_cnt(ref->node._parent);
-            }
-        }
-    } else {
-        /* run the children */
+
+    if (!ref->_self_is_active) {
+        /* run the children (manually-unrolled tail recursion) */
         queue_set(node->_queue, &ref->_queue_node, ref->weight);
-        bail_out = run_once(&ref->node, cb, cb_arg, num_touched);
+        node = &ref->node;
+        goto Redo;
+    }
+    assert(ref->_active_cnt != 0);
+
+    /* call the callbacks */
+    int still_is_active, bail_out = cb(ref, &still_is_active, cb_arg);
+    if (still_is_active) {
+        queue_set(node->_queue, &ref->_queue_node, ref->weight);
+    } else {
+        ref->_self_is_active = 0;
+        if (--ref->_active_cnt != 0) {
+            queue_set(node->_queue, &ref->_queue_node, ref->weight);
+        } else if (ref->node._parent != NULL) {
+            decr_active_cnt(ref->node._parent);
+        }
     }
 
     return bail_out;
@@ -311,13 +331,12 @@ static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb
 
 int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_scheduler_run_cb cb, void *cb_arg)
 {
-    int bail_out = 0;
-    size_t num_touched;
-
-    do {
-        num_touched = 0;
-        bail_out = run_once(root, cb, cb_arg, &num_touched);
-    } while (!bail_out && num_touched != 0);
-
-    return bail_out;
+    if (root->_queue != NULL) {
+        while (!queue_is_empty(root->_queue)) {
+            int bail_out = proceed(root, cb, cb_arg);
+            if (bail_out)
+                return bail_out;
+        }
+    }
+    return 0;
 }
