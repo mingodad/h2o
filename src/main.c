@@ -341,6 +341,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL, *ocsp_update_cmd = NULL,
            *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
+    /* 2 Ton Digital modification to add support for custom DH files */
+    yoml_t *dh_file = NULL;
+    /* end mod */
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
@@ -388,6 +391,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             FETCH_PROPERTY("ocsp-update-cmd", ocsp_update_cmd);
             FETCH_PROPERTY("ocsp-update-interval", ocsp_update_interval_node);
             FETCH_PROPERTY("ocsp-max-failures", ocsp_max_failures_node);
+            /* 2 Ton Digital modification to add support for custom DH files */
+            FETCH_PROPERTY("dh-file", dh_file);
+            /* end mod */
             h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
             return -1;
 #undef FETCH_PROPERTY
@@ -466,6 +472,26 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ERR_print_errors_fp(stderr);
         goto Error;
     }
+    /* 2 Ton Digital modification to add support for custom DH files */
+    if (dh_file != NULL) {
+        BIO *bio = BIO_new_file(dh_file->data.scalar, "r");
+        if (bio == NULL) {
+            h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
+            ERR_print_errors_fp(stderr);
+            goto Error;
+        }
+        DH *dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
+        BIO_free(bio);
+        if (dh == NULL) {
+            h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
+            ERR_print_errors_fp(stderr);
+            goto Error;
+        }
+        SSL_CTX_set_tmp_dh(ssl_ctx, dh);
+        SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_DH_USE);
+        DH_free(dh);
+    }
+    /* end mod */
 
 /* setup protocol negotiation methods */
 #if H2O_USE_NPN
@@ -1082,6 +1108,9 @@ static void setup_configurators(void)
                                         "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)\n"
                                         "       cipher-suite:     list of cipher suites to be passed to OpenSSL via\n"
                                         "                         SSL_CTX_set_cipher_list (optional)\n"
+                                        /* 2 Ton Digital modification to add support for custom DH files */
+                                        "       dh-file:          PEM file of dhparam to use\n"
+                                        /* end mod */
                                         "       ocsp-update-interval:\n"
                                         "                         interval for updating the OCSP stapling data (in\n"
                                         "                         seconds), or set to zero to disable OCSP stapling\n"
