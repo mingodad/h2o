@@ -27,10 +27,12 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     CMakeFiles/h2o.dir/lib/handler/file.c.o \
     CMakeFiles/h2o.dir/lib/handler/mimemap.c.o \
     CMakeFiles/h2o.dir/lib/handler/proxy.c.o \
+    CMakeFiles/h2o.dir/lib/handler/redirect.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/access_log.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/expires.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/file.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/proxy.c.o \
+    CMakeFiles/h2o.dir/lib/handler/configurator/redirect.c.o \
     CMakeFiles/h2o.dir/lib/http1.c.o \
     CMakeFiles/h2o.dir/lib/http2/connection.c.o \
     CMakeFiles/h2o.dir/lib/http2/frame.c.o \
