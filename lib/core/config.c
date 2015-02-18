@@ -216,8 +216,8 @@ int register_handler_on_host_by_host(h2o_globalconf_t *globalconf,
 {
     int result = 0;
     size_t i;
-    for (i = 0; i != globalconf->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
+    for (i = 0; globalconf->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = globalconf->hosts[i];
         if(strcmp(host, hostconf->hostname.base) == 0)
         {
             result = register_handler_on_host(hostconf, path, on_req);
@@ -232,8 +232,8 @@ int register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_r
     size_t i;
     int result = 0;
     //printf("register_handler : %s : %d\n", path, (uint)globalconf->hosts.size);
-    for (i = 0; i != globalconf->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
+    for (i = 0; globalconf->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = globalconf->hosts[i];
         result += register_handler_on_host(hostconf, path, on_req);
     }
     return result;
@@ -243,8 +243,8 @@ void sort_handler_global(h2o_globalconf_t *globalconf)
 {
     size_t i;
     //printf("register_handler : %s : %d\n", path, (uint)globalconf->hosts.size);
-    for (i = 0; i != globalconf->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = globalconf->hosts.entries + i;
+    for (i = 0; globalconf->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = globalconf->hosts[i];
         qsort(hostconf->paths.entries, hostconf->paths.size, sizeof(hostconf->paths.entries[0]),
           (void *)sort_from_longer_paths);
     }

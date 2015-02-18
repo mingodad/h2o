@@ -6,6 +6,7 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     -DH2O_ROOT="\"/usr/local\"" -DH2O_USE_EPOLL \
     CMakeFiles/h2o.dir/deps/picohttpparser/picohttpparser.c.o \
     CMakeFiles/h2o.dir/lib/common/memory.c.o \
+    CMakeFiles/h2o.dir/lib/common/multithread.c.o \
     CMakeFiles/h2o.dir/lib/common/http1client.c.o \
     CMakeFiles/h2o.dir/lib/common/serverutil.c.o \
     CMakeFiles/h2o.dir/lib/common/socket.c.o \

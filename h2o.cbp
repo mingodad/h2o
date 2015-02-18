@@ -143,6 +143,9 @@
 		<Unit filename="lib/common/memory.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/common/multithread.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/common/serverutil.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -209,6 +212,9 @@
 		<Unit filename="lib/handler/configurator/proxy.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/configurator/redirect.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/expires.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -219,6 +225,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/proxy.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/redirect.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/http1.c">
