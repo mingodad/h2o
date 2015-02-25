@@ -98,8 +98,10 @@ sub run_tests_with_conf {
                 my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
                 like $resp, qr/^x-forwarded-for: 127\.0\.0\.1$/mi, "x-forwarded-for";
                 like $resp, qr/^x-forwarded-proto: $proto$/mi, "x-forwarded-proto";
-                $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' $proto://127.0.0.1:$port/echo-headers`;
+                like $resp, qr/^via: 1\.1 127\.0\.0\.1:$port$/mi, "via";
+                $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' --header 'Via: 2 example.com' $proto://127.0.0.1:$port/echo-headers`;
                 like $resp, qr/^x-forwarded-for: 127\.0\.0\.2, 127\.0\.0\.1$/mi, "x-forwarded-for (append)";
+                like $resp, qr/^via: 2 example.com, 1\.1 127\.0\.0\.1:$port$/mi, "via (append)";
             };
         };
         $doit->('http', $port);
@@ -128,6 +130,19 @@ sub run_tests_with_conf {
                     if $opt eq '-u';
                 $out = `nghttp $opt -H 'cookie: a=b' -H 'cookie: c=d' $proto://127.0.0.1:$port/echo-headers`;
                 like $out, qr{^cookie: a=b; c=d$}m;
+            };
+            subtest 'issues/185' => sub {
+                my $out = `nghttp $opt -v "$proto://127.0.0.1:$port/set-headers?access-control-allow-origin=%2a"`;
+                is $?, 0;
+                like $out, qr/ access-control-allow-origin: \*$/m;
+            };
+            subtest 'issues/192' => sub {
+                my $cookie = '_yohoushi_session=ZU5tK2FhcllVQ1RGaTZmZE9MUXozZnAzdTdmR250ZjRFU1hNSnZ4Y2JxZm9pYzJJSEpISGFKNmtWcW1HcjBySmUxZzIwNngrdlVIOC9jdmg0R3I3TFR4eVYzaHlFSHdEL1M4dnh1SmRCbVl3ZE5FckZEU1NyRmZveWZwTmVjcVV5V1JhNUd5REIvWjAwQ3RiT1ZBNGVMUkhiN0tWR0c1RzZkSVhrVkdoeW1lWXRDeHJPUW52NUwxSytRTEQrWXdoZ1EvVG9kak9aeUxnUFRNTDB4Vis1RDNUYWVHZm12bDgwL1lTa09MTlJYcGpXN2VUWmdHQ2FuMnVEVDd4c3l1TTJPMXF1dGhYcGRHS2U2bW9UaG0yZGIwQ0ZWVzFsY1hNTkY5cVFvWjNqSWNrQ0pOY1gvMys4UmRHdXJLU1A0ZTZQc3pSK1dKcXlpTEF2djJHLzUwbytwSnVpS0xhdFp6NU9kTDhtcmgxamVXMkI0Nm9Nck1rMStLUmV0TEdUeGFSTjlKSzM0STc3NTlSZ05ZVjJhWUNibkdzY1I1NUg4bG96dWZSeGorYzF4M2tzMGhKSkxmeFBTNkpZS09HTFgrREN4SWd4a29kamRxT3FobDRQZ2xMVUE9PS0tQUxSWU5nWmVTVzRoN09sS3pmUVM3dz09--3a411c0cf59845f0b8ccf61f69b8eb87aa1727ac; path=/; HttpOnly';
+                my $cookie_encoded = $cookie;
+                $cookie_encoded =~ s{([^A-Za-z0-9_])}{sprintf "%%%02x", ord $1}eg;
+                $out = `nghttp $opt -v $proto://127.0.0.1:$port/set-headers?set-cookie=$cookie_encoded`;
+                is $?, 0;
+                like $out, qr/ set-cookie: $cookie$/m;
             };
         };
         subtest 'http (upgrade)' => sub {
