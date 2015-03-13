@@ -184,6 +184,9 @@
 		<Unit filename="lib/core/headers.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/core/proxy.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/core/request.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -209,16 +212,25 @@
 		<Unit filename="lib/handler/configurator/file.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/configurator/headers.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/configurator/proxy.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/configurator/redirect.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/configurator/reproxy.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/expires.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/file.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/headers.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/mimemap.c">
@@ -228,6 +240,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/redirect.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/reproxy.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/http1.c">

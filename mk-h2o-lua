@@ -5,6 +5,7 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     -D_GNU_SOURCE -Iinclude -Ideps/yoml -Ideps/picohttpparser -Ideps/klib \
     -DH2O_ROOT="\"/usr/local\"" -DH2O_USE_EPOLL \
     CMakeFiles/h2o.dir/deps/picohttpparser/picohttpparser.c.o \
+    CMakeFiles/h2o.dir/lib/common/hostinfo.c.o \
     CMakeFiles/h2o.dir/lib/common/memory.c.o \
     CMakeFiles/h2o.dir/lib/common/multithread.c.o \
     CMakeFiles/h2o.dir/lib/common/http1client.c.o \
@@ -19,6 +20,7 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     CMakeFiles/h2o.dir/lib/core/configurator.c.o \
     CMakeFiles/h2o.dir/lib/core/context.c.o \
     CMakeFiles/h2o.dir/lib/core/headers.c.o \
+    CMakeFiles/h2o.dir/lib/core/proxy.c.o \
     CMakeFiles/h2o.dir/lib/core/request.c.o \
     CMakeFiles/h2o.dir/lib/core/token.c.o \
     CMakeFiles/h2o.dir/lib/core/util.c.o \
@@ -26,14 +28,18 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     CMakeFiles/h2o.dir/lib/handler/chunked.c.o \
     CMakeFiles/h2o.dir/lib/handler/expires.c.o \
     CMakeFiles/h2o.dir/lib/handler/file.c.o \
+    CMakeFiles/h2o.dir/lib/handler/headers.c.o \
     CMakeFiles/h2o.dir/lib/handler/mimemap.c.o \
     CMakeFiles/h2o.dir/lib/handler/proxy.c.o \
     CMakeFiles/h2o.dir/lib/handler/redirect.c.o \
+    CMakeFiles/h2o.dir/lib/handler/reproxy.c.o \
+    CMakeFiles/h2o.dir/lib/handler/configurator/reproxy.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/access_log.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/expires.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/file.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/proxy.c.o \
     CMakeFiles/h2o.dir/lib/handler/configurator/redirect.c.o \
+    CMakeFiles/h2o.dir/lib/handler/configurator/headers.c.o \
     CMakeFiles/h2o.dir/lib/http1.c.o \
     CMakeFiles/h2o.dir/lib/http2/connection.c.o \
     CMakeFiles/h2o.dir/lib/http2/frame.c.o \
@@ -42,3 +48,6 @@ $MYCC -O2 -g -Wall -Wno-unused-function  \
     CMakeFiles/h2o.dir/lib/http2/scheduler.c.o \
     src/sq_h2o.c  -o h2o_lua \
     -rdynamic -L$MYLUAJIT/lib -lluajit-5.1 -lssl -lcrypto -lyaml -lpthread -ldl -lm
+    
+
+   
