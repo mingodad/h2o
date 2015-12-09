@@ -1416,7 +1416,7 @@ inline void h2o_conn_init(h2o_conn_t *conn, h2o_context_t *ctx, h2o_hostconf_t *
     conn->hosts = hosts;
     conn->connected_at = connected_at;
     conn->callbacks = callbacks;
-    conn->link = (h2o_linklist_t){};
+    conn->link.prev = conn->link.next = NULL;
     h2o_linklist_insert(&ctx->connections, &conn->link);
 }
 
