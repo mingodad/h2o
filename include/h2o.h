@@ -380,6 +380,10 @@ struct st_h2o_context_t {
      */
     h2o_loop_t *loop;
     /**
+     * link-list of connections
+     */
+    h2o_linklist_t connections;
+    /**
      * timeout structure to be used for registering deferred callbacks
      */
     h2o_timeout_t zero_timeout;
@@ -586,6 +590,10 @@ struct st_h2o_conn_t {
      * callbacks
      */
     const h2o_conn_callbacks_t *callbacks;
+    /**
+     * link-list of connections
+     */
+    h2o_linklist_t link;
 };
 
 /**
@@ -891,6 +899,14 @@ size_t h2o_stringify_protocol_version(char *dst, int version);
 h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
                                                    const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                                    h2o_iovec_t *base_path);
+
+/**
+ * connection
+ */
+
+static void h2o_conn_init(h2o_conn_t *conn, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                          const h2o_conn_callbacks_t *callbacks);
+static void h2o_conn_dispose(h2o_conn_t *conn);
 
 /* request */
 
@@ -1392,6 +1408,22 @@ void h2o_reproxy_register(h2o_pathconf_t *pathconf);
 void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
+
+inline void h2o_conn_init(h2o_conn_t *conn, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                          const h2o_conn_callbacks_t *callbacks)
+{
+    conn->ctx = ctx;
+    conn->hosts = hosts;
+    conn->connected_at = connected_at;
+    conn->callbacks = callbacks;
+    conn->link = (h2o_linklist_t){};
+    h2o_linklist_insert(&ctx->connections, &conn->link);
+}
+
+inline void h2o_conn_dispose(h2o_conn_t *conn)
+{
+    h2o_linklist_unlink(&conn->link);
+}
 
 inline void h2o_proceed_response(h2o_req_t *req)
 {

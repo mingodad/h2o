@@ -110,6 +110,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
+    h2o_conn_dispose(&conn->super);
     free(conn);
 }
 
@@ -707,10 +708,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     memset(conn, 0, offsetof(struct st_h2o_http1_conn_t, req));
 
     /* init properties that need to be non-zero */
-    conn->super.ctx = ctx->ctx;
-    conn->super.hosts = ctx->hosts;
-    conn->super.connected_at = connected_at;
-    conn->super.callbacks = &callbacks;
+    h2o_conn_init(&conn->super, ctx->ctx, ctx->hosts, connected_at, &callbacks);
     conn->sock = sock;
     sock->data = conn;
 

@@ -90,6 +90,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
     ctx->globalconf = config;
+    h2o_linklist_init_anchor(&ctx->connections);
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     h2o_timeout_init(ctx->loop, &ctx->one_sec_timeout, 1000);
     ctx->queue = h2o_multithread_create_queue(loop);
@@ -125,6 +126,8 @@ void h2o_context_dispose(h2o_context_t *ctx)
 {
     h2o_globalconf_t *config = ctx->globalconf;
     size_t i, j;
+
+    assert(h2o_linklist_is_empty(&ctx->connections));
 
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];

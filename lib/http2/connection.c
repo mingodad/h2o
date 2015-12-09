@@ -258,6 +258,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
+    h2o_conn_dispose(&conn->super);
     free(conn);
 }
 
@@ -1037,10 +1038,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
 
     /* init the connection */
     memset(conn, 0, sizeof(*conn));
-    conn->super.ctx = ctx;
-    conn->super.hosts = hosts;
-    conn->super.connected_at = connected_at;
-    conn->super.callbacks = &callbacks;
+    h2o_conn_init(&conn->super, ctx, hosts, connected_at, &callbacks);
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);
@@ -1192,6 +1190,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
+    h2o_conn_dispose(&http2conn->super);
     free(http2conn);
     return -1;
 }
