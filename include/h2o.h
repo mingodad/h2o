@@ -564,6 +564,10 @@ typedef struct st_h2o_conn_callbacks_t {
      * callback for server push (may be NULL)
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+    /**
+     * collects status
+     */
+    void (*collect_status)(h2o_conn_t *conn, h2o_buffer_t **buf);
 } h2o_conn_callbacks_t;
 
 /**

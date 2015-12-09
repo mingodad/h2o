@@ -110,6 +110,18 @@ typedef enum en_run_mode_t {
     RUN_MODE_TEST,
 } run_mode_t;
 
+struct collected_status_t {
+    pthread_mutex_t mutex;
+    pthread_cond_t *cond;     /* cond to which one of the worker should notify, when remainig becomes zero */
+    size_t remaining;         /* number of remaining threads that should collect the status */
+    H2O_VECTOR(char *) bytes; /* collected status */
+};
+
+struct server_notification_t {
+    h2o_multithread_message_t super;
+    struct collected_status_t *status; /* if non-NULL, the receiving thread should fill-in collected_status_t */
+};
+
 static struct {
     h2o_globalconf_t globalconf;
     run_mode_t run_mode;
@@ -149,7 +161,7 @@ static struct {
     1024,            /* max_connections */
     0,               /* initialized in main() */
     0,               /* initialized in main() */
-    NULL,            /* thread_ids */
+    NULL,            /* threads */
     0,               /* shutdown_requested */
     {},              /* state */
 };
@@ -1056,20 +1068,64 @@ static yoml_t *load_config(const char *fn)
     return yoml;
 }
 
-static void notify_all_threads(void)
+static size_t get_thread_index(void)
+{
+    pthread_t self = pthread_self();
+    size_t i;
+
+    for (i = 0; i != conf.num_threads; ++i)
+        if (pthread_equal(self, conf.threads[i].tid))
+            return i;
+    assert(!"failed to determine the worker thread index of current thread");
+    abort();
+}
+
+static void collect_status(struct collected_status_t *status)
+{
+    h2o_context_t *ctx = &conf.threads[get_thread_index()].ctx;
+    h2o_buffer_t *buffer;
+    h2o_linklist_t *link;
+
+    h2o_buffer_init(&buffer, &h2o_socket_buffer_prototype);
+
+    /* collect status to buffer */
+    for (link = ctx->connections.next; link != &ctx->connections; link = link->next) {
+        h2o_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, link, link);
+        if (conn->callbacks->collect_status != NULL)
+            conn->callbacks->collect_status(conn, &buffer);
+    }
+
+    pthread_mutex_lock(&status->mutex);
+
+    /* append collected data to shared buffer */
+    h2o_vector_reserve(NULL, (void *)&status->bytes, sizeof(status->bytes.entries[0]), status->bytes.size + buffer->size);
+    memcpy(status->bytes.entries + status->bytes.size, buffer->bytes, buffer->size);
+    status->bytes.size += buffer->size;
+
+    /* notify the collecting thread that all data is avialable */
+    if (--status->remaining == 0)
+        pthread_cond_signal(status->cond);
+
+    pthread_mutex_unlock(&status->mutex);
+
+    h2o_buffer_dispose(&buffer);
+}
+
+static void notify_all_threads(struct collected_status_t *status)
 {
     unsigned i;
     for (i = 0; i != conf.num_threads; ++i) {
-        h2o_multithread_message_t *message = h2o_mem_alloc(sizeof(*message));
-        *message = (h2o_multithread_message_t){};
-        h2o_multithread_send_message(&conf.threads[i].server_notifications, message);
+        struct server_notification_t *message = h2o_mem_alloc(sizeof(*message));
+        message->super = (h2o_multithread_message_t){};
+        message->status = status;
+        h2o_multithread_send_message(&conf.threads[i].server_notifications, &message->super);
     }
 }
 
 static void on_sigterm(int signo)
 {
     conf.shutdown_requested = 1;
-    notify_all_threads();
+    notify_all_threads(NULL);
 }
 
 #ifdef __GLIBC__
@@ -1144,7 +1200,7 @@ static void on_socketclose(void *data)
 
     if (prev_num_connections == conf.max_connections) {
         /* ready to accept new connections. wake up all the threads! */
-        notify_all_threads();
+        notify_all_threads(NULL);
     }
 }
 
@@ -1201,11 +1257,11 @@ static void update_listener_state(struct listener_ctx_t *listeners)
 
 static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
 {
-    /* the notification is used only for exitting h2o_evloop_run; actual changes are done in the main loop of run_loop */
-
     while (!h2o_linklist_is_empty(messages)) {
-        h2o_multithread_message_t *message = H2O_STRUCT_FROM_MEMBER(h2o_multithread_message_t, link, messages->next);
-        h2o_linklist_unlink(&message->link);
+        struct server_notification_t *message = H2O_STRUCT_FROM_MEMBER(struct server_notification_t, super.link, messages->next);
+        h2o_linklist_unlink(&message->super.link);
+        if (message->status != NULL)
+            collect_status(message->status);
         free(message);
     }
 }
