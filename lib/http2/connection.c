@@ -60,9 +60,12 @@ static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
+static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa);
+static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len);
 
 const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown};
+static const h2o_conn_callbacks_t CONN_CALLBACKS = {get_sockname, get_peername, push_path};
 
 static int is_idle_stream_id(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
@@ -84,10 +87,13 @@ static void graceful_shutdown_resend_goaway(h2o_timeout_entry_t *entry)
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
     h2o_linklist_t *node;
 
-    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
-        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
-        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED)
-            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){});
+    for (node = ctx->connections.next; node != &ctx->connections; node = node->next) {
+        h2o_conn_t *anyconn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, link, node);
+        if (anyconn->callbacks == &CONN_CALLBACKS) {
+            h2o_http2_conn_t *conn = (void *)anyconn;
+            if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED)
+                enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){});
+        }
     }
 }
 
@@ -106,12 +112,15 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
         return;
     ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
-    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
-        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
-        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
-            h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
-                                          (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
-            h2o_http2_conn_request_write(conn);
+    for (node = ctx->connections.next; node != &ctx->connections; node = node->next) {
+        h2o_conn_t *anyconn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, link, node);
+        if (anyconn->callbacks == &CONN_CALLBACKS) {
+            h2o_http2_conn_t *conn = (void *)anyconn;
+            if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
+                h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
+                                              (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
+                h2o_http2_conn_request_write(conn);
+            }
         }
     }
     h2o_timeout_link(ctx->loop, &ctx->one_sec_timeout, &ctx->http2._graceful_shutdown_timeout);
@@ -254,7 +263,6 @@ static void close_connection_now(h2o_http2_conn_t *conn)
         h2o_buffer_dispose(&conn->_headers_unparsed);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
-    h2o_linklist_unlink(&conn->_conns);
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
@@ -1019,13 +1027,13 @@ static void emit_writereq(h2o_timeout_entry_t *entry)
     do_emit_writereq(conn);
 }
 
-static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
+socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     h2o_http2_conn_t *conn = (void *)_conn;
     return h2o_socket_getsockname(conn->sock, sa);
 }
 
-static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
+socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     h2o_http2_conn_t *conn = (void *)_conn;
     return h2o_socket_getpeername(conn->sock, sa);
@@ -1033,18 +1041,16 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
-    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername, push_path};
     h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     /* init the connection */
     memset(conn, 0, sizeof(*conn));
-    h2o_conn_init(&conn->super, ctx, hosts, connected_at, &callbacks);
+    h2o_conn_init(&conn->super, ctx, hosts, connected_at, &CONN_CALLBACKS);
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
-    h2o_linklist_insert(&ctx->http2._conns, &conn->_conns);
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;

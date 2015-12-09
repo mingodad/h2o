@@ -432,10 +432,6 @@ struct st_h2o_context_t {
          */
         h2o_timeout_t idle_timeout;
         /**
-         * link-list of h2o_http2_conn_t
-         */
-        h2o_linklist_t _conns;
-        /**
          * timeout entry used for graceful shutdown
          */
         h2o_timeout_entry_t _graceful_shutdown_timeout;
