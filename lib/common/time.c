@@ -91,12 +91,14 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
     if (len != H2O_TIMESTR_RFC1123_LEN)
         return -1;
 
-    /*           1         2
-     * 01234567890123456789012345678
-     * Fri, 19 Sep 2014 05:24:04 GMT
-     */
+/*           1         2
+ * 01234567890123456789012345678
+ * Fri, 19 Sep 2014 05:24:04 GMT
+ */
 
-#define FETCH(dst, pos, n) if ((dst = fetch_digits(s + pos, n)) == -1) return -1;
+#define FETCH(dst, pos, n)                                                                                                         \
+    if ((dst = fetch_digits(s + pos, n)) == -1)                                                                                    \
+        return -1;
     FETCH(tm->tm_year, 12, 4);
     tm->tm_year -= 1900;
     /* month is parsed afterwards */
@@ -106,35 +108,57 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
     FETCH(tm->tm_sec, 23, 2);
 #undef FETCH
 
-#define PACK3(a, b, c) (((a) & 0xff) << 16 | ((b) & 0xff) << 8 | ((c) & 0xff))
-#define MAP(c1, c2, c3, value) case PACK3(c1, c2, c3): tm->tm_mon = value; break
+#define PACK3(a, b, c) (((a)&0xff) << 16 | ((b)&0xff) << 8 | ((c)&0xff))
+#define MAP(c1, c2, c3, value)                                                                                                     \
+    case PACK3(c1, c2, c3):                                                                                                        \
+        tm->tm_mon = value;                                                                                                        \
+        break
     switch (PACK3(s[8], s[9], s[10])) {
-    MAP('J', 'a', 'n', 0);
-    MAP('F', 'e', 'b', 1);
-    MAP('M', 'a', 'r', 2);
-    MAP('A', 'p', 'r', 3);
-    MAP('M', 'a', 'y', 4);
-    MAP('J', 'u', 'n', 5);
-    MAP('J', 'u', 'l', 6);
-    MAP('A', 'u', 'g', 7);
-    MAP('S', 'e', 'p', 8);
-    MAP('O', 'c', 't', 9);
-    MAP('N', 'o', 'v', 10);
-    MAP('D', 'e', 'c', 11);
+        MAP('J', 'a', 'n', 0);
+        MAP('F', 'e', 'b', 1);
+        MAP('M', 'a', 'r', 2);
+        MAP('A', 'p', 'r', 3);
+        MAP('M', 'a', 'y', 4);
+        MAP('J', 'u', 'n', 5);
+        MAP('J', 'u', 'l', 6);
+        MAP('A', 'u', 'g', 7);
+        MAP('S', 'e', 'p', 8);
+        MAP('O', 'c', 't', 9);
+        MAP('N', 'o', 'v', 10);
+        MAP('D', 'e', 'c', 11);
     default:
         return -1;
     }
 #undef MAP
-#undef PACK4
+#undef PACK3
 
     return 0;
+}
+
+static int calc_gmt_offset(time_t t, struct tm *local)
+{
+    struct tm gmt;
+    int delta;
+
+    gmtime_r(&t, &gmt);
+    delta = (local->tm_hour - gmt.tm_hour) * 60 + (local->tm_min - gmt.tm_min);
+
+    if (local->tm_yday != gmt.tm_yday) {
+        int day_offset;
+        if (local->tm_year == gmt.tm_year)
+            day_offset = local->tm_yday - gmt.tm_yday;
+        else
+            day_offset = local->tm_year - gmt.tm_year;
+        delta += day_offset * 24 * 60;
+    }
+    return delta;
 }
 
 void h2o_time2str_log(char *buf, time_t time)
 {
     struct tm localt;
     localtime_r(&time, &localt);
-    int gmt_off = (int)(localt.tm_gmtoff / 60);
+    int gmt_off = calc_gmt_offset(time, &localt);
     int gmt_sign;
 
     if (gmt_off >= 0) {

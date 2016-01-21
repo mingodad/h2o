@@ -12,6 +12,7 @@ my @HOSTS = qw(
     www.cybertrust.ne.jp
     www.comodo.com
     www.godaddy.com
+    www.startssl.com
 );
 
 for my $host (@HOSTS) {
@@ -36,7 +37,7 @@ sub doit {
     }
     ok @certs >= 2, "chain has more than 2 certificates";
 
-    my ($cert_fh, $cert_fn) = tempfile();
+    my ($cert_fh, $cert_fn) = tempfile(UNLINK => 1);
     print $cert_fh join "\n", @certs;
     close $cert_fh;
 

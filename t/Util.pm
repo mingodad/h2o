@@ -11,7 +11,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o create_data_file md5_file prog_exists run_prog openssl_can_negotiate);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -20,11 +20,46 @@ sub bindir {
     $ENV{BINARY_DIR} || '.';
 }
 
+sub server_features {
+    open my $fh, "-|", bindir() . "/h2o", "--version"
+        or die "failed to invoke: h2o --version:$!";
+    <$fh>; # skip h2o version
+    +{
+        map { chomp($_); split /:/, $_, 2 } <$fh>
+    };
+}
+
 sub exec_unittest {
     my $base = shift;
     my $fn = bindir() . "/t-00unit-$base.t";
     plan skip_all => "unit test:$base does not exist"
         if ! -e $fn;
+
+    if (prog_exists("memcached")) {
+        my $port = empty_port();
+        pipe my $rfh, my $wfh
+            or die "pipe failed:$!";
+        my $pid = fork;
+        die "fork failed:$!"
+            unless defined $pid;
+        if ($pid == 0) {
+            # child process
+            close $wfh;
+            POSIX::dup2($rfh->fileno, 5)
+                or die "dup2 failed:$!";
+            exec qw(share/h2o/kill-on-close -- memcached -l 127.0.0.1 -p), $port;
+            exit 1;
+        }
+        close $rfh;
+        POSIX::dup($wfh->fileno)
+            or die "dup failed:$!";
+        sleep 1;
+        if (waitpid($pid, WNOHANG) == $pid) {
+            die "failed to launch memcached";
+        }
+        $ENV{MEMCACHED_PORT} = $port;
+    }
+
     exec $fn;
     die "failed to exec $fn:$!";
 }
@@ -85,23 +120,18 @@ sub spawn_server {
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
-    my @prefix;
+    my @opts;
 
     # decide the port numbers
-    my $port = empty_port();
-    my $tls_port;
-    while (1) {
-       $tls_port = empty_port();
-       last if $tls_port != $port;
-    }
+    my ($port, $tls_port) = empty_ports(2);
 
     # setup the configuration file
-    my ($conffh, $conffn) = tempfile();
+    my ($conffh, $conffn) = tempfile(UNLINK => 1);
     $conf = $conf->($port, $tls_port)
         if ref $conf eq 'CODE';
     if (ref $conf eq 'HASH') {
-        @prefix = @{$conf->{prefix}}
-            if $conf->{prefix};
+        @opts = @{$conf->{opts}}
+            if $conf->{opts};
         $conf = $conf->{conf};
     }
     print $conffh <<"EOT";
@@ -119,22 +149,34 @@ EOT
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
-        argv     => [ @prefix, bindir() . "/h2o", "-c", $conffn ],
+        argv     => [ bindir() . "/h2o", "-c", $conffn, @opts ],
         is_ready => sub {
             check_port($port) && check_port($tls_port);
         },
     );
-    return +{
+    my $ret = {
         port     => $port,
         tls_port => $tls_port,
         guard    => $guard,
         pid      => $pid,
     };
+    return $ret;
+}
+
+sub empty_ports {
+    my $n = shift;
+    my @ports;
+    while (@ports < $n) {
+        my $t = empty_port();
+        push @ports, $t
+            unless grep { $_ == $t } @ports;
+    }
+    return @ports;
 }
 
 sub create_data_file {
     my $sz = shift;
-    my ($fh, $fn) = tempfile();
+    my ($fh, $fn) = tempfile(UNLINK => 1);
     print $fh '0' x $sz;
     close $fh;
     return $fn;
@@ -155,7 +197,7 @@ sub prog_exists {
 
 sub run_prog {
     my $cmd = shift;
-    my ($tempfh, $tempfn) = tempfile();
+    my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
     my $stderr = `$cmd 2>&1 > $tempfn`;
     my $stdout = do { local $/; <$tempfh> };
     return ($stderr, $stdout);
@@ -167,6 +209,10 @@ sub openssl_can_negotiate {
         or die "cannot parse OpenSSL version: $openssl_ver";
     $openssl_ver = $1 * 10000 + $2 * 100 + $3;
     return $openssl_ver >= 10001;
+}
+
+sub curl_supports_http2 {
+    return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
 }
 
 1;

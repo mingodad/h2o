@@ -23,7 +23,6 @@
 #define h2o__server_starter_h
 
 #include <stddef.h>
-#include <pwd.h>
 
 /* taken from sysexits.h */
 #ifndef EX_SOFTWARE
@@ -43,33 +42,27 @@
  * equivalent of signal(3)
  */
 void h2o_set_signal_handler(int signo, void (*cb)(int signo));
-/**
- * a signal handler that does nothing
- */
-void h2o_noop_signal_handler(int signo);
-
-/**
- * initializes the given signal to be used for waking up other threads
- */
-void h2o_thread_initialize_signal_for_notification(int signo);
-/**
- * notifies a thread
- */
-void h2o_thread_notify(pthread_t tid);
-/**
- * returns if the running thread has received a notification (and clears the flag)
- */
-int h2o_thread_is_notified(void);
 
 /**
  * equiv. to setuidgid of djb
  */
-int h2o_setuidgid(struct passwd *passwd);
+int h2o_setuidgid(const char *user);
 
 /**
  * return a list of fds passed in from Server::Starter, or 0 if Server::Starter was not used.  -1 on error
  */
-ssize_t h2o_server_starter_get_fds(int **_fds);
+size_t h2o_server_starter_get_fds(int **_fds);
+
+/**
+ * spawns a command with given arguments, while mapping the designated file descriptors.
+ * @param cmd file being executed
+ * @param argv argv passed to the executable
+ * @param mapped_fds if non-NULL, must point to an array contain containing a list of pair of file descriptors, terminated with -1.
+ *        Every pair of the mapping will be duplicated by calling `dup2` before execvp is being called if the second value of the
+ *        pair is not -1.  If the second value is -1, then `close` is called with the first value as the argument.
+ * @return pid of the process being spawned if successful, or -1 if otherwise
+ */
+pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int clocexec_mutex_is_locked);
 
 /**
  * executes a command and returns its output

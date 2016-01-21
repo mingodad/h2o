@@ -25,6 +25,41 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
+struct st_core_config_vars_t {
+    struct {
+        int reprioritize_blocking_assets;
+        h2o_casper_conf_t casper;
+    } http2;
+};
+
+struct st_core_configurator_t {
+    h2o_configurator_t super;
+    struct st_core_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+};
+
+static int on_core_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)_self;
+
+    ++self->vars;
+    self->vars[0] = self->vars[-1];
+    return 0;
+}
+
+static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)_self;
+
+    if (ctx->hostconf != NULL && ctx->pathconf == NULL) {
+        /* exitting from host-level configuration */
+        ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
+        ctx->hostconf->http2.casper = self->vars->http2.casper;
+    }
+
+    --self->vars;
+    return 0;
+}
+
 static void destroy_configurator(h2o_configurator_t *configurator)
 {
     if (configurator->dispose != NULL)
@@ -51,23 +86,35 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
     return 0;
 }
 
-static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_t *node)
+static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_t *slot)
 {
-    struct {
+    unsigned timeout_in_secs;
+
+    if (h2o_configurator_scanf(cmd, node, "%u", &timeout_in_secs) != 0)
+        return -1;
+
+    *slot = timeout_in_secs * 1000;
+    return 0;
+}
+
+int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands)
+{
+    struct st_cmd_value_t {
         h2o_configurator_command_t *cmd;
         yoml_t *value;
-    } *deferred;
-    size_t num_deferred = 0, i;
+    };
+    H2O_VECTOR(struct st_cmd_value_t) deferred = {}, semi_deferred = {};
+    size_t i;
+    int ret = -1;
 
     if (node->type != YOML_TYPE_MAPPING) {
         h2o_configurator_errprintf(NULL, node, "node must be a MAPPING");
-        return -1;
+        goto Exit;
     }
-    deferred = alloca(sizeof(*deferred) * node->data.mapping.size);
 
     /* call on_enter of every configurator */
     if (setup_configurators(ctx, 1, node) != 0)
-        return -1;
+        goto Exit;
 
     /* handle the configuration commands */
     for (i = 0; i != node->data.mapping.size; ++i) {
@@ -76,15 +123,21 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
         /* obtain the target command */
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(NULL, key, "command must be a string");
-            return -1;
+            goto Exit;
+        }
+        if (ignore_commands != NULL) {
+            size_t i;
+            for (i = 0; ignore_commands[i] != NULL; ++i)
+                if (strcmp(ignore_commands[i], key->data.scalar) == 0)
+                    goto SkipCommand;
         }
         if ((cmd = h2o_configurator_get_command(ctx->globalconf, key->data.scalar)) == NULL) {
             h2o_configurator_errprintf(NULL, key, "unknown command: %s", key->data.scalar);
-            return -1;
+            goto Exit;
         }
         if ((cmd->flags & flags_mask) == 0) {
             h2o_configurator_errprintf(cmd, key, "the command cannot be used at this level");
-            return -1;
+            goto Exit;
         }
         /* check value type */
         if ((cmd->flags & (H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
@@ -93,19 +146,19 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
             case YOML_TYPE_SCALAR:
                 if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR) == 0) {
                     h2o_configurator_errprintf(cmd, value, "argument cannot be a scalar");
-                    return -1;
+                    goto Exit;
                 }
                 break;
             case YOML_TYPE_SEQUENCE:
                 if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE) == 0) {
                     h2o_configurator_errprintf(cmd, value, "argument cannot be a sequence");
-                    return -1;
+                    goto Exit;
                 }
                 break;
             case YOML_TYPE_MAPPING:
                 if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING) == 0) {
                     h2o_configurator_errprintf(cmd, value, "argument cannot be a mapping");
-                    return -1;
+                    goto Exit;
                 }
                 break;
             default:
@@ -114,25 +167,39 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
             }
         }
         /* handle the command (or keep it for later execution) */
-        if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
-            deferred[num_deferred].cmd = cmd;
-            deferred[num_deferred].value = value;
-            ++num_deferred;
+        if ((cmd->flags & H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED) != 0) {
+            h2o_vector_reserve(NULL, (void *)&semi_deferred, sizeof(semi_deferred.entries[0]), semi_deferred.size + 1);
+            semi_deferred.entries[semi_deferred.size++] = (struct st_cmd_value_t){cmd, value};
+        } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
+            h2o_vector_reserve(NULL, (void *)&deferred, sizeof(deferred.entries[0]), deferred.size + 1);
+            deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value};
         } else {
             if (cmd->cb(cmd, ctx, value) != 0)
                 return -1;
         }
+    SkipCommand:
+        ;
     }
-    for (i = 0; i != num_deferred; ++i) {
-        if (deferred[i].cmd->cb(deferred[i].cmd, ctx, deferred[i].value) != 0)
-            return -1;
+    for (i = 0; i != semi_deferred.size; ++i) {
+        struct st_cmd_value_t *pair = semi_deferred.entries + i;
+        if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+            goto Exit;
+    }
+    for (i = 0; i != deferred.size; ++i) {
+        struct st_cmd_value_t *pair = deferred.entries + i;
+        if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+            goto Exit;
     }
 
     /* call on_enter of every configurator */
     if (setup_configurators(ctx, 0, node) != 0)
-        return -1;
+        goto Exit;
 
-    return 0;
+    ret = 0;
+Exit:
+    free(deferred.entries);
+    free(semi_deferred.entries);
+    return ret;
 }
 
 static int sort_from_longer_paths(const yoml_mapping_element_t *x, const yoml_mapping_element_t *y)
@@ -164,10 +231,12 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        ctx->pathconf = h2o_config_register_path(ctx->hostconf, key->data.scalar);
-        if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_PATH, value) != 0)
+        h2o_configurator_context_t path_ctx = *ctx;
+        path_ctx.pathconf = h2o_config_register_path(path_ctx.hostconf, key->data.scalar);
+        path_ctx.mimemap = &path_ctx.pathconf->mimemap;
+        path_ctx.parent = ctx;
+        if (h2o_configurator_apply_commands(&path_ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL) != 0)
             return -1;
-        ctx->pathconf = NULL;
     }
 
     return 0;
@@ -185,18 +254,35 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
+        h2o_iovec_t hostname;
+        uint16_t port;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, key, "key (representing the hostname) must be a string");
             return -1;
         }
-        ctx->hostconf = h2o_config_register_host(ctx->globalconf, key->data.scalar);
-        if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_HOST, value) != 0)
+        if (h2o_url_parse_hostport(key->data.scalar, strlen(key->data.scalar), &hostname, &port) == NULL) {
+            h2o_configurator_errprintf(cmd, key, "invalid key (must be either `host` or `host:port`)");
+            return -1;
+        }
+        assert(hostname.len != 0);
+        if ((hostname.base[0] == '*' && !(hostname.len == 1 || hostname.base[1] == '.')) ||
+            memchr(hostname.base + 1, '*', hostname.len - 1) != NULL) {
+            h2o_configurator_errprintf(cmd, key, "wildcard (*) can only be used at the start of the hostname");
+            return -1;
+        }
+        h2o_configurator_context_t host_ctx = *ctx;
+        if ((host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port)) == NULL) {
+            h2o_configurator_errprintf(cmd, key, "duplicate host entry");
+            return -1;
+        }
+        host_ctx.mimemap = &host_ctx.hostconf->mimemap;
+        host_ctx.parent = ctx;
+        if (h2o_configurator_apply_commands(&host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL) != 0)
             return -1;
         if (yoml_get(value, "paths") == NULL) {
             h2o_configurator_errprintf(NULL, value, "mandatory configuration directive `paths` is missing");
             return -1;
         }
-        ctx->hostconf = NULL;
     }
 
     return 0;
@@ -207,15 +293,19 @@ static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_con
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->max_request_entity_size);
 }
 
+static int on_config_max_delegations(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_delegations);
+}
+
+static int on_config_handshake_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->handshake_timeout);
+}
+
 static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    unsigned timeout_in_secs;
-
-    if (h2o_configurator_scanf(cmd, node, "%u", &timeout_in_secs) != 0)
-        return -1;
-
-    ctx->globalconf->http1.req_timeout = timeout_in_secs * 1000;
-    return 0;
+    return config_timeout(cmd, node, &ctx->globalconf->http1.req_timeout);
 }
 
 static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -229,19 +319,296 @@ static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o
 
 static int on_config_http2_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    unsigned timeout_in_secs;
-
-    if (h2o_configurator_scanf(cmd, node, "%u", &timeout_in_secs) != 0)
-        return -1;
-
-    ctx->globalconf->http2.idle_timeout = timeout_in_secs * 1000;
-    return 0;
+    return config_timeout(cmd, node, &ctx->globalconf->http2.idle_timeout);
 }
 
 static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
                                                                   yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
+}
+
+static int on_config_http2_reprioritize_blocking_assets(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                        yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    self->vars->http2.reprioritize_blocking_assets = (int)on;
+
+    return 0;
+}
+
+static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    static const h2o_casper_conf_t defaults = {
+        13, /* casper_bits: default (2^13 ~= 100 assets * 1/0.01 collision probability) */
+        0   /* track blocking assets only */
+    };
+
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        if (strcasecmp(node->data.scalar, "OFF") == 0) {
+            self->vars->http2.casper = (h2o_casper_conf_t){};
+        } else if (strcasecmp(node->data.scalar, "ON") == 0) {
+            self->vars->http2.casper = defaults;
+        }
+        break;
+    case YOML_TYPE_MAPPING: {
+        /* set to default */
+        self->vars->http2.casper = defaults;
+        /* override the attributes defined */
+        yoml_t *t;
+        if ((t = yoml_get(node, "capacity-bits")) != NULL) {
+            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 0 &&
+                  self->vars->http2.casper.capacity_bits < 16)) {
+                h2o_configurator_errprintf(cmd, t, "value of `capacity-bits` must be an integer between 0 to 15");
+                return -1;
+            }
+        }
+        if ((t = yoml_get(node, "tracking-types")) != NULL) {
+            if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "blocking-assets") == 0) {
+                self->vars->http2.casper.track_all_types = 0;
+            } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "all") == 0) {
+                self->vars->http2.casper.track_all_types = 1;
+            } else {
+                h2o_configurator_errprintf(cmd, t, "value of `tracking-types` must be either of: `blocking-assets` or `all`");
+                return -1;
+            }
+        }
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "value must be `OFF`,`ON` or a mapping containing the necessary attributes");
+        return -1;
+    }
+
+    return 0;
+}
+
+static int assert_is_mimetype(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, node, "expected a scalar (mime-type)");
+        return -1;
+    }
+    if (strchr(node->data.scalar, '/') == NULL) {
+        h2o_configurator_errprintf(cmd, node, "the string \"%s\" does not look like a mime-type", node->data.scalar);
+        return -1;
+    }
+    return 0;
+}
+
+static int assert_is_extension(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, node, "expected a scalar (extension)");
+        return -1;
+    }
+    if (node->data.scalar[0] != '.') {
+        h2o_configurator_errprintf(cmd, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
+        return -1;
+    }
+    return 0;
+}
+
+static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap, yoml_t *node)
+{
+    size_t i, j;
+
+    assert(node->type == YOML_TYPE_MAPPING);
+
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key;
+        yoml_t *value = node->data.mapping.elements[i].value;
+        if (assert_is_mimetype(cmd, key) != 0)
+            return -1;
+        switch (value->type) {
+        case YOML_TYPE_SCALAR:
+            if (assert_is_extension(cmd, value) != 0)
+                return -1;
+            h2o_mimemap_define_mimetype(mimemap, value->data.scalar + 1, key->data.scalar, NULL);
+            break;
+        case YOML_TYPE_SEQUENCE:
+            for (j = 0; j != value->data.sequence.size; ++j) {
+                yoml_t *ext_node = value->data.sequence.elements[j];
+                if (assert_is_extension(cmd, ext_node) != 0)
+                    return -1;
+                h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, NULL);
+            }
+            break;
+        case YOML_TYPE_MAPPING: {
+            yoml_t *t;
+            h2o_mime_attributes_t attr;
+            h2o_mimemap_get_default_attributes(key->data.scalar, &attr);
+            if ((t = yoml_get(value, "is_compressible")) != NULL) {
+                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "YES") == 0) {
+                    attr.is_compressible = 1;
+                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "NO") == 0) {
+                    attr.is_compressible = 0;
+                } else {
+                    h2o_configurator_errprintf(cmd, t, "`is_compressible` attribute must be either of: `YES` or `NO`");
+                    return -1;
+                }
+            }
+            if ((t = yoml_get(value, "priority")) != NULL) {
+                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "normal") == 0) {
+                    attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL;
+                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "highest") == 0) {
+                    attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
+                } else {
+                    h2o_configurator_errprintf(cmd, t, "`priority` attribute must be either of: `normal` or `highest`");
+                    return -1;
+                }
+            }
+            if ((t = yoml_get(value, "extensions")) == NULL) {
+                h2o_configurator_errprintf(cmd, value, "cannot find mandatory attribute `extensions`");
+                return -1;
+            }
+            if (t->type != YOML_TYPE_SEQUENCE) {
+                h2o_configurator_errprintf(cmd, t, "`extensions` attribute must be a sequence of scalars");
+                return -1;
+            }
+            for (j = 0; j != t->data.sequence.size; ++j) {
+                yoml_t *ext_node = t->data.sequence.elements[j];
+                if (assert_is_extension(cmd, ext_node) != 0)
+                    return -1;
+                h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, &attr);
+            }
+        } break;
+        default:
+            fprintf(stderr, "logic flaw at %s:%d\n", __FILE__, __LINE__);
+            abort();
+        }
+    }
+
+    return 0;
+}
+
+static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_mimemap_t *newmap = h2o_mimemap_create();
+
+    h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(*ctx->mimemap)->data.mimetype.base, NULL);
+    if (set_mimetypes(cmd, newmap, node) != 0) {
+        h2o_mem_release_shared(newmap);
+        return -1;
+    }
+
+    h2o_mem_release_shared(*ctx->mimemap);
+    *ctx->mimemap = newmap;
+    return 0;
+}
+
+static void clone_mimemap_if_clean(h2o_configurator_context_t *ctx)
+{
+    if (ctx->parent == NULL)
+        return;
+    if (*ctx->mimemap != *ctx->parent->mimemap)
+        return;
+    h2o_mem_release_shared(*ctx->mimemap);
+    /* even after release, ctx->mimemap is still retained by the parent and therefore we can use it as the argument to clone */
+    *ctx->mimemap = h2o_mimemap_clone(*ctx->mimemap);
+}
+
+static int on_config_mime_addtypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    clone_mimemap_if_clean(ctx);
+    return set_mimetypes(cmd, *ctx->mimemap, node);
+}
+
+static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    size_t i;
+
+    clone_mimemap_if_clean(ctx);
+    for (i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *ext_node = node->data.sequence.elements[i];
+        if (assert_is_extension(cmd, ext_node) != 0)
+            return -1;
+        h2o_mimemap_remove_type(*ctx->mimemap, ext_node->data.scalar + 1);
+    }
+
+    return 0;
+}
+
+static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (assert_is_mimetype(cmd, node) != 0)
+        return -1;
+
+    clone_mimemap_if_clean(ctx);
+    h2o_mimemap_set_default_type(*ctx->mimemap, node->data.scalar, NULL);
+
+    return 0;
+}
+
+static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    static const char *ignore_commands[] = {"extension", NULL};
+    yoml_t *ext_node;
+    const char **exts;
+    h2o_mimemap_type_t *type = NULL;
+
+    if (node->type != YOML_TYPE_MAPPING) {
+        h2o_configurator_errprintf(cmd, node, "argument must be a MAPPING");
+        return -1;
+    }
+    if ((ext_node = yoml_get(node, "extension")) == NULL) {
+        h2o_configurator_errprintf(cmd, node, "mandatory key `extension` is missing");
+        return -1;
+    }
+
+    /* create dynamic type */
+    switch (ext_node->type) {
+    case YOML_TYPE_SCALAR:
+        if (assert_is_extension(cmd, ext_node) != 0)
+            return -1;
+        exts = alloca(2 * sizeof(*exts));
+        exts[0] = ext_node->data.scalar + 1;
+        exts[1] = NULL;
+        break;
+    case YOML_TYPE_SEQUENCE: {
+        exts = alloca((ext_node->data.sequence.size + 1) * sizeof(*exts));
+        size_t i;
+        for (i = 0; i != ext_node->data.sequence.size; ++i) {
+            yoml_t *n = ext_node->data.sequence.elements[i];
+            if (assert_is_extension(cmd, n) != 0)
+                return -1;
+            exts[i] = n->data.scalar + 1;
+        }
+        exts[i] = NULL;
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, ext_node,
+                                   "only scalar or sequence of scalar is permitted at the value part of the argument");
+        return -1;
+    }
+    clone_mimemap_if_clean(ctx);
+    type = h2o_mimemap_define_dynamic(*ctx->mimemap, exts, ctx->globalconf);
+
+    /* apply the configuration commands */
+    h2o_configurator_context_t ext_ctx = *ctx;
+    ext_ctx.pathconf = &type->data.dynamic.pathconf;
+    ext_ctx.mimemap = NULL;
+    ext_ctx.parent = ctx;
+    if (h2o_configurator_apply_commands(&ext_ctx, node, H2O_CONFIGURATOR_FLAG_EXTENSION, ignore_commands) != 0)
+        return -1;
+    switch (type->data.dynamic.pathconf.handlers.size) {
+    case 1:
+        break;
+    case 0:
+        h2o_configurator_errprintf(cmd, node, "no handler declared for given extension");
+        return -1;
+    default:
+        h2o_configurator_errprintf(cmd, node, "cannot assign more than one handler for given extension");
+        return -1;
+    }
+
+    return 0;
 }
 
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
@@ -254,35 +621,65 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
         h2o_configurator_define_command(c, "hosts", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
                                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                        on_config_hosts, "map of `host[:port]` -> map of per-host configs");
+                                        on_config_hosts);
         h2o_configurator_define_command(c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
                                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                        on_config_paths, "map of URL-path -> configuration");
+                                        on_config_paths);
     };
 
     { /* setup global configurators */
-        h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
-        h2o_configurator_define_command(c, "limit-request-body", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_limit_request_body,
-                                        "maximum size of request body in bytes (e.g. content of POST)\n"
-                                        "(default: unlimited)");
-        h2o_configurator_define_command(
-            c, "http1-request-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_http1_request_timeout,
-            "timeout for incoming requests in seconds (default: " H2O_TO_STR(H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS) ")");
-        h2o_configurator_define_command(
-            c, "http1-upgrade-to-http2", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_http1_upgrade_to_http2, "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2\n"
-                                              "(default: ON)");
-        h2o_configurator_define_command(
-            c, "http2-idle-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_http2_idle_timeout,
-            "timeout for idle connections in seconds (default: " H2O_TO_STR(H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS) ")");
-        h2o_configurator_define_command(c, "http2-max-concurrent-requests-per-connection",
+        struct st_core_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+        c->super.enter = on_core_enter;
+        c->super.exit = on_core_exit;
+        c->vars = c->_vars_stack;
+        c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
+        h2o_configurator_define_command(&c->super, "limit-request-body",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_http2_max_concurrent_requests_per_connection,
-                                        "max. number of requests to be handled concurrently within a single HTTP/2\n"
-                                        "stream (default: 16)");
+                                        on_config_limit_request_body);
+        h2o_configurator_define_command(&c->super, "max-delegations",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_max_delegations);
+        h2o_configurator_define_command(&c->super, "handshake-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_handshake_timeout);
+        h2o_configurator_define_command(&c->super, "http1-request-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http1_request_timeout);
+        h2o_configurator_define_command(&c->super, "http1-upgrade-to-http2",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http1_upgrade_to_http2);
+        h2o_configurator_define_command(&c->super, "http2-idle-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_idle_timeout);
+        h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_max_concurrent_requests_per_connection);
+        h2o_configurator_define_command(&c->super, "http2-reprioritize-blocking-assets",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_reprioritize_blocking_assets);
+        h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
+                                        on_config_http2_casper);
+        h2o_configurator_define_command(&c->super, "file.mime.settypes",
+                                        (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_mime_settypes);
+        h2o_configurator_define_command(&c->super, "file.mime.addtypes",
+                                        (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_mime_addtypes);
+        h2o_configurator_define_command(&c->super, "file.mime.removetypes",
+                                        (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                        on_config_mime_removetypes);
+        h2o_configurator_define_command(&c->super, "file.mime.setdefaulttype",
+                                        (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_mime_setdefaulttype);
+        h2o_configurator_define_command(&c->super, "file.custom-handler",
+                                        (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                            H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED,
+                                        on_config_custom_handler);
     }
 }
 
@@ -310,8 +707,7 @@ h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz)
     return c;
 }
 
-void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb,
-                                     const char *desc)
+void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb)
 {
     h2o_configurator_command_t *cmd;
 
@@ -322,7 +718,6 @@ void h2o_configurator_define_command(h2o_configurator_t *configurator, const cha
     cmd->flags = flags;
     cmd->name = name;
     cmd->cb = cb;
-    cmd->description = desc;
 }
 
 h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf, const char *name)
@@ -343,13 +738,16 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
     return NULL;
 }
 
-int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node)
+int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run)
 {
-    h2o_configurator_context_t ctx = {config};
+    h2o_configurator_context_t ctx = {};
+    ctx.globalconf = config;
+    ctx.mimemap = &ctx.globalconf->mimemap;
+    ctx.dry_run = dry_run;
 
-    if (apply_commands(&ctx, H2O_CONFIGURATOR_FLAG_GLOBAL, node) != 0)
+    if (h2o_configurator_apply_commands(&ctx, node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL) != 0)
         return -1;
-    if (config->hosts.size == 0) {
+    if (config->hosts[0] == NULL) {
         h2o_configurator_errprintf(NULL, node, "mandatory configuration directive `hosts` is missing");
         return -1;
     }
@@ -417,4 +815,28 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
 Error:
     h2o_configurator_errprintf(cmd, node, "argument must be one of: %s", candidates);
     return -1;
+}
+
+char *h2o_configurator_get_cmd_path(const char *cmd)
+{
+    char *root, *cmd_fullpath;
+
+    /* just return the cmd (being strdup'ed) in case we do not need to prefix the value */
+    if (cmd[0] == '/' || strchr(cmd, '/') == NULL)
+        goto ReturnOrig;
+
+    /* obtain root */
+    if ((root = getenv("H2O_ROOT")) == NULL) {
+        root = H2O_TO_STR(H2O_ROOT);
+        if (root == NULL)
+            goto ReturnOrig;
+    }
+
+    /* build full-path and return */
+    cmd_fullpath = h2o_mem_alloc(strlen(root) + strlen(cmd) + 2);
+    sprintf(cmd_fullpath, "%s/%s", root, cmd);
+    return cmd_fullpath;
+
+ReturnOrig:
+    return h2o_strdup(NULL, cmd, SIZE_MAX).base;
 }

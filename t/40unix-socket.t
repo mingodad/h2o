@@ -5,10 +5,10 @@ use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
 
-plan skip_all => 'nc not found'
-    unless prog_exists('nc');
+plan skip_all => 'nc -U not found'
+    unless prog_exists('nc') and `nc -h 2>&1` =~ /-U\t+Use UNIX domain socket/;
 
-my $tempdir = tempdir(CELANUP => 1);
+my $tempdir = tempdir(CLEANUP => 1);
 my $sock_path = "$tempdir/h2o.sock";
 
 my $server = spawn_h2o(<< "EOT");

@@ -19,6 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include "h2o.h"
+#include "h2o/configurator.h"
+#include "../../src/standalone.h"
 #include "./test.h"
 
 static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
@@ -27,9 +30,9 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
     size_t i;
 
     for (i = 0; i != inbufcnt; ++i) {
-        h2o_buffer_reserve(&conn->body, inbufs->len);
-        memcpy(conn->body->bytes + conn->body->size, inbufs->base, inbufs->len);
-        conn->body->size += inbufs->len;
+        h2o_buffer_reserve(&conn->body, inbufs[i].len);
+        memcpy(conn->body->bytes + conn->body->size, inbufs[i].base, inbufs[i].len);
+        conn->body->size += inbufs[i].len;
     }
 
     if (is_final)
@@ -38,12 +41,33 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
         h2o_proceed_response(&conn->req);
 }
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx)
+static socklen_t get_sockname(h2o_conn_t *conn, struct sockaddr *sa)
 {
+    struct sockaddr_in *sin = (void *)sa;
+    sin->sin_family = AF_INET;
+    sin->sin_addr.s_addr = htonl(0x7f000001);
+    sin->sin_port = htons(80);
+    return sizeof(*sin);
+}
+
+static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
+{
+    struct sockaddr_in *sin = (void *)sa;
+    sin->sin_family = AF_INET;
+    sin->sin_addr.s_addr = htonl(0x7f000001);
+    sin->sin_port = htons(55555);
+    return sizeof(*sin);
+}
+
+h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
+{
+    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
     h2o_loopback_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
+    conn->super.hosts = hosts;
+    conn->super.callbacks = &callbacks;
     h2o_init_request(&conn->req, &conn->super, NULL);
     h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;
@@ -61,8 +85,8 @@ void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 {
-    if (conn->req.scheme == NULL)
-        conn->req.scheme = &H2O_URL_SCHEME_HTTP;
+    if (conn->req.input.scheme == NULL)
+        conn->req.input.scheme = &H2O_URL_SCHEME_HTTP;
     if (conn->req.version == 0)
         conn->req.version = 0x100; /* HTTP/1.0 */
 
@@ -106,12 +130,12 @@ static void test_loopback(void)
     h2o_loopback_conn_t *conn;
 
     h2o_config_init(&conf);
-    h2o_config_register_host(&conf, "default");
+    h2o_config_register_host(&conf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
     h2o_context_init(&ctx, test_loop, &conf);
 
-    conn = h2o_loopback_create(&ctx);
-    conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
-    conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+    conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+    conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+    conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
     h2o_loopback_run_loop(conn);
 
     ok(conn->req.res.status == 404);
@@ -122,15 +146,24 @@ static void test_loopback(void)
 
 int main(int argc, char **argv)
 {
+    init_openssl();
+
     { /* library tests */
-        subtest("lib/string.c", test_lib__string_c);
-        subtest("lib/url.c", test_lib__url_c);
-        subtest("lib/time.c", test_lib__time_c);
-        subtest("lib/headers.c", test_lib__headers_c);
-        subtest("lib/server_starter.c", test_lib__serverutil_c);
+        subtest("lib/common/multithread.c", test_lib__common__multithread_c);
+        subtest("lib/common/hostinfo.c", test_lib__common__hostinfo_c);
+        subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
+        subtest("lib/common/serverutil.c", test_lib__common__socket_c);
+        subtest("lib/common/string.c", test_lib__common__string_c);
+        subtest("lib/common/url.c", test_lib__common__url_c);
+        subtest("lib/common/time.c", test_lib__common__time_c);
+        subtest("lib/core/headers.c", test_lib__core__headers_c);
+        subtest("lib/core/proxy.c", test_lib__core__proxy_c);
+        subtest("lib/core/util.c", test_lib__core__util_c);
+        subtest("lib/handler/headers.c", test_lib__handler__headers_c);
+        subtest("lib/handler/mimemap.c", test_lib__handler__mimemap_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
-        subtest("lib/mimemap.c", test_lib__mimemap_c);
+        subtest("lib/http2/casper.c", test_lib__http2__casper);
     }
 
     { /* tests that use the run loop */
@@ -142,8 +175,11 @@ int main(int argc, char **argv)
 #endif
 
         subtest("lib/t/test.c/loopback", test_loopback);
-        subtest("lib/file.c", test_lib__file_c);
-        subtest("lib/proxy.c", test_lib__proxy_c);
+        subtest("lib/fastcgi.c", test_lib__handler__fastcgi_c);
+        subtest("lib/file.c", test_lib__handler__file_c);
+        subtest("lib/gzip.c", test_lib__handler__gzip_c);
+        subtest("lib/redirect.c", test_lib__handler__redirect_c);
+        subtest("issues/293.c", test_issues293);
 
 #if H2O_USE_LIBUV
         uv_loop_close(test_loop);
@@ -151,6 +187,10 @@ int main(int argc, char **argv)
 #else
 // h2o_evloop_destroy(loop);
 #endif
+    }
+
+    { /* src tests */
+        subtest("src/ssl.c", test_src__ssl_c);
     }
 
     return done_testing();

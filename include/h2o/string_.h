@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Justin Zhu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -57,6 +57,14 @@ static int h2o_tolower(int ch);
  */
 static void h2o_strtolower(char *s, size_t len);
 /**
+ * tr/a-z/A-Z/
+ */
+static int h2o_toupper(int ch);
+/**
+ * tr/a-z/A-Z/
+ */
+static void h2o_strtoupper(char *s, size_t len);
+/**
  * tests if target string (target_len bytes long) is equal to test string (test_len bytes long) after being converted to lower-case
  */
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
@@ -65,17 +73,38 @@ static int h2o_lcstris(const char *target, size_t target_len, const char *test, 
  */
 size_t h2o_strtosize(const char *s, size_t len);
 /**
- * base64 url decoder
+ * parses first positive number contained in *s or return SIZE_MAX if failed.
+ * *s will set to right after the number in string or right after the end of string.
  */
+size_t h2o_strtosizefwd(char **s, size_t len);
+/**
+* base64 url decoder
+*/
 h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t len);
 /**
- * base64 encoder
+ * base64 encoder (note: the function emits trailing '\0')
  */
-void h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
+size_t h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
+/**
+ * decodes hexadecimal string
+ */
+int h2o_hex_decode(void *dst, const char *src, size_t src_len);
+/**
+ * encodes binary into a hexadecimal string (with '\0' appended at last)
+ */
+void h2o_hex_encode(char *dst, const void *src, size_t src_len);
+/**
+ * URI-ecsapes given string (as defined in RFC 3986)
+ */
+h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const char *preserve_chars);
 /**
  * returns the extension portion of path
  */
-const char *h2o_get_filext(const char *path, size_t len);
+h2o_iovec_t h2o_get_filext(const char *path, size_t len);
+/**
+ * returns a vector with surrounding WS stripped
+ */
+h2o_iovec_t h2o_str_stripws(const char *s, size_t len);
 /**
  * returns the offset of given substring or SIZE_MAX if not found
  */
@@ -102,6 +131,11 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len);
 #define h2o_concat(pool, ...)                                                                                                      \
     h2o_concat_list(pool, (h2o_iovec_t[]){__VA_ARGS__}, sizeof((h2o_iovec_t[]){__VA_ARGS__}) / sizeof(h2o_iovec_t))
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count);
+/**
+ * emits a two-line string to buf that graphically points to given location within the source string
+ * @return 0 if successful
+ */
+int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
@@ -116,6 +150,17 @@ inline void h2o_strtolower(char *s, size_t len)
 {
     for (; len != 0; ++s, --len)
         *s = h2o_tolower(*s);
+}
+
+inline int h2o_toupper(int ch)
+{
+    return 'a' <= ch && ch <= 'z' ? ch - 0x20 : ch;
+}
+
+inline void h2o_strtoupper(char *s, size_t len)
+{
+    for (; len != 0; ++s, --len)
+        *s = h2o_toupper(*s);
 }
 
 inline int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len)

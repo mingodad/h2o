@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Justin Zhu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -22,6 +22,9 @@
 #ifndef h2o__memory_h
 #define h2o__memory_h
 
+#ifdef __sun__
+#include <alloca.h>
+#endif
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -34,8 +37,16 @@ extern "C" {
 
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
 
+#if __GNUC__ >= 3
+#define H2O_LIKELY(x) __builtin_expect(!!(x), 1)
+#define H2O_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#else
+#define H2O_LIKELY(x) (x)
+#define H2O_UNLIKELY(x) (x)
+#endif
+
 #ifdef __GNUC__
-#define H2O_GNUC_VERSION ((__GNUC__ << 16) | (__GNUC__MINOR__ << 8) | __GNUC_PATCHLEVEL__)
+#define H2O_GNUC_VERSION ((__GNUC__ << 16) | (__GNUC_MINOR__ << 8) | __GNUC_PATCHLEVEL__)
 #else
 #define H2O_GNUC_VERSION 0
 #endif
@@ -49,8 +60,8 @@ extern "C" {
 #define H2O_NORETURN
 #endif
 
-#if !defined(__clang__) && defined(__GNUC__) && H2O_GNUC_VERSION >= 0x40802
-// returns_nonnull was seemingly not defined before gcc 4.8.2
+#if !defined(__clang__) && defined(__GNUC__) && H2O_GNUC_VERSION >= 0x40900
+// returns_nonnull was seemingly not defined before gcc 4.9 (exists in 4.9.1 but not in 4.8.2)
 #define H2O_RETURNS_NONNULL __attribute__((returns_nonnull))
 #else
 #define H2O_RETURNS_NONNULL
@@ -134,6 +145,8 @@ struct st_h2o_buffer_prototype_t {
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
+
+extern void *(*h2o_mem__set_secure)(void *, int, size_t);
 
 /**
  * prints an error message and aborts
@@ -231,6 +244,7 @@ static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
  * after it is linked.
  */
 static void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool);
+void h2o_buffer__dispose_linked(void *p);
 /**
  * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
  * @param pool memory pool that the vector is using
@@ -247,9 +261,24 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t eleme
 static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
 
 /**
+ * secure memset
+ */
+static void *h2o_mem_set_secure(void *b, int c, size_t len);
+
+/**
+ * swaps contents of memory
+ */
+void h2o_mem_swap(void *x, void *y, size_t len);
+
+/**
  * emits hexdump of given buffer to fp
  */
 void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
+
+/**
+ * appends an element to a NULL-terminated list allocated using malloc
+ */
+void h2o_append_to_null_terminated_list(void ***list, void *element);
 
 /* inline defs */
 
@@ -322,7 +351,7 @@ inline void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
 
 inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
 {
-    h2o_buffer_t **slot = (h2o_buffer_t **)h2o_mem_alloc_shared(pool, sizeof(*slot), (void (*)(void *))(void *)h2o_buffer_dispose);
+    h2o_buffer_t **slot = (h2o_buffer_t **)h2o_mem_alloc_shared(pool, sizeof(*slot), h2o_buffer__dispose_linked);
     *slot = buffer;
 }
 
@@ -343,6 +372,11 @@ inline int h2o_memis(const void *_target, size_t target_len, const void *_test, 
     if (target[0] != test[0])
         return 0;
     return memcmp(target + 1, test + 1, test_len - 1) == 0;
+}
+
+inline void *h2o_mem_set_secure(void *b, int c, size_t len)
+{
+    return h2o_mem__set_secure(b, c, len);
 }
 
 #ifdef __cplusplus

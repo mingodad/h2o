@@ -22,16 +22,16 @@
 #include "../../test.h"
 #include "../../../../lib/common/time.c"
 
-void test_lib__time_c(void)
+void test_lib__common__time_c(void)
 {
     struct tm tm = {
-        56, /* sec */
-        34, /* min */
-        12, /* hour */
-        4,  /* 4th */
-        1,  /* feb */
+        56,  /* sec */
+        34,  /* min */
+        12,  /* hour */
+        4,   /* 4th */
+        1,   /* feb */
         115, /* 2015 */
-        3 /* Wed */
+        3    /* Wed */
     };
     char buf[H2O_TIMESTR_RFC1123_LEN + 1];
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Justin Zhu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -95,6 +95,44 @@ Error:
     return SIZE_MAX;
 }
 
+size_t h2o_strtosizefwd(char **s, size_t len)
+{
+    uint64_t v, c;
+    char *p = *s, *p_end = *s + len;
+
+    if (len == 0)
+        goto Error;
+
+    int ch = *p++;
+    if (!('0' <= ch && ch <= '9'))
+        goto Error;
+    v = ch - '0';
+    c = 1;
+
+    while (1) {
+        ch = *p;
+        if (!('0' <= ch && ch <= '9'))
+            break;
+        v *= 10;
+        v += ch - '0';
+        p++;
+        c++;
+        if (p == p_end)
+            break;
+        /* similar as above, do not even try to overflow */
+        if (c == 20)
+            goto Error;
+    }
+
+    if (v >= SIZE_MAX)
+        goto Error;
+    *s = p;
+    return v;
+
+Error:
+    return SIZE_MAX;
+}
+
 static uint32_t decode_base64url_quad(const char *src)
 {
     const char *src_end = src + 4;
@@ -136,7 +174,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
-    decoded.base = h2o_mem_alloc_pool(pool, decoded.len + 1);
+    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
     dst = (uint8_t *)decoded.base;
 
     while (len >= 4) {
@@ -183,7 +221,7 @@ Error:
     return h2o_iovec_init(NULL, 0);
 }
 
-void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
+size_t h2o_base64_encode(char *_dst, const void *_src, size_t len, int url_encoded)
 {
     static const char *MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                              "abcdefghijklmnopqrstuvwxyz"
@@ -192,6 +230,7 @@ void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
                                          "abcdefghijklmnopqrstuvwxyz"
                                          "0123456789-_";
 
+    char *dst = _dst;
     const uint8_t *src = _src;
     const char *map = url_encoded ? MAP_URL_ENCODED : MAP;
     uint32_t quad;
@@ -222,27 +261,119 @@ void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
     }
 
     *dst = '\0';
+    return dst - _dst;
 }
 
-const char *h2o_get_filext(const char *path, size_t len)
+static int decode_hex(int ch)
 {
-    const char *p = path + len;
+    if ('0' <= ch && ch <= '9')
+        return ch - '0';
+    if ('A' <= ch && ch <= 'F')
+        return ch - 'A' + 0xa;
+    if ('a' <= ch && ch <= 'f')
+        return ch - 'a' + 0xa;
+    return -1;
+}
+
+int h2o_hex_decode(void *_dst, const char *src, size_t src_len)
+{
+    unsigned char *dst = _dst;
+
+    if (src_len % 2 != 0)
+        return -1;
+    for (; src_len != 0; src_len -= 2) {
+        int hi, lo;
+        if ((hi = decode_hex(*src++)) == -1 || (lo = decode_hex(*src++)) == -1)
+            return -1;
+        *dst++ = (hi << 4) | lo;
+    }
+    return 0;
+}
+
+void h2o_hex_encode(char *dst, const void *_src, size_t src_len)
+{
+    const unsigned char *src = _src, *src_end = src + src_len;
+    for (; src != src_end; ++src) {
+        *dst++ = "0123456789abcdef"[*src >> 4];
+        *dst++ = "0123456789abcdef"[*src & 0xf];
+    }
+    *dst = '\0';
+}
+
+h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const char *preserve_chars)
+{
+    h2o_iovec_t encoded;
+    size_t i, capacity = l * 3 + 1;
+
+    encoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, capacity) : h2o_mem_alloc(capacity);
+    encoded.len = 0;
+
+    /* RFC 3986:
+        path-noscheme = segment-nz-nc *( "/" segment )
+        segment-nz-nc = 1*( unreserved / pct-encoded / sub-delims / "@" )
+        unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
+        sub-delims    = "!" / "$" / "&" / "'" / "(" / ")"
+                     / "*" / "+" / "," / ";" / "="
+    */
+    for (i = 0; i != l; ++i) {
+        int ch = s[i];
+        if (ch >= 0x80 || ('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z') || ('0' <= ch && ch <= '9') || ch == '-' ||
+            ch == '.' || ch == '_' || ch == '~' || ch == '!' || ch == '$' || ch == '&' || ch == '\'' || ch == '(' || ch == ')' ||
+            ch == '*' || ch == '+' || ch == ',' || ch == ';' || ch == '=' ||
+            (preserve_chars != NULL && strchr(preserve_chars, ch) != NULL)) {
+            encoded.base[encoded.len++] = ch;
+        } else {
+            encoded.base[encoded.len++] = '%';
+            encoded.base[encoded.len++] = "0123456789ABCDEF"[(ch >> 4) & 0xf];
+            encoded.base[encoded.len++] = "0123456789ABCDEF"[ch & 0xf];
+        }
+    }
+    encoded.base[encoded.len] = '\0';
+
+    return encoded;
+}
+
+h2o_iovec_t h2o_get_filext(const char *path, size_t len)
+{
+    const char *end = path + len, *p = end;
 
     while (--p != path) {
         if (*p == '.') {
-            return p + 1;
+            return h2o_iovec_init(p + 1, end - (p + 1));
         } else if (*p == '/') {
             break;
         }
     }
-    return NULL;
+    return h2o_iovec_init(NULL, 0);
+}
+
+static int is_ws(int ch)
+{
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
+
+h2o_iovec_t h2o_str_stripws(const char *s, size_t len)
+{
+    const char *end = s + len;
+
+    while (s != end) {
+        if (!is_ws(*s))
+            break;
+        ++s;
+    }
+    while (s != end) {
+        if (!is_ws(end[-1]))
+            break;
+        --end;
+    }
+    return h2o_iovec_init(s, end - s);
 }
 
 size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len)
 {
     /* TODO optimize */
     if (haysack_len >= needle_len) {
-        size_t off, max = haysack_len - needle_len;
+        size_t off, max = haysack_len - needle_len + 1;
         if (needle_len == 0)
             return 0;
         for (off = 0; off != max; ++off)
@@ -258,7 +389,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
     const char *cur = iter->base, *end = iter->base + iter->len, *token_start, *token_end;
 
     /* find start */
-    for (; ; ++cur) {
+    for (;; ++cur) {
         if (cur == end)
             return NULL;
         if (!(*cur == ' ' || *cur == '\t'))
@@ -268,7 +399,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
     token_end = cur;
 
     /* find last */
-    for (; ; ++cur) {
+    for (;; ++cur) {
         if (cur == end)
             break;
         if (*cur == separator) {
@@ -393,4 +524,43 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
     ret.base[ret.len] = '\0';
 
     return ret;
+}
+
+int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column)
+{
+    const char *src_end = src + src_len;
+    int i;
+
+    /* find the line */
+    if (lineno <= 0 || column <= 0)
+        return -1;
+    for (--lineno; lineno != 0; --lineno) {
+        do {
+            if (src == src_end)
+                return -1;
+        } while (*src++ != '\n');
+    }
+
+    /* adjust the starting column */
+    while (column > 40) {
+        if (src != src_end)
+            ++src;
+        --column;
+    }
+
+    /* emit */
+    for (i = 1; i <= 76; ++i) {
+        if (src == src_end || *src == '\n')
+            break;
+        *buf++ = *src++;
+    }
+    if (i < column)
+        column = i;
+    *buf++ = '\n';
+    for (i = 1; i < column; ++i)
+        *buf++ = ' ';
+    *buf++ = '^';
+    *buf++ = '\n';
+    *buf = '\0';
+    return 0;
 }

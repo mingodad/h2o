@@ -45,7 +45,7 @@ static void test_server_starter(void)
 
     setenv("SERVER_STARTER_PORT", "0.0.0.0:80=foo", 1);
     num_fds = h2o_server_starter_get_fds(&fds);
-    ok(num_fds == -1);
+    ok(num_fds == SIZE_MAX);
 
     /* without bind address */
     setenv("SERVER_STARTER_PORT", "50908=4", 1);
@@ -88,7 +88,7 @@ static void test_read_command(void)
     ok(ret != 0 || (ret == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 127));
 }
 
-void test_lib__serverutil_c(void)
+void test_lib__common__serverutil_c(void)
 {
     subtest("server-starter", test_server_starter);
     subtest("read-command", test_read_command);

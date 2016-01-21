@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku, Justin Zhu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -26,6 +26,7 @@
 #include <string.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <openssl/err.h>
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
@@ -42,6 +43,14 @@ struct st_h2o_socket_ssl_t {
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     struct {
         h2o_socket_cb cb;
+        struct {
+            enum {
+                ASYNC_RESUMPTION_STATE_COMPLETE = 0, /* just pass thru */
+                ASYNC_RESUMPTION_STATE_RECORD,       /* record first input and restore SSL state if state changes to REQUEST_SENT */
+                ASYNC_RESUMPTION_STATE_REQUEST_SENT  /* async request has been sent, and is waiting for response */
+            } state;
+            SSL_SESSION *session_data;
+        } async_resumption;
     } handshake;
     struct {
         h2o_buffer_t *encrypted;
@@ -65,6 +74,7 @@ static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
 static h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info);
+static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 
 /* internal functions called from the backend */
 static int decode_ssl_input(h2o_socket_t *sock);
@@ -84,6 +94,10 @@ __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     {16},                                       /* keep 16 recently used chunks */
     {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
     &h2o_socket_buffer_mmap_settings};
+
+static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
+static void (*resumption_new)(h2o_iovec_t session_id, h2o_iovec_t session_data);
+static void (*resumption_remove)(h2o_iovec_t session_id);
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -169,7 +183,7 @@ int decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl != NULL);
     assert(sock->ssl->handshake.cb == NULL);
 
-    while (sock->ssl->input.encrypted->size != 0) {
+    while (sock->ssl->input.encrypted->size != 0 || SSL_pending(sock->ssl->ssl)) {
         int rlen;
         h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096);
         if (buf.base == NULL)
@@ -202,11 +216,18 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
     do_write(sock, sock->ssl->output.bufs.entries, sock->ssl->output.bufs.size, cb);
 }
 
+static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
+{
+    memset(&ssl->output.bufs, 0, sizeof(ssl->output.bufs));
+    h2o_mem_clear_pool(&ssl->output.pool);
+}
+
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
     SSL_free(ssl->ssl);
+    ssl->ssl = NULL;
     h2o_buffer_dispose(&ssl->input.encrypted);
-    h2o_mem_clear_pool(&ssl->output.pool);
+    clear_output_buffer(ssl);
     free(ssl);
 }
 
@@ -215,9 +236,15 @@ static void dispose_socket(h2o_socket_t *sock, int status)
     void (*close_cb)(void *data);
     void *close_cb_data;
 
-    if (sock->ssl != NULL)
+    if (sock->ssl != NULL) {
         destroy_ssl(sock->ssl);
+        sock->ssl = NULL;
+    }
     h2o_buffer_dispose(&sock->input);
+    if (sock->_peername != NULL) {
+        free(sock->_peername);
+        sock->_peername = NULL;
+    }
 
     close_cb = sock->on_close.cb;
     close_cb_data = sock->on_close.data;
@@ -234,6 +261,13 @@ static void shutdown_ssl(h2o_socket_t *sock, int status)
 
     if (status != 0)
         goto Close;
+
+    if (sock->_cb.write != NULL) {
+        /* note: libuv calls the write callback after the socket is closed by uv_close (with status set to 0 if the write succeeded)
+         */
+        sock->_cb.write = NULL;
+        goto Close;
+    }
 
     if ((ret = SSL_shutdown(sock->ssl->ssl)) == -1) {
         goto Close;
@@ -257,8 +291,10 @@ Close:
 void h2o_socket_dispose_export(h2o_socket_export_t *info)
 {
     assert(info->fd != -1);
-    if (info->ssl != NULL)
+    if (info->ssl != NULL) {
         destroy_ssl(info->ssl);
+        info->ssl = NULL;
+    }
     h2o_buffer_dispose(&info->input);
     close(info->fd);
     info->fd = -1;
@@ -340,7 +376,19 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                 if (sz > 1400)
                     sz = 1400;
                 ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
-                assert(ret == sz);
+                if (ret != sz) {
+                    /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet
+                     * being received). We need to take care of this since some protocol implementations send data after the read-
+                     * side of the connection gets closed (note that protocol implementations are (yet) incapable of distinguishing
+                     * a normal shutdown and close due to an error using the `status` value of the read callback).
+                     */
+                    clear_output_buffer(sock->ssl);
+                    flush_pending_ssl(sock, cb);
+#ifndef H2O_USE_LIBUV
+                    ((struct st_h2o_evloop_socket_t *)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+#endif
+                    return;
+                }
                 off += sz;
             }
         }
@@ -352,10 +400,8 @@ void on_write_complete(h2o_socket_t *sock, int status)
 {
     h2o_socket_cb cb;
 
-    if (sock->ssl != NULL) {
-        memset(&sock->ssl->output.bufs, 0, sizeof(sock->ssl->output.bufs));
-        h2o_mem_clear_pool(&sock->ssl->output.pool);
-    }
+    if (sock->ssl != NULL)
+        clear_output_buffer(sock->ssl);
 
     cb = sock->_cb.write;
     sock->_cb.write = NULL;
@@ -372,6 +418,28 @@ void h2o_socket_read_stop(h2o_socket_t *sock)
 {
     sock->_cb.read = NULL;
     do_read_stop(sock);
+}
+
+void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len)
+{
+    if (sock->_peername != NULL)
+        free(sock->_peername);
+    sock->_peername = h2o_mem_alloc(offsetof(struct st_h2o_socket_peername_t, addr) + len);
+    sock->_peername->len = len;
+    memcpy(&sock->_peername->addr, sa, len);
+}
+
+socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
+{
+    /* return cached, if exists */
+    if (sock->_peername != NULL) {
+        memcpy(sa, &sock->_peername->addr, sock->_peername->len);
+        return sock->_peername->len;
+    }
+    /* call, copy to cache, and return */
+    socklen_t len = get_peername_uncached(sock, sa);
+    h2o_socket_setpeername(sock, sa, len);
+    return len;
 }
 
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)
@@ -422,6 +490,71 @@ size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf
     return strlen(buf);
 }
 
+int32_t h2o_socket_getport(struct sockaddr *sa)
+{
+    switch (sa->sa_family) {
+    case AF_INET:
+        return htons(((struct sockaddr_in *)sa)->sin_port);
+    case AF_INET6:
+        return htons(((struct sockaddr_in6 *)sa)->sin6_port);
+    default:
+        return -1;
+    }
+}
+
+static void create_ssl(h2o_socket_t *sock, SSL_CTX *ssl_ctx)
+{
+    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
+                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
+    BIO *bio = BIO_new(&bio_methods);
+    bio->ptr = sock;
+    bio->init = 1;
+    sock->ssl->ssl = SSL_new(ssl_ctx);
+    SSL_set_bio(sock->ssl->ssl, bio, bio);
+}
+
+static SSL_SESSION *on_async_resumption_get(SSL *ssl, unsigned char *data, int len, int *copy)
+{
+    h2o_socket_t *sock = SSL_get_rbio(ssl)->ptr;
+
+    switch (sock->ssl->handshake.async_resumption.state) {
+    case ASYNC_RESUMPTION_STATE_RECORD:
+        sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_REQUEST_SENT;
+        resumption_get_async(sock, h2o_iovec_init(data, len));
+        return NULL;
+    case ASYNC_RESUMPTION_STATE_COMPLETE:
+        *copy = 1;
+        return sock->ssl->handshake.async_resumption.session_data;
+    default:
+        assert(!"FIXME");
+        return NULL;
+    }
+}
+
+static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
+{
+    h2o_iovec_t data;
+    const unsigned char *id;
+    unsigned id_len;
+    unsigned char *p;
+
+    /* build data */
+    data.len = i2d_SSL_SESSION(session, NULL);
+    data.base = alloca(data.len);
+    p = (void *)data.base;
+    i2d_SSL_SESSION(session, &p);
+
+    id = SSL_SESSION_get_id(session, &id_len);
+    resumption_new(h2o_iovec_init(id, id_len), data);
+    return 0;
+}
+
+static void on_async_resumption_remove(SSL_CTX *ssl_ctx, SSL_SESSION *session)
+{
+    h2o_iovec_t session_id = h2o_iovec_init(session->session_id, session->session_id_length);
+    resumption_remove(session_id);
+}
+
 static void on_handshake_complete(h2o_socket_t *sock, int status)
 {
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
@@ -433,6 +566,7 @@ static void on_handshake_complete(h2o_socket_t *sock, int status)
 
 static void proceed_handshake(h2o_socket_t *sock, int status)
 {
+    h2o_iovec_t first_input = {};
     int ret;
 
     sock->_cb.write = NULL;
@@ -441,9 +575,43 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         goto Complete;
     }
 
+    if (sock->ssl->handshake.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
+        if (sock->ssl->input.encrypted->size <= 1024) {
+            /* retain a copy of input if performing async resumption */
+            first_input = h2o_iovec_init(alloca(sock->ssl->input.encrypted->size), sock->ssl->input.encrypted->size);
+            memcpy(first_input.base, sock->ssl->input.encrypted->bytes, first_input.len);
+        } else {
+            sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
+        }
+    }
+
+Redo:
     ret = SSL_accept(sock->ssl->ssl);
 
-    if (ret == 2 || (ret < 0 && SSL_get_error(sock->ssl->ssl, ret) != SSL_ERROR_WANT_READ)) {
+    switch (sock->ssl->handshake.async_resumption.state) {
+    case ASYNC_RESUMPTION_STATE_RECORD:
+        /* async resumption has not been triggered; proceed the state to complete */
+        sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
+        break;
+    case ASYNC_RESUMPTION_STATE_REQUEST_SENT: {
+        /* sent async request, reset the ssl state, and wait for async response */
+        assert(ret < 0);
+        SSL_CTX *ssl_ctx = SSL_get_SSL_CTX(sock->ssl->ssl);
+        SSL_free(sock->ssl->ssl);
+        create_ssl(sock, ssl_ctx);
+        clear_output_buffer(sock->ssl);
+        h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
+        h2o_buffer_reserve(&sock->ssl->input.encrypted, first_input.len);
+        memcpy(sock->ssl->input.encrypted->bytes, first_input.base, first_input.len);
+        sock->ssl->input.encrypted->size = first_input.len;
+        h2o_socket_read_stop(sock);
+        return;
+    }
+    default:
+        break;
+    }
+
+    if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ssl, ret) != SSL_ERROR_WANT_READ)) {
         /* failed */
         status = -1;
         goto Complete;
@@ -456,7 +624,8 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         if (ret == 1) {
             goto Complete;
         }
-        assert(sock->ssl->input.encrypted->size == 0);
+        if (sock->ssl->input.encrypted->size != 0)
+            goto Redo;
         h2o_socket_read_start(sock, proceed_handshake);
     }
     return;
@@ -468,23 +637,60 @@ Complete:
 
 void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb)
 {
-    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
-                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
-
-    BIO *bio;
-
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
+
+    /* setup the buffers; sock->input should be empty, sock->ssl->input.encrypted should contain the initial input, if any */
     h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
+    if (sock->input->size != 0) {
+        h2o_buffer_t *tmp = sock->input;
+        sock->input = sock->ssl->input.encrypted;
+        sock->ssl->input.encrypted = tmp;
+    }
+
     h2o_mem_init_pool(&sock->ssl->output.pool);
-    bio = BIO_new(&bio_methods);
-    bio->ptr = sock;
-    bio->init = 1;
-    sock->ssl->ssl = SSL_new(ssl_ctx);
-    SSL_set_bio(sock->ssl->ssl, bio, bio);
+    create_ssl(sock, ssl_ctx);
 
     sock->ssl->handshake.cb = handshake_cb;
+    if (SSL_CTX_sess_get_get_cb(ssl_ctx) != NULL)
+        sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_RECORD;
+    if (sock->ssl->input.encrypted->size != 0)
+        proceed_handshake(sock, 0);
+    else
+        h2o_socket_read_start(sock, proceed_handshake);
+}
+
+void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t session_data)
+{
+    if (session_data.len != 0) {
+        const unsigned char *p = (void *)session_data.base;
+        sock->ssl->handshake.async_resumption.session_data = d2i_SSL_SESSION(NULL, &p, (long)session_data.len);
+        /* FIXME warn on failure */
+    }
+
+    sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
     proceed_handshake(sock, 0);
+
+    if (sock->ssl->handshake.async_resumption.session_data != NULL) {
+        SSL_SESSION_free(sock->ssl->handshake.async_resumption.session_data);
+        sock->ssl->handshake.async_resumption.session_data = NULL;
+    }
+}
+
+void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_async_cb,
+                                          h2o_socket_ssl_resumption_new_cb new_cb, h2o_socket_ssl_resumption_remove_cb remove_cb)
+{
+    resumption_get_async = get_async_cb;
+    resumption_new = new_cb;
+    resumption_remove = remove_cb;
+}
+
+void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
+{
+    SSL_CTX_sess_set_get_cb(ctx, on_async_resumption_get);
+    SSL_CTX_sess_set_new_cb(ctx, on_async_resumption_new);
+    SSL_CTX_sess_set_remove_cb(ctx, on_async_resumption_remove);
+    /* if necessary, it is the responsibility of the caller to disable the internal cache */
 }
 
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
@@ -506,27 +712,25 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
     return h2o_iovec_init(data, len);
 }
 
-#if H2O_USE_ALPN
-
-static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen,
+static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *_in, unsigned int inlen,
                           void *_protocols)
 {
     const h2o_iovec_t *protocols = _protocols;
-    const unsigned char *in_end = in + inlen;
     size_t i;
 
-    while (in != in_end) {
-        size_t cand_len = *in++;
-        if (in_end - in < cand_len) {
-            /* broken request */
-            break;
-        }
-        for (i = 0; protocols[i].len != 0; ++i) {
+    for (i = 0; protocols[i].len != 0; ++i) {
+        const unsigned char *in = _in, *in_end = in + inlen;
+        while (in != in_end) {
+            size_t cand_len = *in++;
+            if (in_end - in < cand_len) {
+                /* broken request */
+                return SSL_TLSEXT_ERR_NOACK;
+            }
             if (cand_len == protocols[i].len && memcmp(in, protocols[i].base, cand_len) == 0) {
                 goto Found;
             }
+            in += cand_len;
         }
-        in += cand_len;
     }
     /* not found */
     return SSL_TLSEXT_ERR_NOACK;
@@ -536,6 +740,8 @@ Found:
     *outlen = (unsigned char)protocols[i].len;
     return SSL_TLSEXT_ERR_OK;
 }
+
+#if H2O_USE_ALPN
 
 void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
 {
