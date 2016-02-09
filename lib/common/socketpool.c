@@ -50,12 +50,12 @@ struct st_h2o_socketpool_connect_request_t {
 static void destroy_detached(struct pool_entry_t *entry)
 {
     h2o_socket_dispose_export(&entry->sockinfo);
-    free(entry);
+    h2o_mem_free(entry);
 }
 
 static void destroy_attached(struct pool_entry_t *entry)
 {
-    h2o_linklist_unlink(&entry->link);
+    entry->link.unlink();
     destroy_detached(entry);
 }
 
@@ -63,8 +63,8 @@ static void destroy_expired(h2o_socketpool_t *pool)
 {
     /* caller should lock the mutex */
     uint64_t expire_before = h2o_now(pool->_interval_cb.loop) - pool->timeout;
-    while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
-        struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
+    while (!pool->_shared.sockets.is_empty()) {
+        auto entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         if (entry->added_at > expire_before)
             break;
         destroy_attached(entry);
@@ -77,26 +77,26 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     /* FIXME decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well
      */
-    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.entry, timeout_entry);
+    auto pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.entry, timeout_entry);
 
     if (pthread_mutex_trylock(&pool->_shared.mutex) == 0) {
         destroy_expired(pool);
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 
-    h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
+    pool->_interval_cb.timeout.link(pool->_interval_cb.loop, &pool->_interval_cb.entry);
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, size_t capacity)
 {
-    memset(pool, 0, sizeof(*pool));
+    h2o_clearmem(pool);
 
     pool->type = type;
     pool->capacity = capacity;
     pool->timeout = UINT64_MAX;
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
-    h2o_linklist_init_anchor(&pool->_shared.sockets);
+    pool->_shared.sockets.init_anchor();
 }
 
 void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, size_t capacity)
@@ -115,21 +115,22 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
     if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
         sin.sin_family = AF_INET;
         sin.sin_port = htons(port);
-        h2o_socketpool_init_by_address(pool, (void *)&sin, sizeof(sin), capacity);
+        h2o_socketpool_init_by_address(pool, (sockaddr *)&sin, sizeof(sin), capacity);
         return;
     }
 
     common_init(pool, H2O_SOCKETPOOL_TYPE_NAMED, capacity);
-    pool->peer.named.host = h2o_strdup(NULL, host.base, host.len);
-    pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
-    pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
+    pool->peer.named.host.strdup(host);
+    size_t port_size = sizeof("65535");
+    pool->peer.named.port.base = h2o_mem_alloc_for<char>(port_size);
+    pool->peer.named.port.len = snprintf(pool->peer.named.port.base, port_size, "%u", (unsigned)port);
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
     pthread_mutex_lock(&pool->_shared.mutex);
-    while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
-        struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
+    while (!pool->_shared.sockets.is_empty()) {
+        auto entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         destroy_attached(entry);
         __sync_sub_and_fetch(&pool->_shared.count, 1);
     }
@@ -137,13 +138,13 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_destroy(&pool->_shared.mutex);
 
     if (pool->_interval_cb.loop != NULL) {
-        h2o_timeout_unlink(&pool->_interval_cb.entry);
-        h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
+        pool->_interval_cb.entry.unlink();
+        h2o_timeout_t::dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
     switch (pool->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
-        free(pool->peer.named.host.base);
-        free(pool->peer.named.port.base);
+        h2o_mem_free(pool->peer.named.host.base);
+        h2o_mem_free(pool->peer.named.port.base);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         break;
@@ -155,10 +156,10 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
     pool->timeout = msec;
 
     pool->_interval_cb.loop = loop;
-    h2o_timeout_init(loop, &pool->_interval_cb.timeout, 1000);
+    pool->_interval_cb.timeout.init(loop, 1000);
     pool->_interval_cb.entry.cb = on_timeout;
 
-    h2o_timeout_link(loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
+    pool->_interval_cb.timeout.link(loop, &pool->_interval_cb.entry);
 }
 
 static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *errstr)
@@ -167,19 +168,19 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     h2o_socket_t *sock = req->sock;
     void *data = req->data;
 
-    free(req);
+    h2o_mem_free(req);
     cb(sock, errstr, data);
 }
 
 static void on_connect(h2o_socket_t *sock, int status)
 {
-    h2o_socketpool_connect_request_t *req = sock->data;
+    auto req = (h2o_socketpool_connect_request_t *)sock->data;
     const char *errstr = NULL;
 
     assert(req->sock == sock);
 
     if (status != 0) {
-        h2o_socket_close(sock);
+        h2o_socket_t::close(sock);
         req->sock = NULL;
         errstr = "connection failed";
     }
@@ -188,7 +189,7 @@ static void on_connect(h2o_socket_t *sock, int status)
 
 static void on_close(void *data)
 {
-    h2o_socketpool_t *pool = data;
+    auto pool = (h2o_socketpool_t *)data;
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
 
@@ -207,7 +208,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
 {
-    h2o_socketpool_connect_request_t *req = _req;
+    auto req = (h2o_socketpool_connect_request_t *)_req;
 
     assert(getaddr_req == req->getaddr_req);
     req->getaddr_req = NULL;
@@ -234,10 +235,10 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
     while (1) {
-        if (h2o_linklist_is_empty(&pool->_shared.sockets))
+        if (pool->_shared.sockets.is_empty())
             break;
         entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
-        h2o_linklist_unlink(&entry->link);
+        entry->link.unlink();
         pthread_mutex_unlock(&pool->_shared.mutex);
 
         /* test if the connection is still alive */
@@ -246,7 +247,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         if (rret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             /* yes! return it */
             h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
-            free(entry);
+            h2o_mem_free(entry);
             sock->on_close.cb = on_close;
             sock->on_close.data = pool;
             cb(sock, NULL, data);
@@ -272,7 +273,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     __sync_add_and_fetch(&pool->_shared.count, 1);
 
     /* prepare request object */
-    h2o_socketpool_connect_request_t *req = h2o_mem_alloc(sizeof(*req));
+    auto req = h2o_mem_alloc_for<h2o_socketpool_connect_request_t>();
     *req = (h2o_socketpool_connect_request_t){data, cb, pool, loop};
     if (_req != NULL)
         *_req = req;
@@ -280,12 +281,12 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     switch (pool->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
-        req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.named.host, pool->peer.named.port, AF_UNSPEC,
-                                                SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
+        req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.named.host, pool->peer.named.port,
+                                                on_getaddr, req);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         /* connect (using sockaddr_in) */
-        start_connect(req, (void *)&pool->peer.sockaddr.bytes, pool->peer.sockaddr.len);
+        start_connect(req, (sockaddr *)&pool->peer.sockaddr.bytes, pool->peer.sockaddr.len);
         break;
     }
 }
@@ -297,31 +298,29 @@ void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req)
         req->getaddr_req = NULL;
     }
     if (req->sock != NULL)
-        h2o_socket_close(req->sock);
-    free(req);
+        h2o_socket_t::close(req->sock);
+    h2o_mem_free(req);
 }
 
 int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {
-    struct pool_entry_t *entry;
-
     /* reset the on_close callback */
     assert(sock->on_close.data == pool);
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;
 
-    entry = h2o_mem_alloc(sizeof(*entry));
-    if (h2o_socket_export(sock, &entry->sockinfo) != 0) {
-        free(entry);
+    auto entry = h2o_mem_alloc_for<pool_entry_t>();
+    if (sock->do_export(&entry->sockinfo) != 0) {
+        h2o_mem_free(entry);
         __sync_sub_and_fetch(&pool->_shared.count, 1);
         return -1;
     }
-    memset(&entry->link, 0, sizeof(entry->link));
+    h2o_clearmem(&entry->link);
     entry->added_at = h2o_now(h2o_socket_get_loop(sock));
 
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
-    h2o_linklist_insert(&pool->_shared.sockets, &entry->link);
+    pool->_shared.sockets.insert(&entry->link);
     pthread_mutex_unlock(&pool->_shared.mutex);
 
     return 0;

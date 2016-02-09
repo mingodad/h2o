@@ -38,12 +38,12 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
     if (is_final)
         conn->_is_complete = 1;
     else
-        h2o_proceed_response(&conn->req);
+        conn->req.proceed_response();
 }
 
 static socklen_t get_sockname(h2o_conn_t *conn, struct sockaddr *sa)
 {
-    struct sockaddr_in *sin = (void *)sa;
+    auto sin = (sockaddr_in *)sa;
     sin->sin_family = AF_INET;
     sin->sin_addr.s_addr = htonl(0x7f000001);
     sin->sin_port = htons(80);
@@ -52,7 +52,7 @@ static socklen_t get_sockname(h2o_conn_t *conn, struct sockaddr *sa)
 
 static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
 {
-    struct sockaddr_in *sin = (void *)sa;
+    auto sin = (sockaddr_in *)sa;
     sin->sin_family = AF_INET;
     sin->sin_addr.s_addr = htonl(0x7f000001);
     sin->sin_port = htons(55555);
@@ -62,13 +62,13 @@ static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
 h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
 {
     static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
-    h2o_loopback_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
+    auto conn = h2o_mem_alloc_for<h2o_loopback_conn_t>();
 
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
     conn->super.callbacks = &callbacks;
-    h2o_init_request(&conn->req, &conn->super, NULL);
+    h2o_req_t::init(&conn->req, &conn->super, NULL);
     h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;
     conn->_ostr_final.do_send = loopback_on_send;
@@ -79,8 +79,8 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **ho
 void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 {
     h2o_buffer_dispose(&conn->body);
-    h2o_dispose_request(&conn->req);
-    free(conn);
+    h2o_req_t::dispose(&conn->req);
+    h2o_mem_free(conn);
 }
 
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
@@ -90,7 +90,7 @@ void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
     if (conn->req.version == 0)
         conn->req.version = 0x100; /* HTTP/1.0 */
 
-    h2o_process_request(&conn->req);
+    conn->req.process();
 
     while (!conn->_is_complete) {
 #if H2O_USE_LIBUV
@@ -125,23 +125,19 @@ h2o_loop_t *test_loop;
 
 static void test_loopback(void)
 {
-    h2o_globalconf_t conf;
+    h2o_globalconf_t conf; //should be declared before h2o_context_t
     h2o_context_t ctx;
     h2o_loopback_conn_t *conn;
 
-    h2o_config_init(&conf);
-    h2o_config_register_host(&conf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
-    h2o_context_init(&ctx, test_loop, &conf);
+    h2o_config_register_host(&conf, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
+    ctx.init(test_loop, &conf);
 
     conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-    conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-    conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+    conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+    conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
     h2o_loopback_run_loop(conn);
 
     ok(conn->req.res.status == 404);
-
-    h2o_context_dispose(&ctx);
-    h2o_config_dispose(&conf);
 }
 
 int main(int argc, char **argv)
@@ -168,7 +164,7 @@ int main(int argc, char **argv)
 
     { /* tests that use the run loop */
 #if H2O_USE_LIBUV
-        test_loop = h2o_mem_alloc(sizeof(*test_loop));
+        test_loop = h2o_mem_alloc_for<h2o_loop_t>();
         uv_loop_init(test_loop);
 #else
         test_loop = h2o_evloop_create();
@@ -183,7 +179,7 @@ int main(int argc, char **argv)
 
 #if H2O_USE_LIBUV
         uv_loop_close(test_loop);
-        free(test_loop);
+        h2o_mem_free(test_loop);
 #else
 // h2o_evloop_destroy(loop);
 #endif

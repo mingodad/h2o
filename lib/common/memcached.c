@@ -27,17 +27,7 @@
 #include "h2o/memcached.h"
 #include "h2o/string_.h"
 
-struct st_h2o_memcached_context_t {
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
-    h2o_linklist_t pending;
-    size_t num_threads_connected;
-    char *host;
-    uint16_t port;
-    h2o_iovec_t prefix;
-};
-
-struct st_h2o_memcached_conn_t {
+struct h2o_memcached_conn_t {
     h2o_memcached_context_t *ctx;
     yrmcds yrmcds;
     pthread_mutex_t mutex;
@@ -47,7 +37,7 @@ struct st_h2o_memcached_conn_t {
 
 enum en_h2o_memcached_req_type_t { REQ_TYPE_GET, REQ_TYPE_SET, REQ_TYPE_DELETE };
 
-struct st_h2o_memcached_req_t {
+struct h2o_memcached_req_t {
     enum en_h2o_memcached_req_type_t type;
     h2o_linklist_t pending;
     h2o_linklist_t inflight;
@@ -72,15 +62,20 @@ struct st_h2o_memcached_req_t {
     } key;
 };
 
+static inline calcBase64EncodedSize(size_t unencoded_size)
+{
+    return (unencoded_size + 2) / 3 * 4 + 1;
+}
+
 static h2o_memcached_req_t *create_req(h2o_memcached_context_t *ctx, enum en_h2o_memcached_req_type_t type, h2o_iovec_t key,
                                        int encode_key)
 {
-    h2o_memcached_req_t *req = h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + ctx->prefix.len +
-                                             (encode_key ? (key.len + 2) / 3 * 4 + 1 : key.len));
+    auto req = (h2o_memcached_req_t *)h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + ctx->prefix.len +
+                                             (encode_key ? calcBase64EncodedSize(key.len) : key.len));
     req->type = type;
-    req->pending = (h2o_linklist_t){};
-    req->inflight = (h2o_linklist_t){};
-    memset(&req->data, 0, sizeof(req->data));
+    req->pending = {};
+    req->inflight = {};
+    h2o_clearmem(&req->data);
     if (ctx->prefix.len != 0)
         memcpy(req->key.base, ctx->prefix.base, ctx->prefix.len);
     req->key.len = ctx->prefix.len;
@@ -95,16 +90,14 @@ static h2o_memcached_req_t *create_req(h2o_memcached_context_t *ctx, enum en_h2o
 
 static void free_req(h2o_memcached_req_t *req)
 {
-    assert(!h2o_linklist_is_linked(&req->pending));
+    assert(!req->pending.is_linked());
     switch (req->type) {
     case REQ_TYPE_GET:
-        assert(!h2o_linklist_is_linked(&req->data.get.message.link));
-        h2o_mem_set_secure(req->data.get.value.base, 0, req->data.get.value.len);
-        free(req->data.get.value.base);
+        assert(!req->data.get.message.link.is_linked());
+        h2o_mem_free_secure(req->data.get.value);
         break;
     case REQ_TYPE_SET:
-        h2o_mem_set_secure(req->data.set.value.base, 0, req->data.set.value.len);
-        free(req->data.set.value.base);
+        h2o_mem_free_secure(req->data.set.value);
         break;
     case REQ_TYPE_DELETE:
         break;
@@ -112,14 +105,14 @@ static void free_req(h2o_memcached_req_t *req)
         assert(!"FIXME");
         break;
     }
-    free(req);
+    h2o_mem_free(req);
 }
 
 static void discard_req(h2o_memcached_req_t *req)
 {
     switch (req->type) {
     case REQ_TYPE_GET:
-        h2o_multithread_send_message(req->data.get.receiver, &req->data.get.message);
+        req->data.get.receiver->send_message(&req->data.get.message);
         break;
     default:
         free_req(req);
@@ -127,7 +120,7 @@ static void discard_req(h2o_memcached_req_t *req)
     }
 }
 
-static h2o_memcached_req_t *pop_inflight(struct st_h2o_memcached_conn_t *conn, uint32_t serial)
+static h2o_memcached_req_t *pop_inflight(struct h2o_memcached_conn_t *conn, uint32_t serial)
 {
     h2o_memcached_req_t *req;
     h2o_linklist_t *node;
@@ -138,7 +131,7 @@ static h2o_memcached_req_t *pop_inflight(struct st_h2o_memcached_conn_t *conn, u
         req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, inflight, node);
         assert(req->type == REQ_TYPE_GET);
         if (req->data.get.serial == serial) {
-            h2o_linklist_unlink(&req->inflight);
+            req->inflight.unlink();
             goto Found;
         }
     }
@@ -152,21 +145,21 @@ Found:
 
 static void *writer_main(void *_conn)
 {
-    struct st_h2o_memcached_conn_t *conn = _conn;
+    auto conn = (h2o_memcached_conn_t*)_conn;
     yrmcds_error err;
 
     pthread_mutex_lock(&conn->ctx->mutex);
 
     while (!__sync_add_and_fetch(&conn->writer_exit_requested, 0)) {
-        while (!h2o_linklist_is_empty(&conn->ctx->pending)) {
-            h2o_memcached_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, pending, conn->ctx->pending.next);
-            h2o_linklist_unlink(&req->pending);
+        while (!conn->ctx->pending.is_empty()) {
+            auto req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, pending, conn->ctx->pending.next);
+            req->pending.unlink();
             pthread_mutex_unlock(&conn->ctx->mutex);
 
             switch (req->type) {
             case REQ_TYPE_GET:
                 pthread_mutex_lock(&conn->mutex);
-                h2o_linklist_insert(&conn->inflight, &req->inflight);
+                conn->inflight.insert(&req->inflight);
                 pthread_mutex_unlock(&conn->mutex);
                 if ((err = yrmcds_get(&conn->yrmcds, req->key.base, req->key.len, 0, &req->data.get.serial)) != YRMCDS_OK)
                     goto Error;
@@ -221,7 +214,7 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
 
 static void reader_main(h2o_memcached_context_t *ctx)
 {
-    struct st_h2o_memcached_conn_t conn = {ctx, {}, PTHREAD_MUTEX_INITIALIZER, {&conn.inflight, &conn.inflight}, 0};
+    struct h2o_memcached_conn_t conn = {ctx, {}, PTHREAD_MUTEX_INITIALIZER, {&conn.inflight, &conn.inflight}, 0};
     pthread_t writer_thread;
     yrmcds_response resp;
     yrmcds_error err;
@@ -246,20 +239,20 @@ static void reader_main(h2o_memcached_context_t *ctx)
             break;
         }
         if (resp.status == YRMCDS_STATUS_OK) {
-            req->data.get.value = h2o_iovec_init(h2o_mem_alloc(resp.data_len), resp.data_len);
+            req->data.get.value.init(h2o_mem_alloc(resp.data_len), resp.data_len);
             memcpy(req->data.get.value.base, resp.data, resp.data_len);
             h2o_mem_set_secure((void *)resp.data, 0, resp.data_len);
         }
-        h2o_multithread_send_message(req->data.get.receiver, &req->data.get.message);
+        req->data.get.receiver->send_message(&req->data.get.message);
     }
 
     /* send error to all the reqs in-flight */
     pthread_mutex_lock(&conn.mutex);
-    while (!h2o_linklist_is_empty(&conn.inflight)) {
-        h2o_memcached_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, inflight, conn.inflight.next);
-        h2o_linklist_unlink(&req->inflight);
+    while (!conn.inflight.is_empty()) {
+        auto req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, inflight, conn.inflight.next);
+        req->inflight.unlink();
         assert(req->type == REQ_TYPE_GET);
-        h2o_multithread_send_message(req->data.get.receiver, &req->data.get.message);
+        req->data.get.receiver->send_message(&req->data.get.message);
     }
     pthread_mutex_unlock(&conn.mutex);
 
@@ -273,9 +266,9 @@ static void reader_main(h2o_memcached_context_t *ctx)
     /* decrement num_threads_connected, and discard all the pending requests if no connections are alive */
     pthread_mutex_lock(&conn.ctx->mutex);
     if (--conn.ctx->num_threads_connected == 0) {
-        while (!h2o_linklist_is_empty(&conn.ctx->pending)) {
-            h2o_memcached_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, pending, conn.ctx->pending.next);
-            h2o_linklist_unlink(&req->pending);
+        while (!conn.ctx->pending.is_empty()) {
+            auto req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, pending, conn.ctx->pending.next);
+            req->pending.unlink();
             discard_req(req);
         }
     }
@@ -287,7 +280,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
 
 static void *thread_main(void *_ctx)
 {
-    h2o_memcached_context_t *ctx = _ctx;
+    auto ctx = (h2o_memcached_context_t*)_ctx;
 
     while (1)
         reader_main(ctx);
@@ -299,7 +292,7 @@ static void dispatch(h2o_memcached_context_t *ctx, h2o_memcached_req_t *req)
     pthread_mutex_lock(&ctx->mutex);
 
     if (ctx->num_threads_connected != 0) {
-        h2o_linklist_insert(&ctx->pending, &req->pending);
+        ctx->pending.insert(&req->pending);
         pthread_cond_signal(&ctx->cond);
     } else {
         discard_req(req);
@@ -310,15 +303,14 @@ static void dispatch(h2o_memcached_context_t *ctx, h2o_memcached_req_t *req)
 
 void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
 {
-    while (!h2o_linklist_is_empty(messages)) {
-        h2o_memcached_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, data.get.message.link, messages->next);
-        h2o_linklist_unlink(&req->data.get.message.link);
+    while (!messages->is_empty()) {
+        auto req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, data.get.message.link, messages->next);
+        req->data.get.message.link.unlink();
         assert(req->type == REQ_TYPE_GET);
         if (req->data.get.cb != NULL) {
             if (req->data.get.value_is_encoded && req->data.get.value.len != 0) {
-                h2o_iovec_t decoded = h2o_decode_base64url(NULL, req->data.get.value.base, req->data.get.value.len);
-                h2o_mem_set_secure(req->data.get.value.base, 0, req->data.get.value.len);
-                free(req->data.get.value.base);
+                h2o_iovec_t decoded = h2o_decode_base64url(req->data.get.value);
+                h2o_mem_free_secure(req->data.get.value);
                 req->data.get.value = decoded;
             }
             req->data.get.cb(req->data.get.value, req->data.get.cb_data);
@@ -327,61 +319,61 @@ void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t
     }
 }
 
-h2o_memcached_req_t *h2o_memcached_get(h2o_memcached_context_t *ctx, h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
+h2o_memcached_req_t *h2o_memcached_context_t::get(h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
                                        h2o_memcached_get_cb cb, void *cb_data, int flags)
 {
-    h2o_memcached_req_t *req = create_req(ctx, REQ_TYPE_GET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    h2o_memcached_req_t *req = create_req(this, REQ_TYPE_GET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     req->data.get.receiver = receiver;
     req->data.get.cb = cb;
     req->data.get.cb_data = cb_data;
     req->data.get.value_is_encoded = (flags & H2O_MEMCACHED_ENCODE_VALUE) != 0;
-    dispatch(ctx, req);
+    dispatch(this, req);
     return req;
 }
 
-void h2o_memcached_cancel_get(h2o_memcached_context_t *ctx, h2o_memcached_req_t *req)
+void h2o_memcached_context_t::cancel_get(h2o_memcached_req_t *req)
 {
     int do_free = 0;
 
-    pthread_mutex_lock(&ctx->mutex);
+    pthread_mutex_lock(&this->mutex);
     req->data.get.cb = NULL;
-    if (h2o_linklist_is_linked(&req->pending)) {
-        h2o_linklist_unlink(&req->pending);
+    if (req->pending.is_linked()) {
+        req->pending.unlink();
         do_free = 1;
     }
-    pthread_mutex_unlock(&ctx->mutex);
+    pthread_mutex_unlock(&this->mutex);
 
     if (do_free)
         free_req(req);
 }
 
-void h2o_memcached_set(h2o_memcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags)
+void h2o_memcached_context_t::set(h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags)
 {
-    h2o_memcached_req_t *req = create_req(ctx, REQ_TYPE_SET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    h2o_memcached_req_t *req = create_req(this, REQ_TYPE_SET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     if ((flags & H2O_MEMCACHED_ENCODE_VALUE) != 0) {
-        req->data.set.value.base = h2o_mem_alloc((value.len + 2) / 3 * 4 + 1);
+        req->data.set.value.base = h2o_mem_alloc_for<char>(calcBase64EncodedSize(value.len));
         req->data.set.value.len = h2o_base64_encode(req->data.set.value.base, value.base, value.len, 1);
     } else {
-        req->data.set.value = h2o_iovec_init(h2o_mem_alloc(value.len), value.len);
+        req->data.set.value.init(h2o_mem_alloc(value.len), value.len);
         memcpy(req->data.set.value.base, value.base, value.len);
     }
     req->data.set.expiration = expiration;
-    dispatch(ctx, req);
+    dispatch(this, req);
 }
 
-void h2o_memcached_delete(h2o_memcached_context_t *ctx, h2o_iovec_t key, int flags)
+void h2o_memcached_context_t::remove(h2o_iovec_t key, int flags)
 {
-    h2o_memcached_req_t *req = create_req(ctx, REQ_TYPE_DELETE, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
-    dispatch(ctx, req);
+    h2o_memcached_req_t *req = create_req(this, REQ_TYPE_DELETE, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    dispatch(this, req);
 }
 
-h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads, const char *prefix)
+h2o_memcached_context_t *h2o_memcached_context_t::create(const char *host, uint16_t port, size_t num_threads, const char *prefix)
 {
-    h2o_memcached_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
+    auto ctx = h2o_mem_alloc_for<h2o_memcached_context_t>();
 
     pthread_mutex_init(&ctx->mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);
-    h2o_linklist_init_anchor(&ctx->pending);
+    ctx->pending.init_anchor();
     ctx->num_threads_connected = 0;
     ctx->host = h2o_strdup(NULL, host, SIZE_MAX).base;
     ctx->port = port;

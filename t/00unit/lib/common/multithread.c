@@ -46,21 +46,21 @@ struct {
 
 static void send_empty_message(h2o_multithread_receiver_t *receiver)
 {
-    h2o_multithread_message_t *message = h2o_mem_alloc(sizeof(*message));
+    auto message = h2o_mem_alloc_for<h2o_multithread_message_t>();
     *message = (h2o_multithread_message_t){};
-    h2o_multithread_send_message(receiver, message);
+    receiver->send_message(message);
 }
 
 static void pop_empty_message(h2o_linklist_t *list)
 {
     h2o_multithread_message_t *message = H2O_STRUCT_FROM_MEMBER(h2o_multithread_message_t, link, list->next);
-    h2o_linklist_unlink(&message->link);
-    free(message);
+    message->link.unlink();
+    h2o_mem_free(message);
 }
 
 static void on_ping(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
 {
-    while (!h2o_linklist_is_empty(list)) {
+    while (!list->is_empty()) {
         pop_empty_message(list);
         if (++worker_thread.num_ping_received < 100) {
             send_empty_message(&main_thread.pong_receiver);
@@ -73,7 +73,7 @@ static void on_ping(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
 
 static void on_pong(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
 {
-    while (!h2o_linklist_is_empty(list)) {
+    while (!list->is_empty()) {
         pop_empty_message(list);
         send_empty_message(&worker_thread.ping_receiver);
     }
@@ -81,7 +81,7 @@ static void on_pong(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
 
 static void on_shutdown(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
 {
-    while (!h2o_linklist_is_empty(list))
+    while (!list->is_empty())
         pop_empty_message(list);
     main_thread.received_shutdown = 1;
 }
@@ -89,7 +89,7 @@ static void on_shutdown(h2o_multithread_receiver_t *receiver, h2o_linklist_t *li
 #if H2O_USE_LIBUV
 static h2o_loop_t *create_loop(void)
 {
-    h2o_loop_t *loop = h2o_mem_alloc(sizeof(*loop));
+    auto loop = h2o_mem_alloc_for<h2o_loop_t>();
     uv_loop_init(loop);
     return loop;
 }
@@ -98,7 +98,7 @@ static void destroy_loop(h2o_loop_t *loop)
 {
     uv_run(loop, UV_RUN_NOWAIT);
     uv_loop_close(loop);
-    free(loop);
+    h2o_mem_free(loop);
 }
 #else
 #define create_loop h2o_evloop_create

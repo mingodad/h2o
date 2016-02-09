@@ -27,18 +27,18 @@ static void test_add_header_token(void)
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {};
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
-    h2o_add_header_token(&pool, &headers, H2O_TOKEN_VARY, H2O_STRLIT("Cookie"));
+    headers.add_token(&pool, H2O_TOKEN_VARY, H2O_STRLIT("Cookie"));
     ok(headers.size == 1);
-    ok(headers.entries[0].name == &H2O_TOKEN_VARY->buf);
-    ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("Cookie")));
-    h2o_add_header_token(&pool, &headers, H2O_TOKEN_VARY, H2O_STRLIT("Accept-Encoding"));
+    ok(headers[0].name == &H2O_TOKEN_VARY->buf);
+    ok(h2o_memis(headers[0].value.base, headers[0].value.len, H2O_STRLIT("Cookie")));
+    headers.add_token(&pool, H2O_TOKEN_VARY, H2O_STRLIT("Accept-Encoding"));
     ok(headers.size == 1);
-    ok(headers.entries[0].name == &H2O_TOKEN_VARY->buf);
-    ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("Cookie, Accept-Encoding")));
+    ok(headers[0].name == &H2O_TOKEN_VARY->buf);
+    ok(h2o_memis(headers[0].value.base, headers[0].value.len, H2O_STRLIT("Cookie, Accept-Encoding")));
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 }
 
 void test_lib__core__headers_c(void)

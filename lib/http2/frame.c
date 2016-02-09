@@ -30,19 +30,20 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT = {
     /* initial_window_size */ 65535,
     /* max_frame_size */ 16384};
 
-int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc)
+int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings,
+        const uint8_t *src, size_t len, const char **err_desc)
 {
     for (; len >= 6; len -= 6, src += 6) {
         uint16_t identifier = h2o_http2_decode16u(src);
         uint32_t value = h2o_http2_decode32u(src + 2);
         switch (identifier) {
-#define SET(label, member, min, max, err_code)                                                                                     \
-    case H2O_HTTP2_SETTINGS_##label:                                                                                               \
-        if (!(min <= value && value <= max)) {                                                                                     \
-            *err_desc = "invalid SETTINGS frame";                                                                                  \
-            return err_code;                                                                                                       \
-        }                                                                                                                          \
-        settings->member = value;                                                                                                  \
+#define SET(label, member, min, max, err_code)  \
+    case H2O_HTTP2_SETTINGS_##label:            \
+        if (!(min <= value && value <= max)) {  \
+            *err_desc = "invalid SETTINGS frame"; \
+            return err_code;                    \
+        }                                       \
+        settings->member = value;               \
         break
             SET(HEADER_TABLE_SIZE, header_table_size, 0, UINT32_MAX, 0);
             SET(ENABLE_PUSH, enable_push, 0, 1, H2O_HTTP2_ERROR_PROTOCOL);
@@ -61,7 +62,8 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
     return 0;
 }
 
-uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
+uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type,
+        uint8_t flags, int32_t stream_id)
 {
     if (length > 0xffffff)
         h2o_fatal("invalid length");
@@ -74,7 +76,8 @@ uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type
     return dst;
 }
 
-static uint8_t *allocate_frame(h2o_buffer_t **buf, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
+static uint8_t *allocate_frame(h2o_buffer_t **buf, size_t length, uint8_t type,
+        uint8_t flags, int32_t stream_id)
 {
     h2o_iovec_t alloced = h2o_buffer_reserve(buf, H2O_HTTP2_FRAME_HEADER_SIZE + length);
     (*buf)->size += H2O_HTTP2_FRAME_HEADER_SIZE + length;
@@ -89,12 +92,14 @@ void h2o_http2_encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, i
 
 void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data)
 {
-    uint8_t *dst = allocate_frame(buf, 8, H2O_HTTP2_FRAME_TYPE_PING, is_ack ? H2O_HTTP2_FRAME_FLAG_ACK : 0, 0);
+    uint8_t *dst = allocate_frame(buf, 8, H2O_HTTP2_FRAME_TYPE_PING,
+            is_ack ? H2O_HTTP2_FRAME_FLAG_ACK : 0, 0);
     memcpy(dst, data, 8);
     dst += 8;
 }
 
-void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, int errnum, h2o_iovec_t additional_data)
+void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id,
+        int errnum, h2o_iovec_t additional_data)
 {
     uint8_t *dst = allocate_frame(buf, 8 + additional_data.len, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
     dst = h2o_http2_encode32u(dst, last_stream_id);
@@ -102,13 +107,15 @@ void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, 
     memcpy(dst, additional_data.base, additional_data.len);
 }
 
-void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment)
+void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id,
+        int32_t window_size_increment)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, stream_id);
     dst = h2o_http2_encode32u(dst, window_size_increment);
 }
 
-ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings,
+ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src,
+        size_t len, const h2o_http2_settings_t *host_settings,
                                const char **err_desc)
 {
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)
@@ -130,7 +137,8 @@ ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, siz
     return H2O_HTTP2_FRAME_HEADER_SIZE + frame->length;
 }
 
-int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
+int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload,
+        const h2o_http2_frame_t *frame, const char **err_desc)
 {
     if (frame->stream_id == 0) {
         *err_desc = "invalid stream id in DATA frame";
@@ -167,7 +175,8 @@ static const uint8_t *decode_priority(h2o_http2_priority_t *priority, const uint
     return src;
 }
 
-int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
+int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload,
+        const h2o_http2_frame_t *frame, const char **err_desc)
 {
     const uint8_t *src = frame->payload, *src_end = frame->payload + frame->length;
 
@@ -204,7 +213,8 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const
     return 0;
 }
 
-int h2o_http2_decode_priority_payload(h2o_http2_priority_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
+int h2o_http2_decode_priority_payload(h2o_http2_priority_t *payload,
+        const h2o_http2_frame_t *frame, const char **err_desc)
 {
     if (frame->stream_id == 0) {
         *err_desc = "invalid stream id in PRIORITY frame";
@@ -219,8 +229,8 @@ int h2o_http2_decode_priority_payload(h2o_http2_priority_t *payload, const h2o_h
     return 0;
 }
 
-int h2o_http2_decode_rst_stream_payload(h2o_http2_rst_stream_payload_t *payload, const h2o_http2_frame_t *frame,
-                                        const char **err_desc)
+int h2o_http2_decode_rst_stream_payload(h2o_http2_rst_stream_payload_t *payload,
+        const h2o_http2_frame_t *frame, const char **err_desc)
 {
     if (frame->stream_id == 0) {
         *err_desc = "invalid stream id in RST_STREAM frame";
@@ -235,7 +245,8 @@ int h2o_http2_decode_rst_stream_payload(h2o_http2_rst_stream_payload_t *payload,
     return 0;
 }
 
-int h2o_http2_decode_ping_payload(h2o_http2_ping_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
+int h2o_http2_decode_ping_payload(h2o_http2_ping_payload_t *payload,
+        const h2o_http2_frame_t *frame, const char **err_desc)
 {
     if (frame->stream_id != 0) {
         *err_desc = "invalid PING frame";
@@ -250,7 +261,8 @@ int h2o_http2_decode_ping_payload(h2o_http2_ping_payload_t *payload, const h2o_h
     return 0;
 }
 
-int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
+int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload,
+        const h2o_http2_frame_t *frame, const char **err_desc)
 {
     if (frame->stream_id != 0) {
         *err_desc = "invalid stream id in GOAWAY frame";
@@ -271,8 +283,9 @@ int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h
     return 0;
 }
 
-int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame,
-                                           const char **err_desc, int *err_is_stream_level)
+int h2o_http2_decode_window_update_payload(
+    h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame,
+    const char **err_desc, int *err_is_stream_level)
 {
     if (frame->length != 4) {
         *err_is_stream_level = 0;

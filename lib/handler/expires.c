@@ -25,15 +25,14 @@
 #include <stdlib.h>
 #include "h2o.h"
 
-struct st_expires_t {
-    h2o_filter_t super;
+struct expires_t : h2o_filter_t {
     int mode;
     h2o_iovec_t value;
 };
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    struct st_expires_t *self = (void *)_self;
+    auto self = (expires_t *)_self;
 
     switch (req->res.status) {
     case 200:
@@ -47,10 +46,12 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     case 307:
         switch (self->mode) {
         case H2O_EXPIRES_MODE_ABSOLUTE:
-            h2o_set_header(&req->pool, &req->res.headers, H2O_TOKEN_EXPIRES, self->value.base, self->value.len, 0);
+            req->res.headers.set(&req->pool, H2O_TOKEN_EXPIRES,
+                    self->value.base, self->value.len, 0);
             break;
         case H2O_EXPIRES_MODE_MAX_AGE:
-            h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, self->value.base, self->value.len);
+            req->res.headers.add_token(&req->pool,
+                    H2O_TOKEN_CACHE_CONTROL, self->value.base, self->value.len);
             break;
         default:
             assert(0);
@@ -61,20 +62,20 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
         break;
     }
 
-    h2o_setup_next_ostream(req, slot);
+    req->setup_next_ostream(slot);
 }
 
 void h2o_expires_register(h2o_pathconf_t *pathconf, h2o_expires_args_t *args)
 {
-    struct st_expires_t *self = (void *)h2o_create_filter(pathconf, sizeof(*self));
-    self->super.on_setup_ostream = on_setup_ostream;
+    h2o_create_new_filter_for(self, pathconf, expires_t);
+    self->on_setup_ostream = on_setup_ostream;
     self->mode = args->mode;
     switch (args->mode) {
     case H2O_EXPIRES_MODE_ABSOLUTE:
-        self->value = h2o_strdup(NULL, args->data.absolute, SIZE_MAX);
+        self->value.strdup(NULL, args->data.absolute, SIZE_MAX);
         break;
     case H2O_EXPIRES_MODE_MAX_AGE:
-        self->value.base = h2o_mem_alloc(128);
+        self->value.base = h2o_mem_alloc_for<char>(128);
         self->value.len = sprintf(self->value.base, "max-age=%" PRIu64, args->data.max_age);
         break;
     default:

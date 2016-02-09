@@ -100,7 +100,7 @@ static const char* findchar_fast(const char* buf, const char* buf_end, const cha
 
     size_t left = (buf_end - buf) & ~15;
     do {
-      __m128i b16 = _mm_loadu_si128((void*)buf);
+      __m128i b16 = _mm_loadu_si128((const __m128i*)buf);
       int r = _mm_cmpestri(ranges16, ranges_size, b16, 16, _SIDD_LEAST_SIGNIFICANT | _SIDD_CMP_RANGES | _SIDD_UBYTE_OPS);
       if (unlikely(r != 16)) {
         buf += r;
@@ -120,7 +120,7 @@ static const char* get_token_to_eol(const char* buf, const char* buf_end,
                                     int* ret)
 {
   const char* token_start = buf;
-  
+
 #ifdef __SSE4_2__
   static const char ranges1[] =
     "\0\010"
@@ -170,16 +170,16 @@ static const char* get_token_to_eol(const char* buf, const char* buf_end,
     return NULL;
   }
   *token = token_start;
-  
+
   return buf;
 }
-  
+
 static const char* is_complete(const char* buf, const char* buf_end,
                                size_t last_len, int* ret)
 {
   int ret_cnt = 0;
   buf = last_len < 3 ? buf : buf + last_len - 3;
-  
+
   while (1) {
     CHECK_EOF();
     if (*buf == '\015') {
@@ -198,7 +198,7 @@ static const char* is_complete(const char* buf, const char* buf_end,
       return buf;
     }
   }
-  
+
   *ret = -2;
   return NULL;
 }
@@ -222,7 +222,7 @@ static const char* parse_int(const char* buf, const char* buf_end, int* value,
       break;
     }
   }
-  
+
   *value = v;
   return buf;
 }
@@ -315,7 +315,7 @@ static const char* parse_request(const char* buf, const char* buf_end,
   } else if (*buf == '\012') {
     ++buf;
   }
-  
+
   /* parse request line */
   ADVANCE_TOKEN(*method, *method_len);
   ++buf;
@@ -333,7 +333,7 @@ static const char* parse_request(const char* buf, const char* buf_end,
     *ret = -1;
     return NULL;
   }
-  
+
   return parse_headers(buf, buf_end, headers, num_headers, max_headers, ret);
 }
 
@@ -345,27 +345,27 @@ int phr_parse_request(const char* buf_start, size_t len, const char** method,
   const char * buf = buf_start, * buf_end = buf_start + len;
   size_t max_headers = *num_headers;
   int r;
-  
+
   *method = NULL;
   *method_len = 0;
   *path = NULL;
   *path_len = 0;
   *minor_version = -1;
   *num_headers = 0;
-  
+
   /* if last_len != 0, check if the request is complete (a fast countermeasure
      againt slowloris */
   if (last_len != 0 && is_complete(buf, buf_end, last_len, &r) == NULL) {
     return r;
   }
-  
+
   if ((buf = parse_request(buf, buf_end, method, method_len, path, path_len,
                            minor_version, headers, num_headers, max_headers,
                            &r))
       == NULL) {
     return r;
   }
-  
+
   return (int)(buf - buf_start);
 }
 
@@ -398,7 +398,7 @@ static const char* parse_response(const char* buf, const char* buf_end,
   if ((buf = get_token_to_eol(buf, buf_end, msg, msg_len, ret)) == NULL) {
     return NULL;
   }
-  
+
   return parse_headers(buf, buf_end, headers, num_headers, max_headers, ret);
 }
 
@@ -410,25 +410,25 @@ int phr_parse_response(const char* buf_start, size_t len, int* minor_version,
   const char * buf = buf_start, * buf_end = buf + len;
   size_t max_headers = *num_headers;
   int r;
-  
+
   *minor_version = -1;
   *status = 0;
   *msg = NULL;
   *msg_len = 0;
   *num_headers = 0;
-  
+
   /* if last_len != 0, check if the response is complete (a fast countermeasure
      against slowloris */
   if (last_len != 0 && is_complete(buf, buf_end, last_len, &r) == NULL) {
     return r;
   }
-  
+
   if ((buf = parse_response(buf, buf_end, minor_version, status, msg, msg_len,
                             headers, num_headers, max_headers, &r))
       == NULL) {
     return r;
   }
-  
+
   return (int)(buf - buf_start);
 }
 

@@ -22,7 +22,7 @@
 #ifndef h2o__socket_h
 #define h2o__socket_h
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 extern "C" {
 #endif
 
@@ -32,7 +32,7 @@ extern "C" {
 #include "h2o/memory.h"
 
 #ifndef H2O_USE_LIBUV
-#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_POLL || H2O_USE_KQUEUE
 #define H2O_USE_LIBUV 0
 #else
 #define H2O_USE_LIBUV 1
@@ -52,27 +52,29 @@ extern "C" {
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
-typedef struct st_h2o_socket_t h2o_socket_t;
+struct h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 
-#if H2O_USE_LIBUV
+#if H2O_USE_LIBUV2
 #include "socket/uv-binding.h"
 #else
 #include "socket/evloop.h"
 #endif
 
-struct st_h2o_socket_peername_t {
+struct h2o_socket_peername_t {
     socklen_t len;
     struct sockaddr addr;
 };
 
+struct h2o_socket_export_t;
+
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
-struct st_h2o_socket_t {
+struct h2o_socket_t {
     void *data;
-    struct st_h2o_socket_ssl_t *ssl;
+    struct h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
     size_t bytes_read;
     struct {
@@ -83,14 +85,86 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
-    struct st_h2o_socket_peername_t *_peername;
+    struct h2o_socket_peername_t *_peername;
+
+    /**
+     * starts polling on the socket (for read) and calls given callback when data arrives
+     * @param sock the socket
+     * @param cb callback to be called when data arrives
+     * @note callback is called when any data arrives at the TCP level so that the
+     * applications can update their timeout counters.  In other words, there is no
+     * guarantee that _new_ data is available when the callback gets called (e.g.
+     * in cases like receiving a partial SSL record or a corrupt TCP packet).
+     */
+    void read_start(h2o_socket_cb cb);
+    /**
+     * stops polling on the socket (for read)
+     * @param sock the socket
+     */
+    void read_stop();
+    /**
+     * detaches a socket from loop.
+     */
+    int do_export(h2o_socket_export_t *info);
+    /**
+     * writes given data to socket
+     * @param sock the socket
+     * @param bufs an array of buffers
+     * @param bufcnt length of the buffer array
+     * @param cb callback to be called when write is complete
+     */
+    void write(h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+    /**
+     * returns a boolean value indicating whether if there is a write is under operation
+     */
+    int is_writing()
+    {
+        return this->_cb.write != NULL;
+    }
+    /**
+     * returns a boolean value indicating whether if the socket is being polled for read
+     */
+    int is_reading()
+    {
+        return this->_cb.read != NULL;
+    }
+    /**
+     * returns the length of the remote address obtained (or 0 if failed)
+     */
+    socklen_t getpeername(struct sockaddr *sa);
+    /**
+     * sets the remote address (used for overriding the value)
+     */
+    void setpeername(struct sockaddr *sa, socklen_t len);
+    /**
+     * closes the socket
+     */
+    static void close(h2o_socket_t *sock);
+    /**
+     * performs SSL handshake on a socket
+     * @param sock the socket
+     * @param ssl_ctx SSL context
+     * @param handshake_cb callback to be called when handshake is complete
+     */
+    void ssl_server_handshake(SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb);
+    /**
+     * resumes SSL handshake with given session data
+     * @param sock the socket
+     * @param session_data session data (or {NULL,0} if not available)
+     */
+    void ssl_resume_server_handshake(h2o_iovec_t session_data);
+    /**
+     * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
+     * @param sock the socket
+     */
+    h2o_iovec_t ssl_get_selected_protocol();
 };
 
-typedef struct st_h2o_socket_export_t {
+struct h2o_socket_export_t {
     int fd;
-    struct st_h2o_socket_ssl_t *ssl;
+    h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
-} h2o_socket_export_t;
+};
 
 typedef void (*h2o_socket_ssl_resumption_get_async_cb)(h2o_socket_t *sock, h2o_iovec_t session_id);
 typedef void (*h2o_socket_ssl_resumption_new_cb)(h2o_iovec_t session_id, h2o_iovec_t session_data);
@@ -104,10 +178,6 @@ extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
  */
 h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *sock);
 /**
- * detaches a socket from loop.
- */
-int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info);
-/**
  * attaches a socket onto a loop.
  */
 h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info);
@@ -116,56 +186,14 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info);
  */
 void h2o_socket_dispose_export(h2o_socket_export_t *info);
 /**
- * closes the socket
- */
-void h2o_socket_close(h2o_socket_t *sock);
-/**
  * connects to peer
  */
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
 /**
- * writes given data to socket
- * @param sock the socket
- * @param bufs an array of buffers
- * @param bufcnt length of the buffer array
- * @param cb callback to be called when write is complete
- */
-void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
-/**
- * starts polling on the socket (for read) and calls given callback when data arrives
- * @param sock the socket
- * @param cb callback to be called when data arrives
- * @note callback is called when any data arrives at the TCP level so that the
- * applications can update their timeout counters.  In other words, there is no
- * guarantee that _new_ data is available when the callback gets called (e.g.
- * in cases like receiving a partial SSL record or a corrupt TCP packet).
- */
-void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb);
-/**
- * stops polling on the socket (for read)
- * @param sock the socket
- */
-void h2o_socket_read_stop(h2o_socket_t *sock);
-/**
- * returns a boolean value indicating whether if there is a write is under operation
- */
-static int h2o_socket_is_writing(h2o_socket_t *sock);
-/**
- * returns a boolean value indicating whether if the socket is being polled for read
- */
-static int h2o_socket_is_reading(h2o_socket_t *sock);
-/**
  * returns the length of the local address obtained (or 0 if failed)
  */
 socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa);
-/**
- * returns the length of the remote address obtained (or 0 if failed)
- */
-socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
-/**
- * sets the remote address (used for overriding the value)
- */
-void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
+
 /**
  * compares socket addresses
  */
@@ -179,19 +207,6 @@ size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf
  */
 int32_t h2o_socket_getport(struct sockaddr *sa);
 /**
- * performs SSL handshake on a socket
- * @param sock the socket
- * @param ssl_ctx SSL context
- * @param handshake_cb callback to be called when handshake is complete
- */
-void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb);
-/**
- * resumes SSL handshake with given session data
- * @param sock the socket
- * @param session_data session data (or {NULL,0} if not available)
- */
-void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t session_data);
-/**
  * registers callbacks to be called for handling session data
  */
 void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_cb, h2o_socket_ssl_resumption_new_cb new_cb,
@@ -200,11 +215,6 @@ void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb
  * setups the SSL context to use the async resumption
  */
 void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
-/**
- * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
- * @param sock the socket
- */
-h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
 /**
  * registers the protocol list to be used for ALPN
  */
@@ -219,17 +229,8 @@ void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
 
 /* inline defs */
 
-inline int h2o_socket_is_writing(h2o_socket_t *sock)
-{
-    return sock->_cb.write != NULL;
-}
 
-inline int h2o_socket_is_reading(h2o_socket_t *sock)
-{
-    return sock->_cb.read != NULL;
-}
-
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 }
 #endif
 

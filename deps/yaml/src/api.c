@@ -74,7 +74,7 @@ YAML_DECLARE(int)
 yaml_string_extend(yaml_char_t **start,
         yaml_char_t **pointer, yaml_char_t **end)
 {
-    yaml_char_t *new_start = yaml_realloc(*start, (*end - *start)*2);
+    yaml_char_t *new_start = (yaml_char_t*)yaml_realloc(*start, (*end - *start)*2);
 
     if (!new_start) return 0;
 
@@ -243,7 +243,7 @@ static int
 yaml_string_read_handler(void *data, unsigned char *buffer, size_t size,
         size_t *size_read)
 {
-    yaml_parser_t *parser = data;
+    auto parser = (yaml_parser_t *)data;
 
     if (parser->input.string.current == parser->input.string.end) {
         *size_read = 0;
@@ -269,7 +269,7 @@ static int
 yaml_file_read_handler(void *data, unsigned char *buffer, size_t size,
         size_t *size_read)
 {
-    yaml_parser_t *parser = data;
+    auto parser = (yaml_parser_t *)data;
 
     *size_read = fread(buffer, 1, size, parser->input.file);
     return !ferror(parser->input.file);
@@ -413,7 +413,7 @@ yaml_emitter_delete(yaml_emitter_t *emitter)
 static int
 yaml_string_write_handler(void *data, unsigned char *buffer, size_t size)
 {
-    yaml_emitter_t *emitter = data;
+    auto emitter = (yaml_emitter_t *)data;
 
     if (emitter->output.string.size + *emitter->output.string.size_written
             < size) {
@@ -439,7 +439,7 @@ yaml_string_write_handler(void *data, unsigned char *buffer, size_t size)
 static int
 yaml_file_write_handler(void *data, unsigned char *buffer, size_t size)
 {
-    yaml_emitter_t *emitter = data;
+    auto emitter = (yaml_emitter_t *)data;
 
     return (fwrite(buffer, 1, size, emitter->output.file) == size);
 }
@@ -717,7 +717,7 @@ yaml_document_start_event_initialize(yaml_event_t *event,
                             /* Valid tag directives are expected. */
 
     if (version_directive) {
-        version_directive_copy = yaml_malloc(sizeof(yaml_version_directive_t));
+        version_directive_copy = (yaml_version_directive_t*)yaml_malloc(sizeof(yaml_version_directive_t));
         if (!version_directive_copy) goto error;
         version_directive_copy->major = version_directive->major;
         version_directive_copy->minor = version_directive->minor;
@@ -843,7 +843,7 @@ yaml_scalar_event_initialize(yaml_event_t *event,
     }
 
     if (!yaml_check_utf8(value, length)) goto error;
-    value_copy = yaml_malloc(length+1);
+    value_copy = (yaml_char_t*)yaml_malloc(length+1);
     if (!value_copy) goto error;
     memcpy(value_copy, value, length);
     value_copy[length] = '\0';
@@ -1058,7 +1058,7 @@ yaml_document_initialize(yaml_document_t *document,
     if (!STACK_INIT(&context, nodes, INITIAL_STACK_SIZE)) goto error;
 
     if (version_directive) {
-        version_directive_copy = yaml_malloc(sizeof(yaml_version_directive_t));
+        version_directive_copy = (yaml_version_directive_t *)yaml_malloc(sizeof(yaml_version_directive_t));
         if (!version_directive_copy) goto error;
         version_directive_copy->major = version_directive->major;
         version_directive_copy->minor = version_directive->minor;
@@ -1219,7 +1219,7 @@ yaml_document_add_scalar(yaml_document_t *document,
     }
 
     if (!yaml_check_utf8(value, length)) goto error;
-    value_copy = yaml_malloc(length+1);
+    value_copy = (yaml_char_t*)yaml_malloc(length+1);
     if (!value_copy) goto error;
     memcpy(value_copy, value, length);
     value_copy[length] = '\0';

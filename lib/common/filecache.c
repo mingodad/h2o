@@ -29,65 +29,64 @@
 
 KHASH_SET_INIT_STR(opencache_set);
 
-struct st_h2o_filecache_t {
-    khash_t(opencache_set) * hash;
-    h2o_linklist_t lru;
-    size_t capacity;
-};
 
 static inline void release_from_cache(h2o_filecache_t *cache, khiter_t iter)
 {
-    const char *path = kh_key(cache->hash, iter);
-    h2o_filecache_ref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _path, path);
+    auto hash = (khash_t(opencache_set)*)cache->hash_table;
+    const char *path = kh_key(hash, iter);
+    auto ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _path, path);
 
     /* detach from list */
-    kh_del(opencache_set, cache->hash, iter);
-    h2o_linklist_unlink(&ref->_lru);
+    kh_del(opencache_set, hash, iter);
+    ref->_lru.unlink();
 
     /* and close */
-    h2o_filecache_close_file(ref);
+    cache->close_file(ref);
 }
 
-h2o_filecache_t *h2o_filecache_create(size_t capacity)
+h2o_filecache_t *h2o_filecache_t::create(size_t capacity)
 {
-    h2o_filecache_t *cache = h2o_mem_alloc(sizeof(*cache));
+    auto cache = h2o_mem_alloc_for<h2o_filecache_t>();
 
-    cache->hash = kh_init(opencache_set);
-    h2o_linklist_init_anchor(&cache->lru);
+    cache->hash_table = kh_init(opencache_set);
+    cache->lru.init_anchor();
     cache->capacity = capacity;
 
     return cache;
 }
 
-void h2o_filecache_destroy(h2o_filecache_t *cache)
+void h2o_filecache_t::destroy(h2o_filecache_t *cache)
 {
-    h2o_filecache_clear(cache);
-    assert(kh_size(cache->hash) == 0);
-    assert(h2o_linklist_is_empty(&cache->lru));
-    kh_destroy(opencache_set, cache->hash);
-    free(cache);
+    cache->clear();
+    auto hash = (khash_t(opencache_set)*)cache->hash_table;
+    assert(kh_size(hash) == 0);
+    assert(cache->lru.is_empty());
+    kh_destroy(opencache_set, hash);
+    h2o_mem_free(cache);
 }
 
-void h2o_filecache_clear(h2o_filecache_t *cache)
+void h2o_filecache_t::clear()
 {
     khiter_t iter;
-    for (iter = kh_begin(cache->hash); iter != kh_end(cache->hash); ++iter) {
-        if (!kh_exist(cache->hash, iter))
+    auto hash = (khash_t(opencache_set)*)hash_table;
+    for (iter = kh_begin(hash); iter != kh_end(hash); ++iter) {
+        if (!kh_exist(hash, iter))
             continue;
-        release_from_cache(cache, iter);
+        release_from_cache(this, iter);
     }
-    assert(kh_size(cache->hash) == 0);
+    assert(kh_size(hash) == 0);
 }
 
-h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char *path, int oflag)
+h2o_filecache_ref_t *h2o_filecache_t::open_file(const char *path, int oflag)
 {
-    khiter_t iter = kh_get(opencache_set, cache->hash, path);
+    auto hash = (khash_t(opencache_set)*)hash_table;
+    khiter_t iter = kh_get(opencache_set, hash, path);
     h2o_filecache_ref_t *ref;
     int fd, dummy;
 
     /* lookup cache, and return the one if found */
-    if (iter != kh_end(cache->hash)) {
-        ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _path, kh_key(cache->hash, iter));
+    if (iter != kh_end(hash)) {
+        ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _path, kh_key(hash, iter));
         ++ref->_refcnt;
         return ref;
     }
@@ -95,61 +94,61 @@ h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char 
     /* not found, try to open the new file */
     if ((fd = open(path, oflag)) == -1)
         return NULL;
-    ref = h2o_mem_alloc(offsetof(h2o_filecache_ref_t, _path) + strlen(path) + 1);
+    ref = (h2o_filecache_ref_t *)h2o_mem_alloc(offsetof(h2o_filecache_ref_t, _path) + strlen(path) + 1);
+    if (fstat(fd, &ref->st) != 0) {
+        close(fd);
+        h2o_mem_free(ref);
+        return NULL;
+    }
     ref->fd = fd;
     ref->_last_modified.str[0] = '\0';
     ref->_etag.len = 0;
     ref->_refcnt = 1;
-    ref->_lru = (h2o_linklist_t){};
+    ref->_lru = {};
     strcpy(ref->_path, path);
-    if (fstat(fd, &ref->st) != 0) {
-        close(fd);
-        free(ref);
-        return NULL;
-    }
     /* if cache is used, then... */
-    if (cache->capacity != 0) {
+    if (capacity != 0) {
         /* purge one entry from LRU if cache is full */
-        if (kh_size(cache->hash) == cache->capacity) {
-            h2o_filecache_ref_t *purge_ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _lru, cache->lru.prev);
-            khiter_t purge_iter = kh_get(opencache_set, cache->hash, purge_ref->_path);
-            assert(purge_iter != kh_end(cache->hash));
-            release_from_cache(cache, purge_iter);
+        if (kh_size(hash) == capacity) {
+            auto purge_ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _lru, lru.prev);
+            khiter_t purge_iter = kh_get(opencache_set, hash, purge_ref->_path);
+            assert(purge_iter != kh_end(hash));
+            release_from_cache(this, purge_iter);
         }
         /* assign the new entry */
         ++ref->_refcnt;
-        kh_put(opencache_set, cache->hash, ref->_path, &dummy);
-        h2o_linklist_insert(cache->lru.next, &ref->_lru);
+        kh_put(opencache_set, hash, ref->_path, &dummy);
+        lru.next->insert(&ref->_lru);
     }
 
     return ref;
 }
 
-void h2o_filecache_close_file(h2o_filecache_ref_t *ref)
+void h2o_filecache_t::close_file(h2o_filecache_ref_t *ref)
 {
     if (--ref->_refcnt != 0)
         return;
-    assert(!h2o_linklist_is_linked(&ref->_lru));
+    assert(!ref->_lru.is_linked());
     close(ref->fd);
     ref->fd = -1;
-    free(ref);
+    h2o_mem_free(ref);
 }
 
-struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbuf)
+struct tm *h2o_filecache_ref_t::get_last_modified(char *outbuf)
 {
-    if (ref->_last_modified.str[0] == '\0') {
-        gmtime_r(&ref->st.st_mtime, &ref->_last_modified.gm);
-        h2o_time2str_rfc1123(ref->_last_modified.str, &ref->_last_modified.gm);
+    if (_last_modified.str[0] == '\0') {
+        gmtime_r(&st.st_mtime, &_last_modified.gm);
+        h2o_time2str_rfc1123(_last_modified.str, &_last_modified.gm);
     }
     if (outbuf != NULL)
-        memcpy(outbuf, ref->_last_modified.str, H2O_TIMESTR_RFC1123_LEN + 1);
-    return &ref->_last_modified.gm;
+        memcpy(outbuf, _last_modified.str, H2O_TIMESTR_RFC1123_LEN + 1);
+    return &_last_modified.gm;
 }
 
-size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf)
+size_t h2o_filecache_ref_t::get_etag(char *outbuf)
 {
-    if (ref->_etag.len == 0)
-        ref->_etag.len = sprintf(ref->_etag.buf, "\"%08x-%zx\"", (unsigned)ref->st.st_mtime, (size_t)ref->st.st_size);
-    memcpy(outbuf, ref->_etag.buf, ref->_etag.len + 1);
-    return ref->_etag.len;
+    if (_etag.len == 0)
+        _etag.len = snprintf(_etag.buf, sizeof(_etag.buf), "\"%08x-%zx\"", (unsigned)st.st_mtime, (size_t)st.st_size);
+    memcpy(outbuf, _etag.buf, _etag.len + 1);
+    return _etag.len;
 }

@@ -24,15 +24,15 @@
 #include <stdlib.h>
 #include "h2o.h"
 
-typedef struct st_chunked_encoder_t {
-    h2o_ostream_t super;
+struct chunked_encoder_t : h2o_ostream_t {
     char buf[64];
-} chunked_encoder_t;
+};
 
-static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req,
+        h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
-    chunked_encoder_t *self = (void *)_self;
-    h2o_iovec_t *outbufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
+    auto self = (chunked_encoder_t *)_self;
+    auto outbufs = (h2o_iovec_t *)h2o_mem_alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
     size_t chunk_size, outbufcnt = 0, i;
 
     /* calc chunk size */
@@ -48,29 +48,28 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         outbufcnt++;
         memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
         outbufcnt += inbufcnt;
-        outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
+        outbufs[outbufcnt].base = (char*)"\r\n0\r\n\r\n";
         outbufs[outbufcnt].len = is_final ? 7 : 2;
         outbufcnt++;
     } else if (is_final) {
-        outbufs[outbufcnt].base = "0\r\n\r\n";
+        outbufs[outbufcnt].base = (char*)"0\r\n\r\n";
         outbufs[outbufcnt].len = 5;
         outbufcnt++;
     }
 
-    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, is_final);
+    req->send_next(self, outbufs, outbufcnt, is_final);
+    h2o_mem_alloca_free(outbufs);
 }
 
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    chunked_encoder_t *encoder;
-
     /* do nothing if not HTTP/1.1 or content-length is known */
     if (req->res.content_length != SIZE_MAX || req->version != 0x101)
         goto Next;
     /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
     if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
         goto Next;
-    else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
+    else if (req->input.method.isEq("HEAD"))
         goto Next;
     /* we cannot handle certain responses (like 101 switching protocols) */
     if (req->res.status != 200) {
@@ -78,23 +77,25 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         goto Next;
     }
     /* skip if content-encoding header is being set */
-    if (h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) != -1)
+    if (req->res.headers.find(H2O_TOKEN_TRANSFER_ENCODING, -1) != -1)
         goto Next;
 
     /* set content-encoding header */
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, H2O_STRLIT("chunked"));
+    req->addResponseHeader(H2O_TOKEN_TRANSFER_ENCODING, H2O_STRLIT("chunked"));
 
     /* setup filter */
-    encoder = (void *)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
-    encoder->super.do_send = send_chunk;
-    slot = &encoder->super.next;
+    {
+        auto encoder = (chunked_encoder_t *)req->add_ostream(sizeof(chunked_encoder_t), slot);
+        encoder->do_send = send_chunk;
+        slot = &encoder->next;
+    }
 
 Next:
-    h2o_setup_next_ostream(req, slot);
+    req->setup_next_ostream(slot);
 }
 
 void h2o_chunked_register(h2o_pathconf_t *pathconf)
 {
-    h2o_filter_t *self = h2o_create_filter(pathconf, sizeof(*self));
+    h2o_create_new_filter_for(self, pathconf, h2o_filter_t);
     self->on_setup_ostream = on_setup_ostream;
 }

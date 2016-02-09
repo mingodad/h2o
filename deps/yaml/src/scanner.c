@@ -762,7 +762,7 @@ yaml_parser_scan(yaml_parser_t *parser, yaml_token_t *token)
     }
 
     /* Fetch the next token from the queue. */
-    
+
     *token = DEQUEUE(parser, parser->tokens);
     parser->token_available = 0;
     parser->tokens_parsed ++;
@@ -1121,7 +1121,7 @@ yaml_parser_save_simple_key(yaml_parser_t *parser)
         yaml_simple_key_t simple_key;
         simple_key.possible = 1;
         simple_key.required = required;
-        simple_key.token_number = 
+        simple_key.token_number =
             parser->tokens_parsed + (parser->tokens.tail - parser->tokens.head);
         simple_key.mark = parser->mark;
 
@@ -1207,7 +1207,7 @@ yaml_parser_decrease_flow_level(yaml_parser_t *parser)
  * Push the current indentation level to the stack and set the new level
  * the current column is greater than the indentation level.  In this case,
  * append or insert the specified token into the token queue.
- * 
+ *
  */
 
 static int
@@ -1945,7 +1945,7 @@ yaml_parser_scan_to_next_token(yaml_parser_t *parser)
          *
          *  - in the flow context;
          *  - in the block context, but not at the beginning of the line or
-         *  after '-', '?', or ':' (complex value).  
+         *  after '-', '?', or ':' (complex value).
          */
 
         if (!CACHE(parser, 1)) return 0;
@@ -2408,7 +2408,7 @@ yaml_parser_scan_tag(yaml_parser_t *parser, yaml_token_t *token)
     {
         /* Set the handle to '' */
 
-        handle = yaml_malloc(1);
+        handle = (yaml_char_t*)yaml_malloc(1);
         if (!handle) goto error;
         handle[0] = '\0';
 
@@ -2460,7 +2460,7 @@ yaml_parser_scan_tag(yaml_parser_t *parser, yaml_token_t *token)
             /* Set the handle to '!'. */
 
             yaml_free(handle);
-            handle = yaml_malloc(2);
+            handle = (yaml_char_t*)yaml_malloc(2);
             if (!handle) goto error;
             handle[0] = '!';
             handle[1] = '\0';
@@ -3014,7 +3014,7 @@ yaml_parser_scan_block_scalar_breaks(yaml_parser_t *parser,
             *indent = 1;
     }
 
-   return 1; 
+   return 1;
 }
 
 /*

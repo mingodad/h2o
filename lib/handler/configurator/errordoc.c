@@ -22,15 +22,14 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-struct errordoc_configurator_t {
-    h2o_configurator_t super;
+struct errordoc_configurator_t : h2o_configurator_t {
     h2o_mem_pool_t pool;
-    H2O_VECTOR(h2o_errordoc_t) * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    H2O_VECTOR<h2o_errordoc_t> * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
 {
-    struct errordoc_configurator_t *self = (void *)cmd->configurator;
+    auto self = (errordoc_configurator_t *)cmd->configurator;
     int status = -1;
     const char *url = NULL;
     size_t i;
@@ -44,17 +43,17 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
         if (strcmp(key->data.scalar, "status") == 0) {
             if (status != -1)
                 goto KeyAlreadyDefinedError;
-            if (h2o_configurator_scanf(cmd, value, "%d", &status) != 0)
+            if (cmd->scanf(value, "%d", &status) != 0)
                 return -1;
             if (!(400 <= status && status <= 599)) {
-                h2o_configurator_errprintf(cmd, value, "status must be within range of 400 to 599");
+                cmd->errprintf(value, "status must be within range of 400 to 599");
                 return -1;
             }
         } else if (strcmp(key->data.scalar, "url") == 0) {
             if (url != NULL)
                 goto KeyAlreadyDefinedError;
             if (value->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, value, "URL must be a scalar");
+                cmd->errprintf(value, "URL must be a scalar");
                 return -1;
             }
             url = value->data.scalar;
@@ -64,28 +63,27 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     }
 
     if (status == -1) {
-        h2o_configurator_errprintf(cmd, hash, "mandatory key `status` is not defined");
+        cmd->errprintf(hash, "mandatory key `status` is not defined");
         return -1;
     }
     if (url == NULL) {
-        h2o_configurator_errprintf(cmd, hash, "mandatory key `url` is not defined");
+        cmd->errprintf(hash, "mandatory key `url` is not defined");
         return -1;
     }
 
     { /* register */
-        h2o_vector_reserve(&self->pool, (void *)self->vars, sizeof(self->vars->entries[0]), self->vars->size + 1);
-        h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
+        auto errordoc = self->vars->append_new(&self->pool);
         errordoc->status = status;
-        errordoc->url = h2o_strdup(&self->pool, url, SIZE_MAX);
+        errordoc->url.strdup(&self->pool, url, SIZE_MAX);
     }
 
     return 0;
 
 UnknownKeyError:
-    h2o_configurator_errprintf(cmd, key, "key must be either of: `status`, `url`");
+    cmd->errprintf(key, "key must be either of: `status`, `url`");
     return -1;
 KeyAlreadyDefinedError:
-    h2o_configurator_errprintf(cmd, key, "the key cannot be defined more than once");
+    cmd->errprintf(key, "the key cannot be defined more than once");
     return -1;
 }
 
@@ -97,7 +95,7 @@ static int on_config_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_
         for (i = 0; i != node->data.sequence.size; ++i) {
             yoml_t *e = node->data.sequence.elements[i];
             if (e->type != YOML_TYPE_MAPPING) {
-                h2o_configurator_errprintf(cmd, e, "element must be a mapping");
+                cmd->errprintf(e, "element must be a mapping");
                 return -1;
             }
             if (register_errordoc(cmd, ctx, e) != 0)
@@ -111,24 +109,24 @@ static int on_config_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_
         break;
     }
 
-    h2o_configurator_errprintf(cmd, node, "argument must be either of: sequence, mapping");
+    cmd->errprintf(node, "argument must be either of: sequence, mapping");
     return -1;
 }
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct errordoc_configurator_t *self = (void *)_self;
+    auto self = (errordoc_configurator_t *)_self;
 
     if (self->vars == self->_vars_stack) {
         /* entering global level */
-        h2o_mem_init_pool(&self->pool);
+        self->pool.init();
     }
 
     /* copy vars */
-    memset(&self->vars[1], 0, sizeof(self->vars[1]));
-    h2o_vector_reserve(&self->pool, (void *)&self->vars[1], sizeof(self->vars[1].entries[0]), self->vars[0].size);
-    memcpy(self->vars[1].entries, self->vars[0].entries, sizeof(self->vars[0].entries[0]) * self->vars[0].size);
-    self->vars[1].size = self->vars[0].size;
+    h2o_clearmem(&self->vars[1]);
+    //h2o_vector_push_front(&self->pool, &self->vars[1], self->vars[0].size);
+
+    self->vars[1].assign(&self->pool, &self->vars[0]);
 
     ++self->vars;
     return 0;
@@ -136,7 +134,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct errordoc_configurator_t *self = (void *)_self;
+    auto self = (errordoc_configurator_t *)_self;
 
     if (ctx->pathconf != NULL && self->vars->size != 0)
         h2o_errordoc_register(ctx->pathconf, self->vars->entries, self->vars->size);
@@ -144,7 +142,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     --self->vars;
     if (self->vars == self->_vars_stack) {
         /* exitting global level */
-        h2o_mem_clear_pool(&self->pool);
+        self->pool.clear();
     }
 
     return 0;
@@ -152,15 +150,15 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_errordoc_register_configurator(h2o_globalconf_t *conf)
 {
-    struct errordoc_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    auto c = conf->configurator_create<errordoc_configurator_t>();
 
     /* set default vars */
     c->vars = c->_vars_stack;
 
     /* setup handlers */
-    c->super.enter = on_config_enter;
-    c->super.exit = on_config_exit;
+    c->enter = on_config_enter;
+    c->exit = on_config_exit;
 
     /* reproxy: ON | OFF */
-    h2o_configurator_define_command(&c->super, "error-doc", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_errordoc);
+    c->define_command("error-doc", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_errordoc);
 }

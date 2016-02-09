@@ -34,16 +34,16 @@
 #define H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION 0x80
 #define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
 
-typedef struct st_h2o_evloop_t {
-    struct st_h2o_evloop_socket_t *_pending_as_client;
-    struct st_h2o_evloop_socket_t *_pending_as_server;
+struct h2o_evloop_t {
+    struct h2o_evloop_socket_t *_pending_as_client;
+    struct h2o_evloop_socket_t *_pending_as_server;
     struct {
-        struct st_h2o_evloop_socket_t *head;
-        struct st_h2o_evloop_socket_t **tail_ref;
+        struct h2o_evloop_socket_t *head;
+        struct h2o_evloop_socket_t **tail_ref;
     } _statechanged;
     uint64_t _now;
     h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
-} h2o_evloop_t;
+};
 
 typedef h2o_evloop_t h2o_loop_t;
 

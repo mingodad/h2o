@@ -37,14 +37,14 @@
 #define FCGI_STDERR 7
 #define FCGI_DATA 8
 
-#define FCGI_RECORD_HEADER_SIZE (sizeof(struct st_fcgi_record_header_t))
+#define FCGI_RECORD_HEADER_SIZE (sizeof(fcgi_record_header_t))
 #define FCGI_BEGIN_REQUEST_BODY_SIZE 8
 
 #define MODULE_NAME "lib/handler/fastcgi.c"
 
 #define APPEND_BLOCKSIZE 512 /* the size should be small enough to be allocated within the buffer of the memory pool */
 
-struct st_fcgi_record_header_t {
+struct fcgi_record_header_t {
     uint8_t version;
     uint8_t type;
     uint16_t requestId;
@@ -53,22 +53,22 @@ struct st_fcgi_record_header_t {
     uint8_t reserved;
 };
 
-struct st_fcgi_begin_request_body_t {
+struct fcgi_begin_request_body_t {
     uint16_t role;
     uint8_t flags;
     uint8_t reserved[5];
 };
 
-typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
+typedef H2O_VECTOR<h2o_iovec_t> iovec_vector_t;
 
-struct st_fcgi_context_t {
+struct fcgi_context_t {
     h2o_fastcgi_handler_t *handler;
     h2o_timeout_t io_timeout;
 };
 
-struct st_fcgi_generator_t {
+struct fcgi_generator_t {
     h2o_generator_t super;
-    struct st_fcgi_context_t *ctx;
+    fcgi_context_t *ctx;
     h2o_req_t *req;
     h2o_socketpool_connect_request_t *connect_req;
     h2o_socket_t *sock;
@@ -81,22 +81,20 @@ struct st_fcgi_generator_t {
     h2o_timeout_entry_t timeout;
 };
 
-struct st_h2o_fastcgi_handler_t {
-    h2o_handler_t super;
+struct h2o_fastcgi_handler_t {
+	h2o_handler_t super;
     h2o_socketpool_t sockpool;
     h2o_fastcgi_config_vars_t config;
 };
 
-static void encode_uint16(void *_p, unsigned v)
-{
-    unsigned char *p = _p;
-    p[0] = (unsigned char)(v >> 8);
-    p[1] = (unsigned char)v;
+static void encode_uint16(void *_p, unsigned v) {
+    auto p = (unsigned char *)_p;
+    p[0] = (unsigned char) (v >> 8);
+    p[1] = (unsigned char) v;
 }
 
-static void encode_record_header(void *p, uint8_t type, uint16_t reqId, uint16_t sz)
-{
-    struct st_fcgi_record_header_t *header = p;
+static void encode_record_header(void *p, uint8_t type, uint16_t reqId, uint16_t sz) {
+    auto header = (fcgi_record_header_t*)p;
     header->version = FCGI_VERSION_1;
     header->type = type;
     encode_uint16(&header->requestId, reqId);
@@ -105,45 +103,44 @@ static void encode_record_header(void *p, uint8_t type, uint16_t reqId, uint16_t
     header->reserved = 0;
 }
 
-static void encode_begin_request(void *p, uint16_t reqId, uint16_t role, uint8_t flags)
-{
+static void encode_begin_request(void *p, uint16_t reqId, uint16_t role, uint8_t flags) {
     encode_record_header(p, FCGI_BEGIN_REQUEST, reqId, FCGI_BEGIN_REQUEST_BODY_SIZE);
-    struct st_fcgi_begin_request_body_t *body = (void *)((char *)p + FCGI_RECORD_HEADER_SIZE);
+    auto body = (fcgi_begin_request_body_t *) ((char *) p + FCGI_RECORD_HEADER_SIZE);
     encode_uint16(&body->role, role);
     body->flags = flags;
-    memset(body->reserved, 0, sizeof(body->reserved));
+    h2o_clearmem(body->reserved);
 }
 
-static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId, uint16_t role, uint8_t flags)
-{
-    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE),
-                                     FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE);
+static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId,
+        uint16_t role, uint8_t flags) {
+    h2o_iovec_t rec = h2o_iovec_t::create(pool->alloc(
+            FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE),
+            FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE);
     encode_begin_request(rec.base, reqId, role, flags);
     return rec;
 }
 
-static h2o_iovec_t create_header(h2o_mem_pool_t *pool, uint8_t type, uint16_t reqId, uint16_t sz)
-{
-    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, FCGI_RECORD_HEADER_SIZE), FCGI_RECORD_HEADER_SIZE);
+static h2o_iovec_t create_header(h2o_mem_pool_t *pool, uint8_t type,
+        uint16_t reqId, uint16_t sz) {
+    h2o_iovec_t rec = h2o_iovec_t::create(pool->alloc(
+            FCGI_RECORD_HEADER_SIZE), FCGI_RECORD_HEADER_SIZE);
     encode_record_header(rec.base, type, reqId, sz);
     return rec;
 }
 
-static void decode_header(struct st_fcgi_record_header_t *decoded, const void *s)
-{
-    memcpy(decoded, s, sizeof(*decoded));
+static void decode_header(fcgi_record_header_t *decoded, const void *s) {
+    memcpy(decoded, s, sizeof (*decoded));
     decoded->requestId = htons(decoded->requestId);
     decoded->contentLength = htons(decoded->contentLength);
 }
 
-static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s, size_t len)
-{
+static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks,
+        const void *s, size_t len) {
     h2o_iovec_t *slot;
 
     if (blocks->entries[blocks->size - 1].len + len > APPEND_BLOCKSIZE) {
-        h2o_vector_reserve(pool, (void *)blocks, sizeof(blocks->entries[0]), blocks->size + 1);
-        slot = blocks->entries + blocks->size++;
-        slot->base = h2o_mem_alloc_pool(pool, len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
+        slot = blocks->append_new(pool);
+        slot->base = pool->alloc_for<char>(len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
         slot->len = 0;
     } else {
         slot = blocks->entries + blocks->size - 1;
@@ -156,63 +153,67 @@ static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s,
     return slot->base + slot->len - len;
 }
 
-static char *encode_length_of_pair(char *p, size_t len)
-{
+static char *encode_length_of_pair(char *p, size_t len) {
     if (len < 127) {
-        *p++ = (char)len;
+        *p++ = (char) len;
     } else {
-        *p++ = (unsigned char)(len >> 24) | 0x80;
-        *p++ = (unsigned char)(len >> 16);
-        *p++ = (unsigned char)(len >> 8);
-        *p++ = (unsigned char)len;
+        *p++ = (unsigned char) (len >> 24) | 0x80;
+        *p++ = (unsigned char) (len >> 16);
+        *p++ = (unsigned char) (len >> 8);
+        *p++ = (unsigned char) len;
     }
     return p;
 }
 
-static void *append_pair(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const char *name, size_t namelen, const char *value,
-                         size_t valuelen)
-{
+static void *append_pair(h2o_mem_pool_t *pool, iovec_vector_t *blocks,
+        const char *name, size_t namelen, const char *value, size_t valuelen) {
     char lenbuf[8];
     void *name_buf;
 
-    append(pool, blocks, lenbuf, encode_length_of_pair(encode_length_of_pair(lenbuf, namelen), valuelen) - lenbuf);
+    append(pool, blocks, lenbuf, encode_length_of_pair(
+            encode_length_of_pair(lenbuf, namelen), valuelen) - lenbuf);
     name_buf = append(pool, blocks, name, namelen);
     if (valuelen != 0)
         append(pool, blocks, value, valuelen);
 
     return name_buf;
 }
+#define append_pair_pv(iov1, iov2) \
+    append_pair(&req->pool, vecs, iov1.base, iov1.len, iov2.base, iov2.len)
+#define append_pair_pvlv(literal, iov2) \
+    append_pair(&req->pool, vecs, H2O_STRLIT(literal), iov2.base, iov2.len)
 
-static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs, const char *addrlabel, size_t addrlabel_len,
-                                const char *portlabel, size_t portlabel_len, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *))
-{
+static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs,
+        const char *addrlabel, size_t addrlabel_len,
+        const char *portlabel, size_t portlabel_len,
+        socklen_t(*cb)(h2o_conn_t *conn, struct sockaddr *)) {
     struct sockaddr_storage ss;
     socklen_t sslen;
     char buf[NI_MAXHOST];
 
-    if ((sslen = cb(req->conn, (void *)&ss)) == 0)
+    if ((sslen = cb(req->conn, (sockaddr *) &ss)) == 0)
         return;
 
-    size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, buf);
+    size_t l = h2o_socket_getnumerichost((sockaddr *) &ss, sslen, buf);
     if (l != SIZE_MAX)
         append_pair(&req->pool, vecs, addrlabel, addrlabel_len, buf, l);
-    int32_t port = h2o_socket_getport((void *)&ss);
+    int32_t port = h2o_socket_getport((sockaddr *) &ss);
     if (port != -1) {
         char buf[6];
-        int l = sprintf(buf, "%" PRIu16, (uint16_t)port);
-        append_pair(&req->pool, vecs, portlabel, portlabel_len, buf, (size_t)l);
+        int l = sprintf(buf, "%" PRIu16, (uint16_t) port);
+        append_pair(&req->pool, vecs, portlabel, portlabel_len, buf, (size_t) l);
     }
 }
 
-static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_config_vars_t *config)
-{
+static void append_params(h2o_req_t *req, iovec_vector_t *vecs,
+        h2o_fastcgi_config_vars_t *config) {
     h2o_iovec_t path_info = {};
 
     /* CONTENT_LENGTH */
     if (req->entity.base != NULL) {
         char buf[32];
         int l = sprintf(buf, "%zu", req->entity.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_LENGTH"), buf, (size_t)l);
+        append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_LENGTH"), buf, (size_t) l);
     }
     /* SCRIPT_FILENAME, SCRIPT_NAME, PATH_INFO */
     if (req->filereq != NULL) {
@@ -220,58 +221,63 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_FILENAME"), filereq->local_path.base, filereq->local_path.len);
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), req->path_normalized.base, filereq->url_path_len);
         if (req->path_normalized.len != filereq->url_path_len)
-            path_info =
-                h2o_iovec_init(req->path_normalized.base + filereq->url_path_len, req->path_normalized.len - filereq->url_path_len);
+            path_info.init(req->path_normalized.base + filereq->url_path_len,
+                req->path_normalized.len - filereq->url_path_len);
     } else {
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), NULL, 0);
         path_info = req->path_normalized;
     }
     if (path_info.base != NULL)
-        append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), path_info.base, path_info.len);
+        append_pair_pvlv("PATH_INFO", path_info);
     /* DOCUMENT_ROOT and PATH_TRANSLATED */
     if (config->document_root.base != NULL) {
-        append_pair(&req->pool, vecs, H2O_STRLIT("DOCUMENT_ROOT"), config->document_root.base, config->document_root.len);
+        append_pair_pvlv("DOCUMENT_ROOT", config->document_root);
         if (path_info.base != NULL) {
-            append_pair(&req->pool, vecs, H2O_STRLIT("PATH_TRANSLATED"), NULL, config->document_root.len + path_info.len);
-            char *dst_end = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len;
+            append_pair(&req->pool, vecs, H2O_STRLIT("PATH_TRANSLATED"), NULL,
+                    config->document_root.len + path_info.len);
+            char *dst_end = vecs->entries[vecs->size - 1].base +
+                    vecs->entries[vecs->size - 1].len;
             memcpy(dst_end - path_info.len, path_info.base, path_info.len);
-            memcpy(dst_end - path_info.len - config->document_root.len, config->document_root.base, config->document_root.len);
+            memcpy(dst_end - path_info.len - config->document_root.len,
+                    config->document_root.base, config->document_root.len);
         }
     }
     /* QUERY_STRING (and adjust PATH_INFO) */
     if (req->query_at != SIZE_MAX) {
-        append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), req->path.base + req->query_at + 1,
-                    req->path.len - (req->query_at + 1));
+        append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"),
+                req->path.base + req->query_at + 1,
+                req->path.len - (req->query_at + 1));
     } else {
         append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), NULL, 0);
     }
     /* REMOTE_ADDR & REMOTE_PORT */
-    append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"), H2O_STRLIT("REMOTE_PORT"), req->conn->callbacks->get_peername);
+    append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"),
+            H2O_STRLIT("REMOTE_PORT"), req->conn->callbacks->get_peername);
     /* REMOTE_USER */
     if (req->remote_user.base != NULL)
         append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_USER"), req->remote_user.base, req->remote_user.len);
     /* REQUEST_METHOD */
-    append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_METHOD"), req->method.base, req->method.len);
+    append_pair_pvlv("REQUEST_METHOD", req->method);
     /* HTTP_HOST & REQUEST_URI */
     if (config->send_delegated_uri) {
-        append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->authority.base, req->authority.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->path.base, req->path.len);
+        append_pair_pvlv("HTTP_HOST", req->authority);
+        append_pair_pvlv("REQUEST_URI", req->path);
     } else {
-        append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->input.authority.base, req->input.authority.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->input.path.base, req->input.path.len);
+        append_pair_pvlv("HTTP_HOST", req->input.authority);
+        append_pair_pvlv("REQUEST_URI", req->input.path);
     }
     /* SERVER_ADDR & SERVER_PORT */
-    append_address_info(req, vecs, H2O_STRLIT("SERVER_ADDR"), H2O_STRLIT("SERVER_PORT"), req->conn->callbacks->get_sockname);
+    append_address_info(req, vecs, H2O_STRLIT("SERVER_ADDR"),
+            H2O_STRLIT("SERVER_PORT"), req->conn->callbacks->get_sockname);
     /* SERVER_NAME */
-    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base, req->hostconf->authority.host.len);
+    append_pair_pvlv("SERVER_NAME", req->hostconf->authority.host);
     { /* SERVER_PROTOCOL */
-        char buf[sizeof("HTTP/1.1") - 1];
+        char buf[sizeof ("HTTP/1.1") - 1];
         size_t l = h2o_stringify_protocol_version(buf, req->version);
         append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_PROTOCOL"), buf, l);
     }
     /* SERVER_SOFTWARE */
-    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_SOFTWARE"), req->conn->ctx->globalconf->server_name.base,
-                req->conn->ctx->globalconf->server_name.len);
+    append_pair_pvlv("SERVER_SOFTWARE", req->conn->ctx->globalconf->server_name);
     /* set HTTPS: on if necessary */
     if (req->scheme == &H2O_URL_SCHEME_HTTPS)
         append_pair(&req->pool, vecs, H2O_STRLIT("HTTPS"), H2O_STRLIT("on"));
@@ -280,12 +286,13 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
         size_t cookie_length = 0;
         for (; h != h_end; ++h) {
             if (h->name == &H2O_TOKEN_CONTENT_TYPE->buf) {
-                append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_TYPE"), h->value.base, h->value.len);
+                append_pair_pvlv("CONTENT_TYPE", h->value);
             } else if (h->name == &H2O_TOKEN_COOKIE->buf) {
                 /* accumulate the length of the cookie, together with the separator */
                 cookie_length += h->value.len + 1;
             } else {
-                char *dst = append_pair(&req->pool, vecs, NULL, h->name->len + sizeof("HTTP_") - 1, h->value.base, h->value.len);
+                char *dst = (char*)append_pair(&req->pool, vecs, NULL,
+                        h->name->len + sizeof ("HTTP_") - 1, h->value.base, h->value.len);
                 const char *src = h->name->base, *src_end = src + h->name->len;
                 *dst++ = 'H';
                 *dst++ = 'T';
@@ -300,7 +307,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
             /* emit the cookie merged */
             cookie_length -= 1;
             append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_COOKIE"), NULL, cookie_length);
-            char *dst = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len - cookie_length;
+            char *dst = vecs->entries[vecs->size - 1].base +
+                    vecs->entries[vecs->size - 1].len - cookie_length;
             for (h = req->headers.entries;; ++h) {
                 if (h->name == &H2O_TOKEN_COOKIE->buf) {
                     if (cookie_length == h->value.len)
@@ -316,8 +324,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     }
 }
 
-static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned request_id, size_t max_record_size)
-{
+static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs,
+        unsigned request_id, size_t max_record_size) {
     size_t index = 2, recsize = 0, header_slot = 1;
 
     while (index != vecs->size) {
@@ -325,15 +333,17 @@ static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned
             recsize += vecs->entries[index].len;
             ++index;
         } else {
-            vecs->entries[header_slot] = create_header(pool, FCGI_PARAMS, request_id, max_record_size);
+            vecs->entries[header_slot] = create_header(pool, FCGI_PARAMS,
+                    request_id, max_record_size);
             if (recsize + vecs->entries[index].len == max_record_size) {
-                h2o_vector_reserve(pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 1);
+                vecs->reserve_more(pool, 1);
                 memmove(vecs->entries + index + 2, vecs->entries + index + 1,
-                        (vecs->size - (index + 1)) * sizeof(vecs->entries[0]));
+                        (vecs->size - (index + 1)) * sizeof (vecs->entries[0]));
                 ++vecs->size;
             } else {
-                h2o_vector_reserve(pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 2);
-                memmove(vecs->entries + index + 2, vecs->entries + index, (vecs->size - index) * sizeof(vecs->entries[0]));
+                vecs->reserve_more(pool, 2);
+                memmove(vecs->entries + index + 2, vecs->entries + index,
+                        (vecs->size - index) * sizeof (vecs->entries[0]));
                 vecs->size += 2;
                 size_t lastsz = max_record_size - recsize;
                 vecs->entries[index].len = lastsz;
@@ -348,22 +358,22 @@ static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned
 
     vecs->entries[header_slot] = create_header(pool, FCGI_PARAMS, request_id, recsize);
     if (recsize != 0) {
-        h2o_vector_reserve(pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 1);
-        vecs->entries[vecs->size++] = create_header(pool, FCGI_PARAMS, request_id, 0);
+        vecs->push_back(pool, create_header(pool, FCGI_PARAMS, request_id, 0));
     }
 }
 
-static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request_id, size_t max_record_size,
-                          h2o_fastcgi_config_vars_t *config)
-{
-    *vecs = (iovec_vector_t){};
+static void build_request(h2o_req_t *req, iovec_vector_t *vecs,
+        unsigned request_id, size_t max_record_size,
+        h2o_fastcgi_config_vars_t *config) {
+    *vecs = {};
 
     /* first entry is FCGI_BEGIN_REQUEST */
-    h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), 5 /* we send at least 5 iovecs */);
+    vecs->reserve(&req->pool, 5 /* we send at least 5 iovecs */);
     vecs->entries[0] =
-        create_begin_request(&req->pool, request_id, FCGI_RESPONDER, config->keepalive_timeout != 0 ? FCGI_KEEP_CONN : 0);
+            create_begin_request(&req->pool, request_id, FCGI_RESPONDER,
+            config->keepalive_timeout != 0 ? FCGI_KEEP_CONN : 0);
     /* second entry is reserved for FCGI_PARAMS header */
-    vecs->entries[1] = h2o_iovec_init(NULL, APPEND_BLOCKSIZE); /* dummy value set to prevent params being appended to the entry */
+    vecs->entries[1].init(NULL, APPEND_BLOCKSIZE); /* dummy value set to prevent params being appended to the entry */
     vecs->size = 2;
     /* accumulate the params data, and annotate them with FCGI_PARAM headers */
     append_params(req, vecs, config);
@@ -372,41 +382,36 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     if (req->entity.len != 0) {
         size_t off = 0;
         for (; off + max_record_size < req->entity.len; off += max_record_size) {
-            h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 2);
+            vecs->reserve_more(&req->pool, 2);
             vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, max_record_size);
-            vecs->entries[vecs->size++] = h2o_iovec_init(req->entity.base + off, max_record_size);
+            vecs->entries[vecs->size++].init(req->entity.base + off, max_record_size);
         }
         if (off != req->entity.len) {
-            h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 2);
+            vecs->reserve_more(&req->pool, 2);
             vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, req->entity.len - off);
-            vecs->entries[vecs->size++] = h2o_iovec_init(req->entity.base + off, req->entity.len - off);
+            vecs->entries[vecs->size++].init(req->entity.base + off, req->entity.len - off);
         }
     }
-    h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 1);
-    vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, 0);
+    vecs->push_back(&req->pool, create_header(&req->pool, FCGI_STDIN, request_id, 0));
 }
 
-static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timeout_t *timeout, h2o_timeout_cb cb)
-{
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
+static void set_timeout(fcgi_generator_t *generator, h2o_timeout_t *timeout, h2o_timeout_cb cb) {
+    generator->timeout.unlink();
 
     generator->timeout.cb = cb;
-    h2o_timeout_link(generator->req->conn->ctx->loop, timeout, &generator->timeout);
+    timeout->link(generator->req->conn->ctx->loop, &generator->timeout);
 }
 
-static void close_generator(struct st_fcgi_generator_t *generator)
-{
+static void close_generator(fcgi_generator_t *generator) {
     /* can be called more than once */
 
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
+    generator->timeout.unlink();
     if (generator->connect_req != NULL) {
         h2o_socketpool_cancel_connect(generator->connect_req);
         generator->connect_req = NULL;
     }
     if (generator->sock != NULL) {
-        h2o_socket_close(generator->sock);
+        h2o_socket_t::close(generator->sock);
         generator->sock = NULL;
     }
     if (generator->resp.sending.buf != NULL)
@@ -415,15 +420,16 @@ static void close_generator(struct st_fcgi_generator_t *generator)
         h2o_buffer_dispose(&generator->resp.receiving);
 }
 
-static void do_send(struct st_fcgi_generator_t *generator)
-{
+static void do_send(fcgi_generator_t *generator) {
     h2o_iovec_t vecs[1];
     size_t veccnt;
     int is_final;
 
-    vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending, &generator->resp.receiving, generator->req->preferred_chunk_size);
+    vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending,
+            &generator->resp.receiving, generator->req->preferred_chunk_size);
     veccnt = vecs[0].len != 0 ? 1 : 0;
-    if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size && generator->resp.receiving->size == 0) {
+    if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size &&
+            generator->resp.receiving->size == 0) {
         is_final = 1;
         if (!(generator->leftsize == 0 || generator->leftsize == SIZE_MAX))
             generator->req->http1_is_persistent = 0;
@@ -432,42 +438,37 @@ static void do_send(struct st_fcgi_generator_t *generator)
             return;
         is_final = 0;
     }
-    h2o_send(generator->req, vecs, veccnt, is_final);
+    generator->req->send(vecs, veccnt, is_final);
 }
 
-static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
-{
+static void send_eos_and_close(fcgi_generator_t *generator, int can_keepalive) {
     if (generator->ctx->handler->config.keepalive_timeout != 0 && can_keepalive)
         h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock);
     else
-        h2o_socket_close(generator->sock);
+        h2o_socket_t::close(generator->sock);
     generator->sock = NULL;
 
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
+    generator->timeout.unlink();
 
     if (generator->resp.sending.bytes_inflight == 0)
         do_send(generator);
 }
 
-static void errorclose(struct st_fcgi_generator_t *generator)
-{
+static void errorclose(fcgi_generator_t *generator) {
     if (generator->sent_headers) {
         send_eos_and_close(generator, 0);
     } else {
         h2o_req_t *req = generator->req;
         close_generator(generator);
-        h2o_send_error(req, 503, "Internal Server Error", "Internal Server Error", 0);
+        req->send_error(503, "Internal Server Error", "Internal Server Error", 0);
     }
 }
 
-static int _isdigit(int ch)
-{
+static int _isdigit(int ch) {
     return '0' <= ch && ch <= '9';
 }
 
-static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_headers)
-{
+static int fill_headers(h2o_req_t *req, phr_header *headers, size_t num_headers) {
     size_t i;
 
     /* set the defaults */
@@ -477,18 +478,18 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
 
     for (i = 0; i != num_headers; ++i) {
         const h2o_token_t *token;
-        h2o_strtolower((char *)headers[i].name, headers[i].name_len);
+        h2o_phr_headertolower(headers[i]);
         if ((token = h2o_lookup_token(headers[i].name, headers[i].name_len)) != NULL) {
             if (token->proxy_should_drop) {
                 /* skip */
             } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX) {
-                    h2o_req_log_error(req, MODULE_NAME, "received multiple content-length headers from fcgi");
+                    req->log_error(MODULE_NAME, "received multiple content-length headers from fcgi");
                     return -1;
                 }
-                if ((req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
-                    h2o_req_log_error(req, MODULE_NAME, "failed to parse content-length header sent from fcgi: %.*s",
-                                      (int)headers[i].value_len, headers[i].value);
+                if ((req->res.content_length = h2o_pht_header_value_tosize(headers[i])) == SIZE_MAX) {
+                    req->log_error(MODULE_NAME, "failed to parse content-length header sent from fcgi: %.*s",
+                            (int) headers[i].value_len, headers[i].value);
                     return -1;
                 }
             } else {
@@ -499,33 +500,31 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
                 RFC suggests abs-path-style Location headers should trigger an internal redirection, but is that how the web servers
                 work?
                  */
-                h2o_add_header(&req->pool, &req->res.headers, token,
-                               h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
+                req->addResponseHeader(token, h2o_strdup(&req->pool, headers[i].value, headers[i].value_len));
                 if (token == H2O_TOKEN_LINK)
-                    h2o_puth_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                    req->puth_path_in_link_header(headers[i].value, headers[i].value_len);
             }
-        } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("status"))) {
-            h2o_iovec_t value = h2o_iovec_init(headers[i].value, headers[i].value_len);
+        } else if (h2o_phr_header_name_is_literal(headers[i], "status")) {
+            h2o_iovec_t value = h2o_iovec_t::create(headers[i].value, headers[i].value_len);
             if (value.len < 3 || !(_isdigit(value.base[0]) && _isdigit(value.base[1]) && _isdigit(value.base[2])) ||
-                (value.len >= 4 && value.base[3] != ' ')) {
-                h2o_req_log_error(req, MODULE_NAME, "failed to parse Status header, got: %.*s", (int)value.len, value.base);
+                    (value.len >= 4 && value.base[3] != ' ')) {
+                req->log_error(MODULE_NAME, "failed to parse Status header, got: %.*s", (int) value.len, value.base);
                 return -1;
             }
             req->res.status = (value.base[0] - '0') * 100 + (value.base[1] - '0') * 10 + (value.base[2] - '0');
             req->res.reason = value.len >= 5 ? h2o_strdup(&req->pool, value.base + 4, value.len - 4).base : "OK";
         } else {
             h2o_iovec_t name_duped = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len),
-                        value_duped = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
-            h2o_add_header_by_str(&req->pool, &req->res.headers, name_duped.base, name_duped.len, 0, value_duped.base,
-                                  value_duped.len);
+                    value_duped = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
+            req->res.headers.add(&req->pool, name_duped.base, name_duped.len, 0, value_duped.base,
+                    value_duped.len);
         }
     }
 
     return 0;
 }
 
-static void append_content(struct st_fcgi_generator_t *generator, const void *src, size_t len)
-{
+static void append_content(fcgi_generator_t *generator, const void *src, size_t len) {
     /* do not accumulate more than content-length bytes */
     if (generator->leftsize != SIZE_MAX) {
         if (generator->leftsize < len) {
@@ -541,8 +540,7 @@ static void append_content(struct st_fcgi_generator_t *generator, const void *sr
     generator->resp.receiving->size += len;
 }
 
-static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_fcgi_record_header_t *header)
-{
+static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t *header) {
     h2o_buffer_t *input = generator->sock->input;
     struct phr_header headers[100];
     size_t num_headers;
@@ -558,23 +556,27 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     }
 
     /* parse the headers using the input buffer (or keep it in response buffer and parse) */
-    num_headers = sizeof(headers) / sizeof(headers[0]);
+    num_headers = sizeof (headers) / sizeof (headers[0]);
     if (generator->resp.receiving->size == 0) {
-        parse_result = phr_parse_headers(input->bytes + FCGI_RECORD_HEADER_SIZE, input->size, headers, &num_headers, 0);
+        parse_result = phr_parse_headers(input->bytes + FCGI_RECORD_HEADER_SIZE,
+                input->size, headers, &num_headers, 0);
     } else {
         size_t prevlen = generator->resp.receiving->size;
-        memcpy(h2o_buffer_reserve(&generator->resp.receiving, header->contentLength).base, input->bytes + FCGI_RECORD_HEADER_SIZE,
-               header->contentLength);
+        memcpy(h2o_buffer_reserve(&generator->resp.receiving,
+                header->contentLength).base,
+                input->bytes + FCGI_RECORD_HEADER_SIZE,
+                header->contentLength);
         generator->resp.receiving->size = prevlen + header->contentLength;
         parse_result =
-            phr_parse_headers(generator->resp.receiving->bytes, generator->resp.receiving->size, headers, &num_headers, prevlen);
+                phr_parse_headers(generator->resp.receiving->bytes,
+                generator->resp.receiving->size, headers, &num_headers, prevlen);
     }
     if (parse_result < 0) {
         if (parse_result == -2) {
             /* incomplete */
             return 0;
         } else {
-            h2o_req_log_error(generator->req, MODULE_NAME, "received broken response");
+            generator->req->log_error(MODULE_NAME, "received broken response");
             return -1;
         }
     }
@@ -583,7 +585,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     if (fill_headers(generator->req, headers, num_headers) != 0)
         return -1;
     generator->leftsize = generator->req->res.content_length;
-    h2o_start_response(generator->req, &generator->super);
+    generator->req->start_response(&generator->super);
     generator->sent_headers = 1;
 
     /* rest of the contents should be stored in the response buffer */
@@ -599,30 +601,28 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     return 0;
 }
 
-static void on_rw_timeout(h2o_timeout_entry_t *entry)
-{
-    struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
+static void on_rw_timeout(h2o_timeout_entry_t *entry) {
+    fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
 
-    h2o_req_log_error(generator->req, MODULE_NAME, "I/O timeout");
+    generator->req->log_error(MODULE_NAME, "I/O timeout");
     errorclose(generator);
 }
 
-static void on_read(h2o_socket_t *sock, int status)
-{
-    struct st_fcgi_generator_t *generator = sock->data;
+static void on_read(h2o_socket_t *sock, int status) {
+    auto generator = (fcgi_generator_t*)sock->data;
     int can_keepalive = 0;
 
     if (status != 0) {
         /* note: FastCGI server is allowed to close the connection any time after sending an empty FCGI_STDOUT record */
         if (!generator->sent_headers)
-            h2o_req_log_error(generator->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
+            generator->req->log_error(MODULE_NAME, "fastcgi connection closed unexpectedly");
         errorclose(generator);
         return;
     }
 
     /* handle the records */
     while (1) {
-        struct st_fcgi_record_header_t header;
+        fcgi_record_header_t header;
         size_t recsize;
         if (sock->input->size < FCGI_RECORD_HEADER_SIZE)
             break;
@@ -632,31 +632,31 @@ static void on_read(h2o_socket_t *sock, int status)
             break;
         /* we have a complete record */
         switch (header.type) {
-        case FCGI_STDOUT:
-            if (handle_stdin_record(generator, &header) != 0)
-                goto Error;
-            h2o_buffer_consume(&sock->input, recsize);
-            break;
-        case FCGI_STDERR:
-            if (header.contentLength != 0)
-                h2o_req_log_error(generator->req, MODULE_NAME, "%.*s", (int)header.contentLength,
-                                  sock->input->bytes + FCGI_RECORD_HEADER_SIZE);
-            h2o_buffer_consume(&sock->input, recsize);
-            break;
-        case FCGI_END_REQUEST:
-            if (!generator->sent_headers) {
-                h2o_req_log_error(generator->req, MODULE_NAME, "received FCGI_END_REQUEST before end of the headers");
-                goto Error;
-            }
-            h2o_buffer_consume(&sock->input, recsize);
-            can_keepalive = 1;
-            goto EOS_Received;
-        default:
-            h2o_req_log_error(generator->req, MODULE_NAME, "received unexpected record, type: %u", header.type);
-            h2o_buffer_consume(&sock->input, recsize);
-            if (!generator->sent_headers)
-                goto Error;
-            goto EOS_Received;
+            case FCGI_STDOUT:
+                if (handle_stdin_record(generator, &header) != 0)
+                    goto Error;
+                h2o_buffer_consume(&sock->input, recsize);
+                break;
+            case FCGI_STDERR:
+                if (header.contentLength != 0)
+                    generator->req->log_error(MODULE_NAME, "%.*s", (int) header.contentLength,
+                        sock->input->bytes + FCGI_RECORD_HEADER_SIZE);
+                h2o_buffer_consume(&sock->input, recsize);
+                break;
+            case FCGI_END_REQUEST:
+                if (!generator->sent_headers) {
+                    generator->req->log_error(MODULE_NAME, "received FCGI_END_REQUEST before end of the headers");
+                    goto Error;
+                }
+                h2o_buffer_consume(&sock->input, recsize);
+                can_keepalive = 1;
+                goto EOS_Received;
+            default:
+                generator->req->log_error(MODULE_NAME, "received unexpected record, type: %u", header.type);
+                h2o_buffer_consume(&sock->input, recsize);
+                if (!generator->sent_headers)
+                    goto Error;
+                goto EOS_Received;
         }
     }
 
@@ -675,23 +675,21 @@ Error:
     errorclose(generator);
 }
 
-static void on_send_complete(h2o_socket_t *sock, int status)
-{
-    struct st_fcgi_generator_t *generator = sock->data;
+static void on_send_complete(h2o_socket_t *sock, int status) {
+    auto generator = (fcgi_generator_t*)sock->data;
 
     set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
-static void on_connect(h2o_socket_t *sock, const char *errstr, void *data)
-{
-    struct st_fcgi_generator_t *generator = data;
+static void on_connect(h2o_socket_t *sock, const char *errstr, void *data) {
+    auto generator = (fcgi_generator_t*)data;
     iovec_vector_t vecs;
 
     generator->connect_req = NULL;
 
     if (sock == NULL) {
-        h2o_req_log_error(generator->req, MODULE_NAME, "connection failed:%s", errstr);
+        generator->req->log_error(MODULE_NAME, "connection failed:%s", errstr);
         errorclose(generator);
         return;
     }
@@ -702,102 +700,92 @@ static void on_connect(h2o_socket_t *sock, const char *errstr, void *data)
     build_request(generator->req, &vecs, 1, 65535, &generator->ctx->handler->config);
 
     /* start sending the response */
-    h2o_socket_write(generator->sock, vecs.entries, vecs.size, on_send_complete);
+    generator->sock->write(vecs.entries, vecs.size, on_send_complete);
 
     set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
 
     /* activate the receiver; note: FCGI spec allows the app to start sending the response before it receives FCGI_STDIN */
-    h2o_socket_read_start(sock, on_read);
+    sock->read_start(on_read);
 }
 
-static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
-{
-    struct st_fcgi_generator_t *generator = (void *)_generator;
+static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req) {
+    auto generator = (fcgi_generator_t *) _generator;
 
     h2o_doublebuffer_consume(&generator->resp.sending);
     do_send(generator);
 }
 
-static void do_stop(h2o_generator_t *_generator, h2o_req_t *req)
-{
-    struct st_fcgi_generator_t *generator = (void *)_generator;
+static void do_stop(h2o_generator_t *_generator, h2o_req_t *req) {
+    auto generator = (fcgi_generator_t *) _generator;
     close_generator(generator);
 }
 
-static void on_connect_timeout(h2o_timeout_entry_t *entry)
-{
-    struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
+static void on_connect_timeout(h2o_timeout_entry_t *entry) {
+    fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
 
-    h2o_req_log_error(generator->req, MODULE_NAME, "connect timeout");
+    generator->req->log_error(MODULE_NAME, "connect timeout");
     errorclose(generator);
 }
 
-static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
-{
-    h2o_fastcgi_handler_t *handler = (void *)_handler;
-    struct st_fcgi_generator_t *generator;
+static int on_req(h2o_handler_t *_handler, h2o_req_t *req) {
+    auto handler = (h2o_fastcgi_handler_t *) _handler;
 
-    generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), (void (*)(void *))close_generator);
+    auto generator = req->pool.alloc_shared_for<fcgi_generator_t>(1, (mem_pool_dispose_cb_t)close_generator);
     generator->super.proceed = do_proceed;
     generator->super.stop = do_stop;
-    generator->ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
+    generator->ctx = (fcgi_context_t*)req->conn->ctx->get_handler_context(&handler->super);
     generator->req = req;
     generator->sock = NULL;
     generator->sent_headers = 0;
     h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
-    generator->timeout = (h2o_timeout_entry_t){};
+    generator->timeout = {};
 
     set_timeout(generator, &generator->ctx->io_timeout, on_connect_timeout);
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, req->conn->ctx->loop,
-                           &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
+            &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
 
     return 0;
 }
 
-static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
-{
-    h2o_fastcgi_handler_t *handler = (void *)_handler;
-    struct st_fcgi_context_t *handler_ctx = h2o_mem_alloc(sizeof(*handler_ctx));
+static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx) {
+    auto handler = (h2o_fastcgi_handler_t *) _handler;
+    auto handler_ctx = h2o_mem_alloc_for<fcgi_context_t>();
 
     /* use the first event loop for handling timeouts of the socket pool */
     if (handler->sockpool.timeout == UINT64_MAX)
         h2o_socketpool_set_timeout(&handler->sockpool, ctx->loop,
-                                   handler->config.keepalive_timeout != 0 ? handler->config.keepalive_timeout : 60000);
+            handler->config.keepalive_timeout != 0 ? handler->config.keepalive_timeout : 60000);
 
     handler_ctx->handler = handler;
-    h2o_timeout_init(ctx->loop, &handler_ctx->io_timeout, handler->config.io_timeout);
+    handler_ctx->io_timeout.init(ctx->loop, handler->config.io_timeout);
 
-    h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
+    ctx->set_handler_context(&handler->super, handler_ctx);
 }
 
-static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
-{
-    h2o_fastcgi_handler_t *handler = (void *)_handler;
-    struct st_fcgi_context_t *handler_ctx = h2o_context_get_handler_context(ctx, &handler->super);
+static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx) {
+    auto handler = (h2o_fastcgi_handler_t *)_handler;
+    auto handler_ctx = (fcgi_context_t *)ctx->get_handler_context(&handler->super);
 
     if (handler_ctx == NULL)
         return;
 
-    h2o_timeout_dispose(ctx->loop, &handler_ctx->io_timeout);
-    free(handler_ctx);
+    h2o_timeout_t::dispose(ctx->loop, &handler_ctx->io_timeout);
+    h2o_mem_free(handler_ctx);
 }
 
-static void on_handler_dispose(h2o_handler_t *_handler)
-{
-    h2o_fastcgi_handler_t *handler = (void *)_handler;
-
+static void on_handler_dispose(h2o_handler_t *_handler) {
+	auto handler = (h2o_fastcgi_handler_t *)_handler;
     if (handler->config.callbacks.dispose != NULL)
         handler->config.callbacks.dispose(handler, handler->config.callbacks.data);
 
     h2o_socketpool_dispose(&handler->sockpool);
-    free(handler->config.document_root.base);
-    free(handler);
+    h2o_mem_free(handler->config.document_root.base);
+    h2o_mem_free(handler);
 }
 
-static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars)
-{
-    h2o_fastcgi_handler_t *handler = (void *)h2o_create_handler(pathconf, sizeof(*handler));
+static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars) {
+    h2o_create_new_handler_for(handler, pathconf, h2o_fastcgi_handler_t);
 
     handler->super.on_context_init = on_context_init;
     handler->super.on_context_dispose = on_context_dispose;
@@ -805,23 +793,24 @@ static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fast
     handler->super.on_req = on_req;
     handler->config = *vars;
     if (vars->document_root.base != NULL)
-        handler->config.document_root = h2o_strdup(NULL, vars->document_root.base, vars->document_root.len);
+        handler->config.document_root.strdup(vars->document_root);
 
     return handler;
 }
 
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
-                                                        h2o_fastcgi_config_vars_t *vars)
-{
+h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf,
+        const char *host, uint16_t port,
+        h2o_fastcgi_config_vars_t *vars) {
     h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
 
-    h2o_socketpool_init_by_hostport(&handler->sockpool, h2o_iovec_init(host, strlen(host)), port, SIZE_MAX /* FIXME */);
+    h2o_socketpool_init_by_hostport(&handler->sockpool,
+            h2o_iovec_t::create(host, strlen(host)), port, SIZE_MAX /* FIXME */);
     return handler;
 }
 
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
-                                                       h2o_fastcgi_config_vars_t *vars)
-{
+h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf,
+        struct sockaddr *sa, socklen_t salen,
+        h2o_fastcgi_config_vars_t *vars) {
     h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
 
     h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, SIZE_MAX /* FIXME */);

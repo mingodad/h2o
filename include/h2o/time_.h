@@ -24,7 +24,7 @@
 
 #include <time.h>
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 extern "C" {
 #endif
 
@@ -44,7 +44,7 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm);
  */
 void h2o_time2str_log(char *buf, time_t time);
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 }
 #endif
 

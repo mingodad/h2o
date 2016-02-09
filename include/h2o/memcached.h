@@ -29,21 +29,31 @@
 #define H2O_MEMCACHED_ENCODE_KEY 0x1
 #define H2O_MEMCACHED_ENCODE_VALUE 0x2
 
-typedef struct st_h2o_memcached_context_t h2o_memcached_context_t;
-typedef struct st_h2o_memcached_req_t h2o_memcached_req_t;
 typedef void (*h2o_memcached_get_cb)(h2o_iovec_t value, void *cb_data);
+struct h2o_memcached_req_t;
 
-h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads, const char *prefix);
+struct h2o_memcached_context_t {
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    h2o_linklist_t pending;
+    size_t num_threads_connected;
+    char *host;
+    uint16_t port;
+    h2o_iovec_t prefix;
+
+    static h2o_memcached_context_t *create(const char *host, uint16_t port, size_t num_threads, const char *prefix);
+    h2o_memcached_req_t *get(h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
+                                           h2o_memcached_get_cb cb, void *cb_data, int flags);
+
+    void cancel_get(h2o_memcached_req_t *req);
+
+    void set(h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags);
+
+    void remove(h2o_iovec_t key, int flags);
+};
+
 
 void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
 
-h2o_memcached_req_t *h2o_memcached_get(h2o_memcached_context_t *ctx, h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
-                                       h2o_memcached_get_cb cb, void *cb_data, int flags);
-
-void h2o_memcached_cancel_get(h2o_memcached_context_t *ctx, h2o_memcached_req_t *req);
-
-void h2o_memcached_set(h2o_memcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags);
-
-void h2o_memcached_delete(h2o_memcached_context_t *ctx, h2o_iovec_t key, int flags);
 
 #endif

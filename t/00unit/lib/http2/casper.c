@@ -34,94 +34,94 @@ static size_t get_end_of_cookie_value(char *cookie, size_t cookie_len)
 
 static void test_calc_key(void)
 {
-    h2o_http2_casper_t *casper = h2o_http2_casper_create(13, 6);
+    h2o_http2_casper_t *casper = h2o_http2_casper_t::create(13, 6);
 
     unsigned key = calc_key(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0")), expected;
     memcpy(&expected, "\x1a\xa6\xfc\x81", 4);
     expected &= (1 << 13) - 1;
     ok(key == expected);
 
-    h2o_http2_casper_destroy(casper);
+    h2o_http2_casper_t::destroy(casper);
 }
 
 static void test_lookup(void)
 {
     h2o_http2_casper_t *casper;
-    casper = h2o_http2_casper_create(13, 6);
+    casper = h2o_http2_casper_t::create(13, 6);
 
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 0);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1) == 0);
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 0);
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1) == 0);
     ok(casper->keys.size == 1);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1) == 1);
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1) == 1);
     ok(casper->keys.size == 1);
 
-    h2o_http2_casper_destroy(casper);
+    h2o_http2_casper_t::destroy(casper);
 }
 
 static void test_cookie(void)
 {
     h2o_http2_casper_t *casper;
 
-    casper = h2o_http2_casper_create(13, 6);
+    casper = h2o_http2_casper_t::create(13, 6);
 
-    h2o_iovec_t cookie = h2o_http2_casper_get_cookie(casper);
+    h2o_iovec_t cookie = casper->get_cookie();
     ok(cookie.base == NULL);
     ok(cookie.len == 0);
 
-    h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1);
-    cookie = h2o_http2_casper_get_cookie(casper);
+    casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1);
+    cookie = casper->get_cookie();
     ok(cookie.len != 0);
     cookie = h2o_strdup(NULL, cookie.base, cookie.len);
-    h2o_http2_casper_destroy(casper);
-    casper = h2o_http2_casper_create(13, 6);
+    h2o_http2_casper_t::destroy(casper);
+    casper = h2o_http2_casper_t::create(13, 6);
 
-    h2o_http2_casper_consume_cookie(casper, cookie.base, get_end_of_cookie_value(cookie.base, cookie.len));
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 0) == 0);
-    h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 1);
+    casper->consume_cookie(cookie.base, get_end_of_cookie_value(cookie.base, cookie.len));
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
+    ok(casper->lookup(H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 0) == 0);
+    casper->lookup(H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 1);
 
-    h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1);
-    cookie = h2o_http2_casper_get_cookie(casper);
+    casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1);
+    cookie = casper->get_cookie();
     ok(cookie.len != 0);
     cookie = h2o_strdup(NULL, cookie.base, cookie.len);
 
-    h2o_http2_casper_destroy(casper);
-    casper = h2o_http2_casper_create(13, 6);
+    h2o_http2_casper_t::destroy(casper);
+    casper = h2o_http2_casper_t::create(13, 6);
 
-    h2o_http2_casper_consume_cookie(casper, cookie.base, get_end_of_cookie_value(cookie.base, cookie.len));
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 0) == 1);
+    casper->consume_cookie(cookie.base, get_end_of_cookie_value(cookie.base, cookie.len));
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
+    ok(casper->lookup(H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 0) == 1);
 
-    h2o_http2_casper_destroy(casper);
+    h2o_http2_casper_t::destroy(casper);
 }
 
 static void test_cookie_merge(void)
 {
     h2o_http2_casper_t *casper;
 
-    casper = h2o_http2_casper_create(13, 6);
-    h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1);
-    h2o_iovec_t cookie1 = h2o_http2_casper_get_cookie(casper);
+    casper = h2o_http2_casper_t::create(13, 6);
+    casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 1);
+    h2o_iovec_t cookie1 = casper->get_cookie();
     cookie1 = h2o_strdup(NULL, cookie1.base, cookie1.len);
-    h2o_http2_casper_destroy(casper);
+    h2o_http2_casper_t::destroy(casper);
 
-    casper = h2o_http2_casper_create(13, 6);
-    h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 1);
-    h2o_iovec_t cookie2 = h2o_http2_casper_get_cookie(casper);
+    casper = h2o_http2_casper_t::create(13, 6);
+    casper->lookup(H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 1);
+    h2o_iovec_t cookie2 = casper->get_cookie();
     cookie2 = h2o_strdup(NULL, cookie2.base, cookie2.len);
-    h2o_http2_casper_destroy(casper);
+    h2o_http2_casper_t::destroy(casper);
 
-    casper = h2o_http2_casper_create(13, 6);
-    h2o_http2_casper_consume_cookie(casper, cookie1.base, get_end_of_cookie_value(cookie1.base, cookie1.len));
-    h2o_http2_casper_consume_cookie(casper, cookie1.base, get_end_of_cookie_value(cookie1.base, cookie1.len));
+    casper = h2o_http2_casper_t::create(13, 6);
+    casper->consume_cookie(cookie1.base, get_end_of_cookie_value(cookie1.base, cookie1.len));
+    casper->consume_cookie(cookie1.base, get_end_of_cookie_value(cookie1.base, cookie1.len));
     ok(casper->keys.size == 1);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
-    h2o_http2_casper_consume_cookie(casper, cookie2.base, get_end_of_cookie_value(cookie2.base, cookie2.len));
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
+    casper->consume_cookie(cookie2.base, get_end_of_cookie_value(cookie2.base, cookie2.len));
     ok(casper->keys.size == 2);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
-    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 0) == 1);
-    h2o_http2_casper_destroy(casper);
+    ok(casper->lookup(H2O_STRLIT("/index.html"), H2O_STRLIT("0-0"), 0) == 1);
+    ok(casper->lookup(H2O_STRLIT("/index.php"), H2O_STRLIT("0-0"), 0) == 1);
+    h2o_http2_casper_t::destroy(casper);
 }
 
 void test_lib__http2__casper(void)

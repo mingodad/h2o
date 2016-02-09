@@ -91,7 +91,7 @@ yaml_parser_fetch_more_tokens(yaml_parser_t *parser);
  */
 
 #define BUFFER_INIT(context,buffer,size)                                        \
-    (((buffer).start = yaml_malloc(size)) ?                                     \
+    (((buffer).start = (unsigned char*)yaml_malloc(size)) ?                                     \
         ((buffer).last = (buffer).pointer = (buffer).start,                     \
          (buffer).end = (buffer).start+(size),                                  \
          1) :                                                                   \
@@ -131,7 +131,7 @@ yaml_string_join(
      (value).pointer = (string))
 
 #define STRING_INIT(context,string,size)                                        \
-    (((string).start = yaml_malloc(size)) ?                                     \
+    (((string).start = (decltype((string).start))yaml_malloc(size)) ?                                     \
         ((string).pointer = (string).start,                                     \
          (string).end = (string).start+(size),                                  \
          memset((string).start, 0, (size)),                                     \
@@ -243,9 +243,9 @@ yaml_string_join(
         (string).pointer[offset] <= (yaml_char_t) 'f') ?                        \
        ((string).pointer[offset] - (yaml_char_t) 'a' + 10) :                    \
        ((string).pointer[offset] - (yaml_char_t) '0'))
- 
+
 #define AS_HEX(string)  AS_HEX_AT((string),0)
- 
+
 /*
  * Check if the character is ASCII.
  */
@@ -422,7 +422,7 @@ YAML_DECLARE(int)
 yaml_queue_extend(void **start, void **head, void **tail, void **end);
 
 #define STACK_INIT(context,stack,size)                                          \
-    (((stack).start = yaml_malloc((size)*sizeof(*(stack).start))) ?             \
+    (((stack).start = (decltype((stack).start))yaml_malloc((size)*sizeof(*(stack).start))) ?             \
         ((stack).top = (stack).start,                                           \
          (stack).end = (stack).start+(size),                                    \
          1) :                                                                   \
@@ -455,7 +455,7 @@ yaml_queue_extend(void **start, void **head, void **tail, void **end);
     (*(--(stack).top))
 
 #define QUEUE_INIT(context,queue,size)                                          \
-    (((queue).start = yaml_malloc((size)*sizeof(*(queue).start))) ?             \
+    (((queue).start = (decltype((queue).start))yaml_malloc((size)*sizeof(*(queue).start))) ?             \
         ((queue).head = (queue).tail = (queue).start,                           \
          (queue).end = (queue).start+(size),                                    \
          1) :                                                                   \

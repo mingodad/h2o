@@ -22,7 +22,8 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *dest;
     int status = 302; /* default is temporary redirect */
@@ -35,31 +36,31 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         break;
     case YOML_TYPE_MAPPING:
         if ((t = yoml_get(node, "url")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory property `url` is missing");
+            cmd->errprintf(node, "mandatory property `url` is missing");
             return -1;
         }
         if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "property `url` must be a string");
+            cmd->errprintf(t, "property `url` must be a string");
             return -1;
         }
         dest = t->data.scalar;
         if ((t = yoml_get(node, "status")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory property `status` is missing");
+            cmd->errprintf(node, "mandatory property `status` is missing");
             return -1;
         }
-        if (h2o_configurator_scanf(cmd, t, "%d", &status) != 0)
+        if (cmd->scanf(t, "%d", &status) != 0)
             return -1;
         if (!(300 <= status && status <= 399)) {
-            h2o_configurator_errprintf(cmd, t, "value of property `status` should be within 300 to 399");
+            cmd->errprintf(t, "value of property `status` should be within 300 to 399");
             return -1;
         }
         if ((t = yoml_get(node, "internal")) != NULL) {
-            if ((internal = (int)h2o_configurator_get_one_of(cmd, t, "NO,YES")) == -1)
+            if ((internal = (int)cmd->get_one_of(t, "NO,YES")) == -1)
                 return -1;
         }
         break;
     default:
-        h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping");
+        cmd->errprintf(node, "value must be a string or a mapping");
         return -1;
     }
 
@@ -70,7 +71,8 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
 
 void h2o_redirect_register_configurator(h2o_globalconf_t *conf)
 {
-    h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
+    auto c = conf->configurator_create<h2o_configurator_t>();
 
-    h2o_configurator_define_command(c, "redirect", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config);
+    c->define_command("redirect", H2O_CONFIGURATOR_FLAG_PATH
+            | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config);
 }

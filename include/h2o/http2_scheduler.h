@@ -114,7 +114,7 @@ int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_schedule
 
 inline int h2o_http2_scheduler_is_open(h2o_http2_scheduler_openref_t *ref)
 {
-    return h2o_linklist_is_linked(&ref->_all_link);
+    return ref->_all_link.is_linked();
 }
 
 inline uint16_t h2o_http2_scheduler_get_weight(h2o_http2_scheduler_openref_t *ref)

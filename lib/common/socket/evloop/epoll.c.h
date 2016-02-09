@@ -30,26 +30,27 @@
 #define DEBUG_LOG(...)
 #endif
 
-struct st_h2o_evloop_epoll_t {
+typedef struct {
     h2o_evloop_t super;
     int ep;
-};
+} st_h2o_evloop_epoll_t;
 
-static int update_status(struct st_h2o_evloop_epoll_t *loop)
+static int update_status(st_h2o_evloop_epoll_t *loop)
 {
-    while (loop->super._statechanged.head != NULL) {
+    auto &head = loop->super._statechanged.head;
+    while (head != NULL) {
         /* detach the top */
-        struct st_h2o_evloop_socket_t *sock = loop->super._statechanged.head;
-        loop->super._statechanged.head = sock->_next_statechanged;
+        h2o_evloop_socket_t *sock = head;
+        head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
-            free(sock);
+            h2o_mem_free(sock);
         } else {
             int changed = 0, op, ret;
             struct epoll_event ev;
             ev.events = 0;
-            if (h2o_socket_is_reading(&sock->super)) {
+            if (sock->super.is_reading()) {
                 ev.events |= EPOLLIN;
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
@@ -61,7 +62,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                     changed = 1;
                 }
             }
-            if (h2o_socket_is_writing(&sock->super) &&
+            if (sock->super.is_writing() &&
                 (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
                 ev.events |= EPOLLOUT;
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
@@ -96,14 +97,14 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
             }
         }
     }
-    loop->super._statechanged.tail_ref = &loop->super._statechanged.head;
+    loop->super._statechanged.tail_ref = &head;
 
     return 0;
 }
 
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
+    st_h2o_evloop_epoll_t *loop = (st_h2o_evloop_epoll_t *)_loop;
     struct epoll_event events[256];
     int nevents, i;
 
@@ -119,7 +120,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
-        struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;
+        auto sock = (h2o_evloop_socket_t*)(events[i].data.ptr);
         int notified = 0;
         if ((events[i].events & (EPOLLIN | EPOLLHUP | EPOLLERR)) != 0) {
             if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) != 0) {
@@ -150,17 +151,17 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     return 0;
 }
 
-static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
+static void evloop_do_on_socket_create(h2o_evloop_socket_t *sock)
 {
 }
 
-static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
+static void evloop_do_on_socket_close(h2o_evloop_socket_t *sock)
 {
 }
 
-static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
+static void evloop_do_on_socket_export(h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_epoll_t *loop = (void *)sock->loop;
+    auto loop = (st_h2o_evloop_epoll_t *)sock->loop;
     int ret;
 
     if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0)
@@ -173,7 +174,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 
 h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
+    st_h2o_evloop_epoll_t *loop = (st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
 
     loop->ep = epoll_create(10);
 

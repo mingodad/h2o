@@ -22,20 +22,19 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-struct st_h2o_file_config_vars_t {
+struct h2o_file_config_vars_t {
     const char **index_files;
     int flags;
 };
 
-struct st_h2o_file_configurator_t {
-    h2o_configurator_t super;
-    struct st_h2o_file_config_vars_t *vars;
-    struct st_h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+struct h2o_file_configurator_t : h2o_configurator_t {
+    h2o_file_config_vars_t *vars;
+    h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    auto self = (h2o_file_configurator_t *)cmd->configurator;
 
     h2o_file_register(ctx->pathconf, node->data.scalar, self->vars->index_files, *ctx->mimemap, self->vars->flags);
     return 0;
@@ -43,15 +42,15 @@ static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_conte
 
 static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    auto self = (h2o_file_configurator_t *)cmd->configurator;
     size_t i;
 
-    free(self->vars->index_files);
-    self->vars->index_files = h2o_mem_alloc(sizeof(self->vars->index_files[0]) * (node->data.sequence.size + 1));
+    h2o_mem_free(self->vars->index_files);
+    self->vars->index_files = h2o_mem_alloc_for<const char*>(node->data.sequence.size + 1);
     for (i = 0; i != node->data.sequence.size; ++i) {
         yoml_t *element = node->data.sequence.elements[i];
         if (element->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, element, "argument must be a sequence of scalars");
+            cmd->errprintf(element, "argument must be a sequence of scalars");
             return -1;
         }
         self->vars->index_files[i] = element->data.scalar;
@@ -63,9 +62,9 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
 
 static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    auto self = (h2o_file_configurator_t *)cmd->configurator;
 
-    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    switch (cmd->get_one_of(node, "OFF,ON")) {
     case 0: /* off */
         self->vars->flags |= H2O_FILE_FLAG_NO_ETAG;
         break;
@@ -81,9 +80,9 @@ static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_cont
 
 static int on_config_send_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    auto self = (h2o_file_configurator_t *)cmd->configurator;
 
-    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    switch (cmd->get_one_of(node, "OFF,ON")) {
     case 0: /* off */
         self->vars->flags &= ~H2O_FILE_FLAG_SEND_GZIP;
         break;
@@ -99,9 +98,9 @@ static int on_config_send_gzip(h2o_configurator_command_t *cmd, h2o_configurator
 
 static int on_config_dir_listing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    auto self = (h2o_file_configurator_t *)cmd->configurator;
 
-    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    switch (cmd->get_one_of(node, "OFF,ON")) {
     case 0: /* off */
         self->vars->flags &= ~H2O_FILE_FLAG_DIR_LISTING;
         break;
@@ -122,7 +121,7 @@ static const char **dup_strlist(const char **s)
 
     for (i = 0; s[i] != NULL; ++i)
         ;
-    ret = h2o_mem_alloc(sizeof(*ret) * (i + 1));
+    ret = h2o_mem_alloc_for<const char*>(i + 1);
     for (i = 0; s[i] != NULL; ++i)
         ret[i] = s[i];
     ret[i] = NULL;
@@ -132,7 +131,7 @@ static const char **dup_strlist(const char **s)
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void *)_self;
+    h2o_file_configurator_t *self = (h2o_file_configurator_t *)_self;
     ++self->vars;
     self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
     self->vars[0].flags = self->vars[-1].flags;
@@ -141,38 +140,31 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void *)_self;
-    free(self->vars->index_files);
+    h2o_file_configurator_t *self = (h2o_file_configurator_t *)_self;
+    h2o_mem_free(self->vars->index_files);
     --self->vars;
     return 0;
 }
 
 void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 {
-    struct st_h2o_file_configurator_t *self = (void *)h2o_configurator_create(globalconf, sizeof(*self));
+    auto self = globalconf->configurator_create<h2o_file_configurator_t>();
 
-    self->super.enter = on_config_enter;
-    self->super.exit = on_config_exit;
+    self->enter = on_config_enter;
+    self->exit = on_config_exit;
     self->vars = self->_vars_stack;
     self->vars->index_files = h2o_file_default_index_files;
 
-    h2o_configurator_define_command(&self->super, "file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+    self->define_command("file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_dir);
-    h2o_configurator_define_command(&self->super, "file.index",
-                                    (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+
+    auto cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION);
+    self->define_command("file.index", cf | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
                                     on_config_index);
-    h2o_configurator_define_command(&self->super, "file.etag",
-                                    (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_etag);
-    h2o_configurator_define_command(&self->super, "file.send-gzip",
-                                    (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_send_gzip);
-    h2o_configurator_define_command(&self->super, "file.dirlisting",
-                                    (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_dir_listing);
+
+    cf = h2o_CONFIGURATOR_FLAG(cf | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR);
+    self->define_command("file.etag", cf, on_config_etag);
+    self->define_command("file.send-gzip", cf, on_config_send_gzip);
+    self->define_command("file.dirlisting", cf, on_config_dir_listing);
 }

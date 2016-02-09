@@ -26,32 +26,39 @@
 #include <stdlib.h>
 #include "h2o/memory.h"
 
-typedef struct st_h2o_http2_casper_t h2o_http2_casper_t;
+struct h2o_http2_casper_t {
+    H2O_VECTOR<unsigned> keys;
+    unsigned capacity_bits;
+    unsigned remainder_bits;
+    h2o_iovec_t cookie_cache;
 
-/**
- * creates an object with provided parameters
- */
-h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned remainder_bits);
-/**
- * destroys the object and resources associated to it
- */
-void h2o_http2_casper_destroy(h2o_http2_casper_t *casper);
-/**
- * returns the number of keys stored
- */
-size_t h2o_http2_casper_num_entries(h2o_http2_casper_t *casper);
-/**
- * checks if a key is (was) marked as cached at the moment the fuction is invoked
- */
-int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len,
-                            int set);
-/**
- * consumes the `Cookie` headers in requests and updates the structure
- */
-void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *cookie, size_t cookie_len);
-/**
- * returns the value of the `Set-Cookie` header that should be sent to the client
- */
-h2o_iovec_t h2o_http2_casper_get_cookie(h2o_http2_casper_t *casper);
+    /**
+     * creates an object with provided parameters
+     */
+    static h2o_http2_casper_t *create(unsigned capacity_bits, unsigned remainder_bits);
+    /**
+     * destroys the object and resources associated to it
+     */
+    static void destroy(h2o_http2_casper_t *casper);
+    /**
+     * returns the number of keys stored
+     */
+    size_t num_entries()
+    {
+        return keys.size;
+    }
+    /**
+     * checks if a key is (was) marked as cached at the moment the fuction is invoked
+     */
+    int lookup(const char *path, size_t path_len, const char *etag, size_t etag_len, int set);
+    /**
+     * consumes the `Cookie` headers in requests and updates the structure
+     */
+    void consume_cookie(const char *cookie, size_t cookie_len);
+    /**
+     * returns the value of the `Set-Cookie` header that should be sent to the client
+     */
+    h2o_iovec_t get_cookie();
+};
 
 #endif

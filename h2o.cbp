@@ -7,7 +7,7 @@
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="Debug">
-				<Option output="h2o_lua" prefix_auto="1" extension_auto="1" />
+				<Option output="h2o_cbp" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -16,7 +16,7 @@
 				</Compiler>
 			</Target>
 			<Target title="Release">
-				<Option output="h2o_lua" prefix_auto="1" extension_auto="1" />
+				<Option output="h2o_cbp" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Release/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -28,7 +28,7 @@
 				</Linker>
 			</Target>
 			<Target title="Profile">
-				<Option output="h2o_lua" prefix_auto="1" extension_auto="1" />
+				<Option output="h2o_cbp" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -53,46 +53,43 @@
 			<Add directory="deps/yoml" />
 			<Add directory="deps/klib" />
 			<Add directory="../../../../local/luajit/include/luajit-2.1" />
+			<Add directory="deps/libyrmcds" />
+			<Add directory="deps/cloexec" />
+			<Add directory="deps/mruby/include" />
+			<Add directory="deps/mruby-input-stream/src" />
+			<Add directory="deps/golombset" />
+			<Add directory="deps/neverbleed" />
+			<Add directory="libressl-build/include" />
 		</Compiler>
 		<Linker>
 			<Add option="-L../../../../local/luajit/lib" />
-			<Add library="ssl" />
-			<Add library="crypto" />
+			<Add library="libressl-build/lib/libssl.a" />
+			<Add library="libressl-build/lib/libcrypto.a" />
 			<Add library="pthread" />
 			<Add library="m" />
 			<Add library="dl" />
 			<Add library="yaml" />
 			<Add library="z" />
 			<Add library="luajit-5.1" />
+			<Add library="mruby/host/lib/libmruby.a" />
 		</Linker>
-		<Unit filename="deps/klib/bgzf.c">
+		<Unit filename="deps/cloexec/cloexec.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="deps/cloexec/cloexec.h" />
 		<Unit filename="deps/klib/bgzf.h" />
 		<Unit filename="deps/klib/kbit.h" />
 		<Unit filename="deps/klib/kbtree.h" />
 		<Unit filename="deps/klib/kgraph.h" />
 		<Unit filename="deps/klib/khash.h" />
-		<Unit filename="deps/klib/khmm.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="deps/klib/khmm.h" />
 		<Unit filename="deps/klib/klist.h" />
-		<Unit filename="deps/klib/kmath.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="deps/klib/kmath.h" />
-		<Unit filename="deps/klib/knetfile.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="deps/klib/knetfile.h" />
 		<Unit filename="deps/klib/knhx.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="deps/klib/knhx.h" />
-		<Unit filename="deps/klib/kopen.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="deps/klib/ksa.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -102,19 +99,43 @@
 		</Unit>
 		<Unit filename="deps/klib/kson.h" />
 		<Unit filename="deps/klib/ksort.h" />
-		<Unit filename="deps/klib/kstring.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="deps/klib/kstring.h" />
 		<Unit filename="deps/klib/ksw.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="deps/klib/ksw.h" />
-		<Unit filename="deps/klib/kthread.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="deps/klib/kurl.h" />
 		<Unit filename="deps/klib/kvec.h" />
+		<Unit filename="deps/libyrmcds/close.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/connect.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/counter.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/portability.h" />
+		<Unit filename="deps/libyrmcds/recv.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/send.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/set_compression.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/socket.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/strerror.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/libyrmcds/yrmcds.h" />
+		<Unit filename="deps/neverbleed/neverbleed.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/neverbleed/neverbleed.h" />
 		<Unit filename="deps/picohttpparser/picohttpparser.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -122,22 +143,46 @@
 		<Unit filename="deps/yoml/yoml.h" />
 		<Unit filename="include/h2o.h" />
 		<Unit filename="include/h2o/configurator.h" />
+		<Unit filename="include/h2o/file.h" />
+		<Unit filename="include/h2o/filecache.h" />
+		<Unit filename="include/h2o/hostinfo.h" />
 		<Unit filename="include/h2o/http1.h" />
 		<Unit filename="include/h2o/http1client.h" />
 		<Unit filename="include/h2o/http2.h" />
+		<Unit filename="include/h2o/http2_casper.h" />
+		<Unit filename="include/h2o/http2_internal.h" />
+		<Unit filename="include/h2o/http2_scheduler.h" />
 		<Unit filename="include/h2o/linklist.h" />
+		<Unit filename="include/h2o/memcached.h" />
 		<Unit filename="include/h2o/memory.h" />
+		<Unit filename="include/h2o/mruby_.h" />
+		<Unit filename="include/h2o/multithread.h" />
 		<Unit filename="include/h2o/serverutil.h" />
 		<Unit filename="include/h2o/socket.h" />
 		<Unit filename="include/h2o/socket/evloop.h" />
 		<Unit filename="include/h2o/socket/uv-binding.h" />
 		<Unit filename="include/h2o/socketpool.h" />
 		<Unit filename="include/h2o/string_.h" />
+		<Unit filename="include/h2o/time_.h" />
 		<Unit filename="include/h2o/timeout.h" />
 		<Unit filename="include/h2o/token.h" />
+		<Unit filename="include/h2o/tunnel.h" />
+		<Unit filename="include/h2o/url.h" />
 		<Unit filename="include/h2o/version.h" />
 		<Unit filename="include/h2o/websocket.h" />
+		<Unit filename="lib/common/file.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/filecache.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/hostinfo.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/common/http1client.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/common/memcached.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/common/memory.c">
@@ -155,6 +200,7 @@
 		<Unit filename="lib/common/socket/evloop.c.h" />
 		<Unit filename="lib/common/socket/evloop/epoll.c.h" />
 		<Unit filename="lib/common/socket/evloop/kqueue.c.h" />
+		<Unit filename="lib/common/socket/evloop/poll.c.h" />
 		<Unit filename="lib/common/socket/evloop/select.c.h" />
 		<Unit filename="lib/common/socket/uv-binding.c.h" />
 		<Unit filename="lib/common/socketpool.c">
@@ -206,13 +252,25 @@
 		<Unit filename="lib/handler/configurator/access_log.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/configurator/errordoc.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/configurator/expires.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/configurator/fastcgi.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/configurator/file.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/configurator/gzip.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/configurator/headers.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/configurator/mruby.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/configurator/proxy.c">
@@ -224,16 +282,37 @@
 		<Unit filename="lib/handler/configurator/reproxy.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/errordoc.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/expires.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/fastcgi.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/file.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/file/_templates.c.h" />
+		<Unit filename="lib/handler/file/templates.c.h" />
+		<Unit filename="lib/handler/gzip.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/headers.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/mimemap.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/mimemap/defaults.c.h" />
+		<Unit filename="lib/handler/mruby.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/mruby/chunked.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/mruby/http_request.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/proxy.c">
@@ -248,6 +327,9 @@
 		<Unit filename="lib/http1.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/http2/casper.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/http2/connection.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -259,26 +341,22 @@
 		</Unit>
 		<Unit filename="lib/http2/hpack_huffman_table.h" />
 		<Unit filename="lib/http2/hpack_static_table.h" />
-		<Unit filename="lib/http2/internal.h" />
 		<Unit filename="lib/http2/scheduler.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/http2/stream.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/h2o_lua.c">
-			<Option compilerVar="CC" />
-			<Option compile="0" />
-			<Option link="0" />
-		</Unit>
-		<Unit filename="src/h2o_squilu.c">
-			<Option compilerVar="CC" />
-			<Option compile="0" />
-			<Option link="0" />
-		</Unit>
-		<Unit filename="src/sq_h2o.c">
+		<Unit filename="lib/tunnel.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="src/main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/ssl.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/standalone.h" />
 		<Extensions>
 			<code_completion />
 			<envvars />

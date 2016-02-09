@@ -43,7 +43,7 @@ static inline char *yoml__strdup(yaml_char_t *s)
 
 static inline yoml_t *yoml__new_node(const char *filename, yoml_type_t type, size_t sz, yaml_char_t *anchor, yaml_event_t *event)
 {
-    yoml_t *node = malloc(sz);
+    yoml_t *node = (yoml_t *)malloc(sz);
     node->filename = filename != NULL ? strdup(filename) : NULL;
     node->type = type;
     node->line = event->start_mark.line;
@@ -73,7 +73,7 @@ static inline yoml_t *yoml__parse_sequence(yaml_parser_t *parser, yaml_event_t *
                 break;
             }
         }
-        seq = realloc(seq, offsetof(yoml_t, data.sequence.elements) + sizeof(yoml_t *) * (seq->data.sequence.size + 1));
+        seq = (st_yoml_t*)realloc(seq, offsetof(yoml_t, data.sequence.elements) + sizeof(yoml_t *) * (seq->data.sequence.size + 1));
         seq->data.sequence.elements[seq->data.sequence.size++] = new_node;
     }
 
@@ -105,7 +105,7 @@ static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *e
             map = NULL;
             break;
         }
-        map = realloc(map, offsetof(yoml_t, data.mapping.elements) + sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
+        map = (st_yoml_t*)realloc(map, offsetof(yoml_t, data.mapping.elements) + sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
         map->data.mapping.elements[map->data.mapping.size].key = key;
         map->data.mapping.elements[map->data.mapping.size].value = value;
         ++map->data.mapping.size;

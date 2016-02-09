@@ -27,19 +27,20 @@
 static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expected, size_t expectedlen)
 {
     z_stream zs = {};
-    char decbuf[expectedlen + 1];
+    size_t decbuf_size = (expectedlen+1);
+    char decbuf[decbuf_size];
 
     zs.zalloc = gzip_encoder_alloc;
     zs.zfree = gzip_encoder_free;
-    zs.next_out = (void *)decbuf;
-    zs.avail_out = (unsigned)sizeof(decbuf);
+    zs.next_out = (Bytef *)decbuf;
+    zs.avail_out = (unsigned)decbuf_size;
 
     inflateInit2(&zs, WINDOW_BITS);
 
     int inflate_ret = -1;
     size_t i;
     for (i = 0; i != num_vecs; ++i) {
-        zs.next_in = (void *)vecs[i].base;
+        zs.next_in = (Bytef *)vecs[i].base;
         zs.avail_in = (unsigned)vecs[i].len;
         inflate_ret = inflate(&zs, Z_NO_FLUSH);
         if (zs.avail_out == 0) {
@@ -55,7 +56,7 @@ static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expecte
     ok(inflate_ret == Z_STREAM_END);
     inflateEnd(&zs);
 
-    ok(zs.avail_out == sizeof(decbuf) - expectedlen);
+    ok(zs.avail_out == decbuf_size - expectedlen);
     ok(memcmp(decbuf, expected, expectedlen) == 0);
 }
 
@@ -64,7 +65,7 @@ void test_gzip_simple(void)
     h2o_mem_pool_t pool;
     iovec_vector_t bufs = {};
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
     z_stream zs = {};
     zs.zalloc = gzip_encoder_alloc;
@@ -76,7 +77,7 @@ void test_gzip_simple(void)
 
     check_result(bufs.entries, bufindex + 1, H2O_STRLIT("hello world"));
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 }
 
 void test_gzip_multi(void)
@@ -101,7 +102,7 @@ void test_gzip_multi(void)
     h2o_mem_pool_t pool;
     iovec_vector_t bufs = {};
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
     z_stream zs = {};
     zs.zalloc = gzip_encoder_alloc;
@@ -119,7 +120,7 @@ void test_gzip_multi(void)
 
     check_result(bufs.entries, bufindex + 1, H2O_STRLIT(P1 P2 P3));
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 
 #undef P1
 #undef P2

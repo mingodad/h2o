@@ -27,8 +27,7 @@
 #include "h2o/configurator.h"
 #include "h2o/mruby_.h"
 
-struct mruby_configurator_t {
-    h2o_configurator_t super;
+struct mruby_configurator_t : h2o_configurator_t {
     h2o_mruby_config_vars_t *vars;
     h2o_mruby_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
@@ -47,19 +46,20 @@ static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
     return ok;
 }
 
-static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_mruby_handler(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct mruby_configurator_t *self = (void *)cmd->configurator;
+    mruby_configurator_t *self = (mruby_configurator_t *)cmd->configurator;
 
     /* set source */
-    self->vars->source = h2o_strdup(NULL, node->data.scalar, SIZE_MAX);
+    self->vars->source.strdup(NULL, node->data.scalar, SIZE_MAX);
     self->vars->path = node->filename;
     self->vars->lineno = (int)node->line;
 
     /* check if there is any error in source */
     char errbuf[1024];
     if (!compile_test(self->vars, errbuf)) {
-        h2o_configurator_errprintf(cmd, node, "ruby compile error:%s", errbuf);
+        cmd->errprintf(node, "ruby compile error:%s", errbuf);
         return -1;
     }
 
@@ -69,24 +69,27 @@ static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct mruby_configurator_t *self = (void *)cmd->configurator;
+    auto self = (mruby_configurator_t *)cmd->configurator;
     FILE *fp = NULL;
     h2o_iovec_t buf = {};
     int ret = -1;
 
     /* open and read file */
     if ((fp = fopen(node->data.scalar, "rt")) == NULL) {
-        h2o_configurator_errprintf(cmd, node, "failed to open file: %s:%s", node->data.scalar, strerror(errno));
+        cmd->errprintf(node, "failed to open file: %s:%s",
+                node->data.scalar, strerror(errno));
         goto Exit;
     }
     while (!feof(fp)) {
-        buf.base = h2o_mem_realloc(buf.base, buf.len + 65536);
+        buf.base = (char*)h2o_mem_realloc(buf.base, buf.len + 65536);
         buf.len += fread(buf.base, 1, 65536, fp);
         if (ferror(fp)) {
-            h2o_configurator_errprintf(cmd, node, "I/O error occurred while reading file:%s:%s", node->data.scalar,
-                                       strerror(errno));
+            cmd->errprintf(node,
+                    "I/O error occurred while reading file:%s:%s",
+                    node->data.scalar, strerror(errno));
             goto Exit;
         }
     }
@@ -100,7 +103,8 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_con
     /* check if there is any error in source */
     char errbuf[1024];
     if (!compile_test(self->vars, errbuf)) {
-        h2o_configurator_errprintf(cmd, node, "failed to compile file:%s:%s", node->data.scalar, errbuf);
+        cmd->errprintf(node, "failed to compile file:%s:%s",
+                node->data.scalar, errbuf);
         goto Exit;
     }
 
@@ -113,32 +117,35 @@ Exit:
     if (fp != NULL)
         fclose(fp);
     if (buf.base != NULL)
-        free(buf.base);
+        h2o_mem_free(buf.base);
     return ret;
 }
 
-static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_configurator_errprintf(cmd, node, "the command has been removed; see https://github.com/h2o/h2o/pull/467");
+    cmd->errprintf(node, "the command has been removed; see https://github.com/h2o/h2o/pull/467");
     return -1;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_enter(h2o_configurator_t *_self,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct mruby_configurator_t *self = (void *)_self;
+    auto self = (mruby_configurator_t *)_self;
 
     memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
     ++self->vars;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_exit(h2o_configurator_t *_self,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct mruby_configurator_t *self = (void *)_self;
+    auto self = (mruby_configurator_t *)_self;
 
     /* free if the to-be-exitted frame level contains a different source */
     if (self->vars[-1].source.base != self->vars[-1].source.base)
-        free(self->vars->source.base);
+        h2o_mem_free(self->vars->source.base);
 
     --self->vars;
     return 0;
@@ -146,18 +153,16 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
 {
-    struct mruby_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    auto c = conf->configurator_create<mruby_configurator_t>();
 
     c->vars = c->_vars_stack;
-    c->super.enter = on_config_enter;
-    c->super.exit = on_config_exit;
+    c->enter = on_config_enter;
+    c->exit = on_config_exit;
 
-    h2o_configurator_define_command(&c->super, "mruby.handler", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                                    H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_mruby_handler);
-    h2o_configurator_define_command(&c->super, "mruby.handler-file", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_mruby_handler_file);
-    h2o_configurator_define_command(&c->super, "mruby.handler_path", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_mruby_handler_path);
+    auto cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED);
+    c->define_command("mruby.handler_path", cf, on_config_mruby_handler_path);
+
+    cf = h2o_CONFIGURATOR_FLAG(cf | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR);
+    c->define_command("mruby.handler", cf, on_config_mruby_handler);
+    c->define_command("mruby.handler-file", cf, on_config_mruby_handler_file);
 }

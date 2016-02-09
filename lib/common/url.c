@@ -46,7 +46,7 @@ static h2o_iovec_t decode_urlencoded(h2o_mem_pool_t *pool, const char *s, size_t
     h2o_iovec_t ret;
     char *dst;
 
-    dst = ret.base = h2o_mem_alloc_pool(pool, len + 1);
+    dst = ret.base = pool->alloc_for<char>(len + 1);
 
     /* decode %xx */
     for (i = 0; i + 3 <= len;) {
@@ -73,9 +73,9 @@ static h2o_iovec_t rewrite_special_paths(h2o_mem_pool_t *pool, const char *src, 
     char *dst;
 
     if (src == src_end)
-        return h2o_iovec_init("/", 1);
+        return h2o_iovec_t::create("/", 1);
 
-    dst = ret.base = h2o_mem_alloc_pool(pool, len + 1);
+    dst = ret.base = pool->alloc_for<char>(len + 1);
 
     /* assertion hereafter: ret.base[0] is always '/' */
     *dst++ = '/';
@@ -118,7 +118,7 @@ static h2o_iovec_t rewrite_special_paths(h2o_mem_pool_t *pool, const char *src, 
 static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at)
 {
     { /* locate '?', and set len to the end of input path */
-        const char *q = memchr(path, '?', len);
+        auto q = (const char *)memchr(path, '?', len);
         if (q != NULL) {
             len = *query_at = q - path;
         } else {
@@ -174,7 +174,7 @@ Rewrite:
     return ret;
 RewriteError:
     fprintf(stderr, "failed to normalize path: `%.*s` => `%.*s`\n", (int)len, path, (int)ret.len, ret.base);
-    ret = h2o_iovec_init("/", 1);
+    ret = h2o_iovec_t::create("/", 1);
     return ret;
 }
 
@@ -194,7 +194,7 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
 {
     const char *token_start = s, *token_end, *end = s + len;
 
-    *port = 65535;
+    *port = H2O_PORT_NOT_SET;
 
     if (token_start == end)
         return NULL;
@@ -202,14 +202,14 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
     if (*token_start == '[') {
         /* is IPv6 address */
         ++token_start;
-        if ((token_end = memchr(token_start, ']', end - token_start)) == NULL)
+        if ((token_end = (const char *)memchr(token_start, ']', end - token_start)) == NULL)
             return NULL;
-        *host = h2o_iovec_init(token_start, token_end - token_start);
+        host->init(token_start, token_end - token_start);
         token_start = token_end + 1;
     } else {
         for (token_end = token_start; !(token_end == end || *token_end == '/' || *token_end == ':'); ++token_end)
             ;
-        *host = h2o_iovec_init(token_start, token_end - token_start);
+        host->init(token_start, token_end - token_start);
         token_start = token_end;
     }
 
@@ -221,9 +221,9 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
     if (token_start != end && *token_start == ':') {
         size_t p;
         ++token_start;
-        if ((token_end = memchr(token_start, '/', end - token_start)) == NULL)
+        if ((token_end = (const char *)memchr(token_start, '/', end - token_start)) == NULL)
             token_end = end;
-        if ((p = h2o_strtosize(token_start, token_end - token_start)) >= 65535)
+        if ((p = h2o_strtosize(token_start, token_end - token_start)) >= H2O_PORT_NOT_SET)
             return NULL;
         *port = (uint16_t)p;
         token_start = token_end;
@@ -237,18 +237,18 @@ static int parse_authority_and_path(const char *src, const char *url_end, h2o_ur
     const char *p = h2o_url_parse_hostport(src, url_end - src, &parsed->host, &parsed->_port);
     if (p == NULL)
         return -1;
-    parsed->authority = h2o_iovec_init(src, p - src);
+    parsed->authority.init(src, p - src);
     if (p == url_end) {
-        parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
+        parsed->path.init(H2O_STRLIT("/"));
     } else {
         if (*p != '/')
             return -1;
-        parsed->path = h2o_iovec_init(p, url_end - p);
+        parsed->path.init(p, url_end - p);
     }
     return 0;
 }
 
-int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
+int h2o_url_t::parse(const char *url, size_t url_len)
 {
     const char *url_end, *p;
 
@@ -257,7 +257,7 @@ int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
     url_end = url + url_len;
 
     /* check and skip scheme */
-    if ((p = parse_scheme(url, url_end, &parsed->scheme)) == NULL)
+    if ((p = parse_scheme(url, url_end, &this->scheme)) == NULL)
         return -1;
 
     /* skip "//" */
@@ -265,10 +265,10 @@ int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
         return -1;
     p += 2;
 
-    return parse_authority_and_path(p, url_end, parsed);
+    return parse_authority_and_path(p, url_end, this);
 }
 
-int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
+int h2o_url_t::parse_relative(const char *url, size_t url_len)
 {
     const char *url_end, *p;
 
@@ -277,25 +277,25 @@ int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
     url_end = url + url_len;
 
     /* obtain scheme and port number */
-    if ((p = parse_scheme(url, url_end, &parsed->scheme)) == NULL) {
-        parsed->scheme = NULL;
+    if ((p = parse_scheme(url, url_end, &this->scheme)) == NULL) {
+        this->scheme = NULL;
         p = url;
     }
 
     /* handle "//" */
     if (url_end - p >= 2 && p[0] == '/' && p[1] == '/')
-        return parse_authority_and_path(p + 2, url_end, parsed);
+        return parse_authority_and_path(p + 2, url_end, this);
 
     /* reset authority, host, port, and set path */
-    parsed->authority = (h2o_iovec_t){};
-    parsed->host = (h2o_iovec_t){};
-    parsed->_port = 65535;
-    parsed->path = h2o_iovec_init(p, url_end - p);
+    this->authority = {};
+    this->host = {};
+    this->_port = H2O_PORT_NOT_SET;
+    this->path.init(p, url_end - p);
 
     return 0;
 }
 
-h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative, h2o_url_t *dest)
+h2o_iovec_t h2o_url_t::resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative)
 {
     h2o_iovec_t base_path, relative_path, ret;
 
@@ -306,25 +306,25 @@ h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h
         /* build URL using base copied to dest */
         static const h2o_url_t fake_relative = {};
         relative = &fake_relative;
-        *dest = *base;
+        *this = *base;
         goto Build;
     }
 
     /* scheme */
-    dest->scheme = relative->scheme != NULL ? relative->scheme : base->scheme;
+    this->scheme = relative->scheme != NULL ? relative->scheme : base->scheme;
 
     /* authority (and host:port) */
     if (relative->authority.base != NULL) {
         assert(relative->host.base != NULL);
-        dest->authority = relative->authority;
-        dest->host = relative->host;
-        dest->_port = relative->_port;
+        this->authority = relative->authority;
+        this->host = relative->host;
+        this->_port = relative->_port;
     } else {
         assert(relative->host.base == NULL);
-        assert(relative->_port == 65535);
-        dest->authority = base->authority;
-        dest->host = base->host;
-        dest->_port = base->_port;
+        assert(relative->_port == H2O_PORT_NOT_SET);
+        this->authority = base->authority;
+        this->host = base->host;
+        this->_port = base->_port;
     }
 
     /* path */
@@ -334,19 +334,19 @@ h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h
         h2o_url_resolve_path(&base_path, &relative_path);
     } else {
         assert(relative->path.len == 0);
-        relative_path = (h2o_iovec_t){};
+        relative_path = {};
     }
 
 Build:
     /* build the output */
-    ret = h2o_concat(pool, dest->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), dest->authority, base_path, relative_path);
+    h2o_concat(ret, pool, this->scheme->name, h2o_iovec_t::create(H2O_STRLIT("://")), this->authority, base_path, relative_path);
     /* adjust dest */
-    dest->authority.base = ret.base + dest->scheme->name.len + 3;
-    dest->host.base = dest->authority.base;
-    if (dest->authority.len != 0 && dest->authority.base[0] == '[')
-        ++dest->host.base;
-    dest->path.base = dest->authority.base + dest->authority.len;
-    dest->path.len = ret.base + ret.len - dest->path.base;
+    this->authority.base = ret.base + this->scheme->name.len + 3;
+    this->host.base = this->authority.base;
+    if (this->authority.len != 0 && this->authority.base[0] == '[')
+        ++this->host.base;
+    this->path.base = this->authority.base + this->authority.len;
+    this->path.len = ret.base + ret.len - this->path.base;
 
     return ret;
 }
@@ -386,16 +386,16 @@ void h2o_url_resolve_path(h2o_iovec_t *base, h2o_iovec_t *relative)
     }
 
     base->len = base_path_len;
-    *relative = h2o_iovec_init(relative->base + rel_path_offset, relative->len - rel_path_offset);
+    relative->init(relative->base + rel_path_offset, relative->len - rel_path_offset);
 }
 
-void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src)
+void h2o_url_t::copy(h2o_mem_pool_t *pool, const h2o_url_t *src)
 {
-    dest->scheme = src->scheme;
-    dest->authority = h2o_strdup(pool, src->authority.base, src->authority.len);
-    dest->host = h2o_strdup(pool, src->host.base, src->host.len);
-    dest->path = h2o_strdup(pool, src->path.base, src->path.len);
-    dest->_port = src->_port;
+    this->scheme = src->scheme;
+    this->authority.strdup(pool, src->authority);
+    this->host.strdup(pool, src->host);
+    this->path.strdup(pool, src->path);
+    this->_port = src->_port;
 }
 
 const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
@@ -408,7 +408,7 @@ const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
     if (host.len - sizeof(PREFIX) - 1 >= sizeof(sa->sun_path))
         return "unix-domain socket path is too long";
 
-    memset(sa, 0, sizeof(*sa));
+    h2o_clearmem(sa);
     sa->sun_family = AF_UNIX;
     memcpy(sa->sun_path, host.base + sizeof(PREFIX) - 1, host.len - (sizeof(PREFIX) - 1));
     return NULL;

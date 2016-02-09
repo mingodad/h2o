@@ -25,20 +25,19 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-struct expires_configurator_t {
-    h2o_configurator_t super;
+struct expires_configurator_t : h2o_configurator_t {
     h2o_expires_args_t **args;
     h2o_expires_args_t *_args_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct expires_configurator_t *self = (void *)cmd->configurator;
+    auto self = (expires_configurator_t *)cmd->configurator;
     uint64_t value;
     char unit[32];
 
-    if (strcasecmp(node->data.scalar, "OFF") == 0) {
-        free(*self->args);
+    if (isScalar(node, "OFF")) {
+        h2o_mem_free(*self->args);
         *self->args = NULL;
     } else if (sscanf(node->data.scalar, "%" PRIu64 " %31s", &value, unit) == 2) {
         /* convert value to seconds depending on the unit */
@@ -56,16 +55,16 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
             value *= 365 * 30 * 60 * 60;
         } else {
             /* TODO add support for H2O_EXPIRES_MODE_MAX_ABSOLUTE that sets the Expires header? */
-            h2o_configurator_errprintf(cmd, node, "unknown unit:`%s` (see --help)", unit);
+            cmd->errprintf(node, "unknown unit:`%s` (see --help)", unit);
             return -1;
         }
         /* save the value */
         if (*self->args == NULL)
-            *self->args = h2o_mem_alloc(sizeof(**self->args));
+            *self->args = h2o_mem_alloc_for<h2o_expires_args_t>();
         (*self->args)->mode = H2O_EXPIRES_MODE_MAX_AGE;
         (*self->args)->data.max_age = value;
     } else {
-        h2o_configurator_errprintf(cmd, node,
+        cmd->errprintf(node,
                                    "failed to parse the value, should be in form of: `<number> <unit>` or `OFF` (see --help)");
         return -1;
     }
@@ -75,12 +74,12 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct expires_configurator_t *self = (void *)_self;
+    auto self = (expires_configurator_t *)_self;
 
     if (self->args[0] != NULL) {
         /* duplicate */
         assert(self->args[0]->mode == H2O_EXPIRES_MODE_MAX_AGE);
-        self->args[1] = h2o_mem_alloc(sizeof(**self->args));
+        self->args[1] = h2o_mem_alloc_for<h2o_expires_args_t>();
         *self->args[1] = *self->args[0];
     } else {
         self->args[1] = NULL;
@@ -91,7 +90,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct expires_configurator_t *self = (void *)_self;
+    auto self = (expires_configurator_t *)_self;
 
     if (*self->args != NULL) {
         /* setup */
@@ -100,7 +99,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         }
         /* destruct */
         assert((*self->args)->mode == H2O_EXPIRES_MODE_MAX_AGE);
-        free(*self->args);
+        h2o_mem_free(*self->args);
         *self->args = NULL;
     }
 
@@ -110,14 +109,15 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_expires_register_configurator(h2o_globalconf_t *conf)
 {
-    struct expires_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    auto c = conf->configurator_create<expires_configurator_t>();
 
     /* set default vars */
     c->args = c->_args_stack;
 
     /* setup handlers */
-    c->super.enter = on_config_enter;
-    c->super.exit = on_config_exit;
-    h2o_configurator_define_command(&c->super, "expires", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_expires);
+    c->enter = on_config_enter;
+    c->exit = on_config_exit;
+    c->define_command("expires",
+            H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            on_config_expires);
 }

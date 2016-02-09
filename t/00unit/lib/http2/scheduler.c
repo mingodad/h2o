@@ -67,7 +67,7 @@ static size_t max_cnt;
 
 static int iterate_cb(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *_unused)
 {
-    node_t *node = (void *)ref;
+    auto node = (node_t *)ref;
 
     if (output[0] != '\0')
         strcat(output, ",");
@@ -383,12 +383,12 @@ static void test_firefox(void)
 static void dump_tree(h2o_http2_scheduler_node_t *node)
 {
     if (node->_parent != NULL) {
-        node_t *n = (void *)node;
+        auto n = (node_t *)node;
         strcat(output, n->name);
         sprintf(output + strlen(output), "%u", (unsigned)h2o_http2_scheduler_get_weight(&n->ref));
     }
 
-    if (!h2o_linklist_is_empty(&node->_all_refs)) {
+    if (!node->_all_refs.is_empty()) {
         unsigned weight;
         int found_any = 0;
         for (weight = 256; weight >= 1; --weight) {

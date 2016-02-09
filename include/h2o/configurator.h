@@ -24,7 +24,7 @@
 
 #include "yoml.h"
 
-enum {
+enum h2o_CONFIGURATOR_FLAG {
     H2O_CONFIGURATOR_FLAG_GLOBAL = 0x1,
     H2O_CONFIGURATOR_FLAG_HOST = 0x2,
     H2O_CONFIGURATOR_FLAG_PATH = 0x4,
@@ -40,21 +40,21 @@ enum {
 
 #define H2O_CONFIGURATOR_NUM_LEVELS 4
 
-typedef struct st_h2o_configurator_context_t {
+struct h2o_configurator_context_t {
     h2o_globalconf_t *globalconf;
     h2o_hostconf_t *hostconf;
     h2o_pathconf_t *pathconf;
     h2o_mimemap_t **mimemap;
     int dry_run;
-    struct st_h2o_configurator_context_t *parent;
-} h2o_configurator_context_t;
+    h2o_configurator_context_t *parent;
+};
 
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
 typedef int (*h2o_configurator_enter_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node);
 typedef int (*h2o_configurator_exit_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node);
 typedef int (*h2o_configurator_command_cb)(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
 
-struct st_h2o_configurator_command_t {
+struct h2o_configurator_command_t {
     /**
      * configurator to which the command belongs
      */
@@ -71,12 +71,34 @@ struct st_h2o_configurator_command_t {
      * mandatory callback called to handle the command
      */
     h2o_configurator_command_cb cb;
+
+    /**
+     * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error
+     * upon failure
+     * @param configurator configurator
+     * @param node configuration value
+     * @param candidates a comma-separated list of strings (should not contain whitespaces)
+     * @return index of the matched string within the given list, or -1 if none of them matched
+     */
+    ssize_t get_one_of(yoml_t *node, const char *candidates);
+    /**
+     * emits configuration error
+     */
+    void errprintf(yoml_t *node, const char *reason, ...) __attribute__((format(printf, 3, 4)));
+    /**
+     * interprets the configuration value using sscanf, or prints an error upon failure
+     * @param configurator configurator
+     * @param node configuration value
+     * @param fmt scanf-style format string
+     * @return 0 if successful, -1 if not
+     */
+    int scanf(yoml_t *node, const char *fmt, ...) __attribute__((format(scanf, 3, 4)));
 };
 
 /**
  * basic structure of a configurator (handles a configuration command)
  */
-struct st_h2o_configurator_t {
+struct h2o_configurator_t {
     h2o_linklist_t _link;
     /**
      * optional callback called when the global config is being disposed
@@ -93,27 +115,18 @@ struct st_h2o_configurator_t {
     /**
      * list of commands
      */
-    H2O_VECTOR(h2o_configurator_command_t) commands;
+    H2O_VECTOR<h2o_configurator_command_t> commands;
+    /**
+     *
+     */
+    void define_command(const char *name, int flags, h2o_configurator_command_cb cb);
 };
 
-/**
- * registers a configurator
- */
-h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz);
-/**
- *
- */
-void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb);
-/**
- * returns a configurator of given command name
- * @return configurator for given name or NULL if not found
- */
-h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf, const char *name);
-/**
- * applies the configuration to the context
- * @return 0 if successful, -1 if not
- */
-int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run);
+inline bool isScalar(yoml_t *node, const char *value)
+{
+    return node->type == YOML_TYPE_SCALAR && strcasecmp(node->data.scalar, value) == 0;
+}
+
 /**
  *
  */
@@ -121,32 +134,11 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
 /**
  * emits configuration error
  */
-void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...)
-    __attribute__((format(printf, 3, 4)));
-/**
- * interprets the configuration value using sscanf, or prints an error upon failure
- * @param configurator configurator
- * @param node configuration value
- * @param fmt scanf-style format string
- * @return 0 if successful, -1 if not
- */
-int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...)
-    __attribute__((format(scanf, 3, 4)));
-/**
- * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error
- * upon failure
- * @param configurator configurator
- * @param node configuration value
- * @param candidates a comma-separated list of strings (should not contain whitespaces)
- * @return index of the matched string within the given list, or -1 if none of them matched
- */
-ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *node, const char *candidates);
+void h2o_configurator_errprintf(yoml_t *node, const char *reason, ...)
+    __attribute__((format(printf, 2, 3)));
 /**
  * returns the absolute paths of supplementary commands
  */
 char *h2o_configurator_get_cmd_path(const char *cmd);
-
-void h2o_configurator__init_core(h2o_globalconf_t *conf);
-void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf);
 
 #endif

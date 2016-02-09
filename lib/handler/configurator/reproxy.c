@@ -27,35 +27,34 @@ struct config_t {
     int enabled;
 };
 
-struct reproxy_configurator_t {
-    h2o_configurator_t super;
+struct reproxy_configurator_t : h2o_configurator_t {
     struct config_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int on_config_reproxy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_reproxy(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct reproxy_configurator_t *self = (void *)cmd->configurator;
-
-    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    ssize_t ret = cmd->get_one_of(node, "OFF,ON");
     if (ret == -1)
         return -1;
-    self->vars->enabled = (int)ret;
-
+    ((reproxy_configurator_t *)cmd->configurator)->vars->enabled = (int)ret;
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_enter(h2o_configurator_t *_self,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct reproxy_configurator_t *self = (void *)_self;
+    reproxy_configurator_t *self = (reproxy_configurator_t *)_self;
 
     self->vars[1] = self->vars[0];
     ++self->vars;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_exit(h2o_configurator_t *_self,
+        h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct reproxy_configurator_t *self = (void *)_self;
+    reproxy_configurator_t *self = (reproxy_configurator_t *)_self;
 
     if (ctx->pathconf != NULL && self->vars->enabled != 0)
         h2o_reproxy_register(ctx->pathconf);
@@ -66,16 +65,17 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_reproxy_register_configurator(h2o_globalconf_t *conf)
 {
-    struct reproxy_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    auto c = conf->configurator_create<reproxy_configurator_t>();
 
     /* set default vars */
     c->vars = c->_vars_stack;
 
     /* setup handlers */
-    c->super.enter = on_config_enter;
-    c->super.exit = on_config_exit;
+    c->enter = on_config_enter;
+    c->exit = on_config_exit;
 
     /* reproxy: ON | OFF */
-    h2o_configurator_define_command(&c->super, "reproxy", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    c->define_command("reproxy",
+        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_reproxy);
 }

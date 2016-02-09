@@ -124,7 +124,7 @@ append_stat(yrmcds_cnt_statistics* s,
         size_t new_capacity = s->capacity * 2;
         if( new_capacity < INITIAL_STATS_CAPACITY )
             new_capacity = INITIAL_STATS_CAPACITY;
-        yrmcds_cnt_stat* new_records =
+        yrmcds_cnt_stat* new_records = (yrmcds_cnt_stat*)
             realloc(s->records, sizeof(yrmcds_cnt_stat) * new_capacity);
         if( new_records == NULL )
             return YRMCDS_OUT_OF_MEMORY;

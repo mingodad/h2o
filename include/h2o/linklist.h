@@ -22,7 +22,7 @@
 #ifndef h2o__linklist_h
 #define h2o__linklist_h
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 extern "C" {
 #endif
 
@@ -35,84 +35,70 @@ extern "C" {
  * Nodes should be zero-filled upon initialization.
  * Heads should be initialized by calling h2o_linklist_init_anchor.
  */
-typedef struct st_h2o_linklist_t {
-    struct st_h2o_linklist_t *next;
-    struct st_h2o_linklist_t *prev;
-} h2o_linklist_t;
+struct h2o_linklist_t {
+    h2o_linklist_t *next;
+    h2o_linklist_t *prev;
 
-/**
- * initializes the anchor (i.e. head) of a linked list
- */
-static void h2o_linklist_init_anchor(h2o_linklist_t *anchor);
-/**
- * tests if the list is empty
- */
-static int h2o_linklist_is_empty(h2o_linklist_t *anchor);
-/**
- * tests if the node is linked to a list
- */
-static int h2o_linklist_is_linked(h2o_linklist_t *node);
-/**
- * inserts a node to the linked list
- * @param pos insert position; the node will be inserted before pos
- * @param node the node to be inserted
- */
-static void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node);
-/**
- * inserts all the elements of list before pos (list becomes empty)
- */
-static void h2o_linklist_insert_list(h2o_linklist_t *pos, h2o_linklist_t *list);
-/**
- * unlinks a node from the linked list
- */
-static void h2o_linklist_unlink(h2o_linklist_t *node);
+    /**
+     * initializes the anchor (i.e. head) of a linked list
+     */
+    void init_anchor()
+    {
+        next = prev = this;
+    }
+    /**
+     * tests if the list is empty
+     */
+    int is_empty()
+    {
+        return next == this;
+    }
+    /**
+     * tests if the node is linked to a list
+     */
+    int is_linked()
+    {
+        return next != NULL;
+    }
+    /**
+     * unlinks a node from the linked list
+     */
+    void unlink()
+    {
+        next->prev = prev;
+        prev->next = next;
+        next = prev = NULL;
+    }
+    /**
+     * inserts a node to the linked list
+     * @param pos insert position; the node will be inserted before pos
+     * @param node the node to be inserted
+     */
+    void insert(h2o_linklist_t *node)
+    {
+        assert(!node->is_linked());
 
-/* inline defs */
+        node->prev = prev;
+        node->next = this;
+        node->prev->next = node;
+        node->next->prev = node;
+    }
+    /**
+     * inserts all the elements of list before pos (list becomes empty)
+     */
+    void insert_list(h2o_linklist_t *list)
+    {
+        if (list->is_empty())
+            return;
+        list->next->prev = prev;
+        list->prev->next = this;
+        prev->next = list->next;
+        prev = list->prev;
+        list->init_anchor();
+    }
+};
 
-inline void h2o_linklist_init_anchor(h2o_linklist_t *anchor)
-{
-    anchor->next = anchor->prev = anchor;
-}
-
-inline int h2o_linklist_is_linked(h2o_linklist_t *node)
-{
-    return node->next != NULL;
-}
-
-inline int h2o_linklist_is_empty(h2o_linklist_t *anchor)
-{
-    return anchor->next == anchor;
-}
-
-inline void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node)
-{
-    assert(!h2o_linklist_is_linked(node));
-
-    node->prev = pos->prev;
-    node->next = pos;
-    node->prev->next = node;
-    node->next->prev = node;
-}
-
-inline void h2o_linklist_insert_list(h2o_linklist_t *pos, h2o_linklist_t *list)
-{
-    if (h2o_linklist_is_empty(list))
-        return;
-    list->next->prev = pos->prev;
-    list->prev->next = pos;
-    pos->prev->next = list->next;
-    pos->prev = list->prev;
-    h2o_linklist_init_anchor(list);
-}
-
-inline void h2o_linklist_unlink(h2o_linklist_t *node)
-{
-    node->next->prev = node->prev;
-    node->prev->next = node->next;
-    node->next = node->prev = NULL;
-}
-
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 }
 #endif
 

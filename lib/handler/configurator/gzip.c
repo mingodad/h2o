@@ -26,23 +26,22 @@ struct gzip_config_vars_t {
     int on;
 };
 
-struct gzip_configurator_t {
-    h2o_configurator_t super;
+struct gzip_configurator_t : h2o_configurator_t {
     struct gzip_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
-};
+} ;
 
 static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct gzip_configurator_t *self = (void *)cmd->configurator;
+    auto self = (gzip_configurator_t *)cmd->configurator;
 
-    if ((self->vars->on = (int)h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+    if ((self->vars->on = (int)cmd->get_one_of(node, "OFF,ON")) == -1)
         return -1;
     return 0;
 }
 
 static int on_config_enter(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct gzip_configurator_t *self = (void *)configurator;
+    auto self = (gzip_configurator_t *)configurator;
 
     ++self->vars;
     self->vars[0] = self->vars[-1];
@@ -51,7 +50,7 @@ static int on_config_enter(h2o_configurator_t *configurator, h2o_configurator_co
 
 static int on_config_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct gzip_configurator_t *self = (void *)configurator;
+    auto self = (gzip_configurator_t *)configurator;
 
     if (ctx->pathconf != NULL && self->vars->on)
         h2o_gzip_register(ctx->pathconf);
@@ -62,11 +61,11 @@ static int on_config_exit(h2o_configurator_t *configurator, h2o_configurator_con
 
 void h2o_gzip_register_configurator(h2o_globalconf_t *conf)
 {
-    struct gzip_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    auto c = conf->configurator_create<gzip_configurator_t>();
 
-    c->super.enter = on_config_enter;
-    c->super.exit = on_config_exit;
-    h2o_configurator_define_command(&c->super, "gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    c->enter = on_config_enter;
+    c->exit = on_config_exit;
+    c->define_command("gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_gzip);
     c->vars = c->_vars_stack;
 }

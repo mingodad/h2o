@@ -22,7 +22,7 @@
 #ifndef h2o__websocket_h
 #define h2o__websocket_h
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 extern "C" {
 #endif
 
@@ -51,7 +51,7 @@ h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_req_t *req, const char *clien
 void h2o_websocket_close(h2o_websocket_conn_t *conn);
 void h2o_websocket_proceed(h2o_websocket_conn_t *conn);
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 }
 #endif
 

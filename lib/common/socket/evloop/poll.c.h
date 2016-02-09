@@ -28,38 +28,38 @@
 #define DEBUG_LOG(...)
 #endif
 
-struct st_h2o_evloop_poll_t {
+struct h2o_evloop_poll_t {
     h2o_evloop_t super;
-    H2O_VECTOR(struct st_h2o_evloop_socket_t *) socks;
+    H2O_VECTOR<h2o_evloop_socket_t *> socks;
 };
 
-static void update_socks(struct st_h2o_evloop_poll_t *loop)
+static void update_socks(h2o_evloop_poll_t *loop)
 {
     /* update loop->socks */
     while (loop->super._statechanged.head != NULL) {
         /* detach the top */
-        struct st_h2o_evloop_socket_t *sock = loop->super._statechanged.head;
+        h2o_evloop_socket_t *sock = loop->super._statechanged.head;
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
             assert(sock->fd == -1);
-            free(sock);
+            h2o_mem_free(sock);
         } else {
             assert(sock->fd < loop->socks.size);
-            if (loop->socks.entries[sock->fd] == NULL) {
-                loop->socks.entries[sock->fd] = sock;
+            if (loop->socks[sock->fd] == NULL) {
+                loop->socks[sock->fd] = sock;
             } else {
-                assert(loop->socks.entries[sock->fd] == sock);
+                assert(loop->socks[sock->fd] == sock);
             }
-            if (h2o_socket_is_reading(&sock->super)) {
+            if (sock->super.is_reading()) {
                 DEBUG_LOG("setting READ for fd: %d\n", sock->fd);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             } else {
                 DEBUG_LOG("clearing READ for fd: %d\n", sock->fd);
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             }
-            if (h2o_socket_is_writing(&sock->super) &&
+            if (sock->super.is_writing() &&
                 (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
                 DEBUG_LOG("setting WRITE for fd: %d\n", sock->fd);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
@@ -74,22 +74,21 @@ static void update_socks(struct st_h2o_evloop_poll_t *loop)
 
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)_loop;
-    H2O_VECTOR(struct pollfd) pollfds = {};
-    int fd, ret;
+    auto loop = (h2o_evloop_poll_t *)_loop;
+    H2O_VECTOR<struct pollfd> pollfds;
+    int fd, ret = 0;
 
     /* update status */
     update_socks(loop);
 
     /* build list of fds to be polled */
     for (fd = 0; fd != loop->socks.size; ++fd) {
-        struct st_h2o_evloop_socket_t *sock = loop->socks.entries[fd];
+        h2o_evloop_socket_t *sock = loop->socks[fd];
         if (sock == NULL)
             continue;
         assert(fd == sock->fd);
         if ((sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) != 0) {
-            h2o_vector_reserve(NULL, (void *)&pollfds, sizeof(pollfds.entries[0]), pollfds.size + 1);
-            struct pollfd *slot = pollfds.entries + pollfds.size++;
+            auto slot = pollfds.append_new(NULL);
             slot->fd = fd;
             slot->events = 0;
             slot->revents = 0;
@@ -104,29 +103,30 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     ret = poll(pollfds.entries, (nfds_t)pollfds.size, get_max_wait(&loop->super));
     update_now(&loop->super);
     if (ret == -1)
-        return -1;
+        goto CleanPollFds;
     DEBUG_LOG("poll returned: %d\n", ret);
 
     /* update readable flags, perform writes */
     if (ret > 0) {
+        ret = 0;
         size_t i;
         for (i = 0; i != pollfds.size; ++i) {
             /* set read_ready flag before calling the write cb, since app. code invoked by the latter may close the socket, clearing
              * the former flag */
-            if ((pollfds.entries[i].revents & POLLIN) != 0) {
-                struct st_h2o_evloop_socket_t *sock = loop->socks.entries[pollfds.entries[i].fd];
+            if ((pollfds[i].revents & POLLIN) != 0) {
+                h2o_evloop_socket_t *sock = loop->socks[pollfds[i].fd];
                 assert(sock != NULL);
-                assert(sock->fd == pollfds.entries[i].fd);
+                assert(sock->fd == pollfds[i].fd);
                 if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
                     link_to_pending(sock);
                     DEBUG_LOG("added fd %d as read_ready\n", sock->fd);
                 }
             }
-            if ((pollfds.entries[i].revents & POLLOUT) != 0) {
-                struct st_h2o_evloop_socket_t *sock = loop->socks.entries[pollfds.entries[i].fd];
+            if ((pollfds[i].revents & POLLOUT) != 0) {
+                h2o_evloop_socket_t *sock = loop->socks[pollfds[i].fd];
                 assert(sock != NULL);
-                assert(sock->fd == pollfds.entries[i].fd);
+                assert(sock->fd == pollfds[i].fd);
                 if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                     DEBUG_LOG("handling pending writes on fd %d\n", fd);
                     write_pending(sock);
@@ -134,41 +134,42 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
             }
         }
     }
-
-    return 0;
+CleanPollFds:
+    pollfds.clear_free();
+    return ret;
 }
 
-static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
+static void evloop_do_on_socket_create(h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)sock->loop;
+    auto loop = (h2o_evloop_poll_t *)sock->loop;
 
     if (sock->fd >= loop->socks.size) {
-        h2o_vector_reserve(NULL, (void *)&loop->socks, sizeof(loop->socks.entries[0]), sock->fd + 1);
+        loop->socks.reserve(NULL, sock->fd + 1);
         memset(loop->socks.entries + loop->socks.size, 0, (sock->fd + 1 - loop->socks.size) * sizeof(loop->socks.entries[0]));
         loop->socks.size = sock->fd + 1;
     }
 
-    if (loop->socks.entries[sock->fd] != NULL)
-        assert(loop->socks.entries[sock->fd]->_flags == H2O_SOCKET_FLAG_IS_DISPOSED);
+    if (loop->socks[sock->fd] != NULL)
+        assert(loop->socks[sock->fd]->_flags == H2O_SOCKET_FLAG_IS_DISPOSED);
 }
 
-static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
+static void evloop_do_on_socket_close(h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)sock->loop;
+    auto loop = (h2o_evloop_poll_t *)sock->loop;
 
     if (sock->fd != -1)
-        loop->socks.entries[sock->fd] = NULL;
+        loop->socks[sock->fd] = NULL;
 }
 
-static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
+static void evloop_do_on_socket_export(h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)sock->loop;
+    auto loop = (h2o_evloop_poll_t *)sock->loop;
     evloop_do_on_socket_close(sock);
-    loop->socks.entries[sock->fd] = NULL;
+    loop->socks[sock->fd] = NULL;
 }
 
 h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)create_evloop(sizeof(*loop));
+    h2o_evloop_poll_t *loop = (h2o_evloop_poll_t *)create_evloop(sizeof(*loop));
     return &loop->super;
 }

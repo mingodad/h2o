@@ -32,7 +32,7 @@ static void test_aton(void)
     ok(ntohl(addr.s_addr) == 0x7f000001);
 
     memset(&addr, 0x55, sizeof(addr));
-    ok(h2o_hostinfo_aton((h2o_iovec_t){"127.0.0.12", sizeof("127.0.0.1") - 1}, &addr) == 0);
+    ok(h2o_hostinfo_aton((h2o_iovec_t){(char*)"127.0.0.12", sizeof("127.0.0.1") - 1}, &addr) == 0);
     ok(ntohl(addr.s_addr) == 0x7f000001);
 
     memset(&addr, 0x55, sizeof(addr));

@@ -106,7 +106,7 @@ static char *dirname(const char *path)
         errno = 0;
         dief("dirname: no slash in given path:%s", path);
     }
-    if ((ret = malloc(last_slash + 1 - path)) == NULL)
+    if ((ret = (char *)malloc(last_slash + 1 - path)) == NULL)
         dief("no memory");
     memcpy(ret, path, last_slash - path);
     ret[last_slash - path] = '\0';
@@ -161,7 +161,7 @@ static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
         buf->capacity = 4096;
     while (buf->buf + buf->capacity - buf->end < extra)
         buf->capacity *= 2;
-    if ((n = realloc(buf->buf, buf->capacity)) == NULL)
+    if ((n = (char *)realloc(buf->buf, buf->capacity)) == NULL)
         dief("realloc failed");
     buf->start += n - buf->buf;
     buf->end += n - buf->buf;
@@ -202,7 +202,7 @@ static int expbuf_shift_num(struct expbuf_t *buf, size_t *v)
 
 static char *expbuf_shift_str(struct expbuf_t *buf)
 {
-    char *nul = memchr(buf->start, '\0', expbuf_size(buf)), *ret;
+    char *nul = (char *)memchr(buf->start, '\0', expbuf_size(buf)), *ret;
     if (nul == NULL)
         return NULL;
     ret = buf->start;
@@ -245,7 +245,7 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
             ++vecindex;
         }
         if (r != 0) {
-            vecs[vecindex].iov_base += r;
+            vecs[vecindex].iov_base = ((char*)vecs[vecindex].iov_base) + r;
             vecs[vecindex].iov_len -= r;
         }
     }
@@ -287,7 +287,7 @@ static void unlink_dir(const char *path)
 
 void dispose_thread_data(void *_thdata)
 {
-    struct st_neverbleed_thread_data_t *thdata = _thdata;
+    auto thdata = (struct st_neverbleed_thread_data_t *)_thdata;
     assert(thdata->fd >= 0);
     close(thdata->fd);
     thdata->fd = -1;
@@ -299,13 +299,13 @@ struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
     pid_t self_pid = getpid();
     ssize_t r;
 
-    if ((thdata = pthread_getspecific(nb->thread_key)) != NULL) {
+    if ((thdata = (st_neverbleed_thread_data_t *)pthread_getspecific(nb->thread_key)) != NULL) {
         if (thdata->self_pid == self_pid)
             return thdata;
         /* we have been forked! */
         close(thdata->fd);
     } else {
-        if ((thdata = malloc(sizeof(*thdata))) == NULL)
+        if ((thdata = (st_neverbleed_thread_data_t *)malloc(sizeof(*thdata))) == NULL)
             dief("malloc failed");
     }
 
@@ -318,7 +318,7 @@ struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
         dief("socket(2) failed");
     set_cloexec(thdata->fd);
 #endif
-    while (connect(thdata->fd, (void *)&nb->sun_, sizeof(nb->sun_)) != 0)
+    while (connect(thdata->fd, (sockaddr *)&nb->sun_, sizeof(nb->sun_)) != 0)
         if (errno != EINTR)
             dief("failed to connect to privsep daemon");
     while ((r = write(thdata->fd, nb->auth_token, sizeof(nb->auth_token))) == -1 && errno == EINTR)
@@ -333,7 +333,7 @@ struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
 static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t **exdata,
                              struct st_neverbleed_thread_data_t **thdata)
 {
-    *exdata = RSA_get_ex_data(rsa, 0);
+    *exdata = (struct st_neverbleed_rsa_exdata_t *)RSA_get_ex_data(rsa, 0);
     if (*exdata == NULL) {
         errno = 0;
         dief("invalid internal ref");
@@ -366,7 +366,7 @@ static size_t daemon_set_rsa(RSA *rsa)
     size_t index;
 
     pthread_mutex_lock(&daemon_vars.keys.lock);
-    if ((daemon_vars.keys.keys = realloc(daemon_vars.keys.keys, sizeof(*daemon_vars.keys.keys) * (daemon_vars.keys.size + 1))) ==
+    if ((daemon_vars.keys.keys = (RSA **)realloc(daemon_vars.keys.keys, sizeof(*daemon_vars.keys.keys) * (daemon_vars.keys.size + 1))) ==
         NULL)
         dief("no memory");
     index = daemon_vars.keys.size++;
@@ -398,7 +398,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
 
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
-    if (expbuf_shift_num(&buf, &ret) != 0 || (to = expbuf_shift_bytes(&buf, &tolen)) == NULL) {
+    if (expbuf_shift_num(&buf, &ret) != 0 || (to = (unsigned char*)expbuf_shift_bytes(&buf, &tolen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
     }
@@ -418,7 +418,7 @@ static int priv_encdec_stub(const char *name,
     RSA *rsa;
     int ret;
 
-    if ((from = expbuf_shift_bytes(buf, &flen)) == NULL || expbuf_shift_num(buf, &key_index) != 0 ||
+    if ((from = (unsigned char*)expbuf_shift_bytes(buf, &flen)) == NULL || expbuf_shift_num(buf, &key_index) != 0 ||
         expbuf_shift_num(buf, &padding) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", name);
@@ -479,7 +479,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
 
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
-    if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
+    if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = (unsigned char*)expbuf_shift_bytes(&buf, &siglen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
     }
@@ -498,7 +498,7 @@ static int sign_stub(struct expbuf_t *buf)
     unsigned siglen = 0;
     int ret;
 
-    if (expbuf_shift_num(buf, &type) != 0 || (m = expbuf_shift_bytes(buf, &m_len)) == NULL ||
+    if (expbuf_shift_num(buf, &type) != 0 || (m = (unsigned char*)expbuf_shift_bytes(buf, &m_len)) == NULL ||
         expbuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
@@ -524,7 +524,7 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
     RSA *rsa;
     EVP_PKEY *pkey;
 
-    if ((exdata = malloc(sizeof(*exdata))) == NULL) {
+    if ((exdata = (st_neverbleed_rsa_exdata_t *)malloc(sizeof(*exdata))) == NULL) {
         fprintf(stderr, "no memory\n");
         abort();
     }
@@ -869,7 +869,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "socket(2) failed:%s", strerror(errno));
         goto Fail;
     }
-    if (bind(listen_fd, (void *)&nb->sun_, sizeof(nb->sun_)) != 0) {
+    if (bind(listen_fd, (sockaddr *)&nb->sun_, sizeof(nb->sun_)) != 0) {
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to bind to %s:%s", nb->sun_.sun_path, strerror(errno));
         goto Fail;
     }

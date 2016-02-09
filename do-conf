@@ -1,0 +1,6 @@
+cmake \
+    -DWITH_BUNDLED_SSL=ON \
+    -DCMAKE_C_FLAGS="-march=native -O2" \
+    -DWITH_MRUBY=ON
+#    -DCMAKE_C_FLAGS="-march=native -O2 -DH2O_USE_POLL=1" \
+

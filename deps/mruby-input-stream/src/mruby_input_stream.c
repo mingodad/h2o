@@ -5,6 +5,8 @@
 #include "mruby/string.h"
 #include "mruby_input_stream.h"
 
+#define IS_DATA_PTR(self) ((mrb_input_stream_t *)DATA_PTR(self))
+
 typedef struct mrb_input_stream_t {
   const char *base;
   mrb_int len;
@@ -125,7 +127,7 @@ mrb_input_stream_value(mrb_state *mrb, const char *base, mrb_int len)
 void
 mrb_input_stream_get_data(mrb_state *mrb, mrb_value self, const char **base, mrb_int *len, mrb_int *pos, mrb_input_stream_free_callback *free_cb, void **free_cb_data)
 {
-  mrb_input_stream_t *stream = DATA_PTR(self);
+  mrb_input_stream_t *stream = IS_DATA_PTR(self);
 
   if (base != NULL)
     *base = stream->base;
@@ -142,7 +144,7 @@ mrb_input_stream_get_data(mrb_state *mrb, mrb_value self, const char **base, mrb
 void
 mrb_input_stream_set_data(mrb_state *mrb, mrb_value self, const char *base, mrb_int len, mrb_int pos, mrb_input_stream_free_callback free_cb, void *free_cb_data)
 {
-  mrb_input_stream_t *stream = DATA_PTR(self);
+  mrb_input_stream_t *stream = IS_DATA_PTR(self);
 
   if (stream->free_cb != NULL)
     stream->free_cb(mrb, stream->base, stream->len, stream->free_cb_data);
@@ -152,7 +154,7 @@ mrb_input_stream_set_data(mrb_state *mrb, mrb_value self, const char *base, mrb_
 static mrb_value
 mrb_input_stream_gets(mrb_state *mrb, mrb_value self)
 {
-  mrb_input_stream_t *stream = DATA_PTR(self);
+  mrb_input_stream_t *stream = IS_DATA_PTR(self);
   mrb_int pos, len;
 
   assert_is_open(mrb, stream);
@@ -197,7 +199,7 @@ mrb_input_stream_read(mrb_state *mrb, mrb_value self)
   mrb_int len;
   mrb_value buf;
   mrb_int n = mrb_get_args(mrb, "|iS", &len, &buf), pos;
-  mrb_input_stream_t *stream = DATA_PTR(self);
+  mrb_input_stream_t *stream = IS_DATA_PTR(self);
   const char *start;
 
   assert_is_open(mrb, stream);
@@ -228,7 +230,7 @@ mrb_input_stream_read(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_input_stream_rewind(mrb_state *mrb, mrb_value self)
 {
-  mrb_input_stream_t *stream = DATA_PTR(self);
+  mrb_input_stream_t *stream = IS_DATA_PTR(self);
   assert_is_open(mrb, stream);
   stream->pos = 0;
   return self;
@@ -238,7 +240,7 @@ mrb_input_stream_rewind(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_input_stream_byteindex(mrb_state *mrb, mrb_value self)
 {
-  mrb_input_stream_t *stream = DATA_PTR(self);
+  mrb_input_stream_t *stream = IS_DATA_PTR(self);
   mrb_int chr, n, len;
 
   assert_is_open(mrb, stream);

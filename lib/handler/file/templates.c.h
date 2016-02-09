@@ -33,7 +33,7 @@ static int cmpstrptr(const void *_x, const void *_y)
 
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR *dp)
 {
-    H2O_VECTOR(char *)files = {};
+    H2O_VECTOR<char *>files;
 
     { /* build list of files */
         struct dirent dent, *dentp;
@@ -41,10 +41,9 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL) {
             if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
                 continue;
-            h2o_vector_reserve(pool, (void *)&files, sizeof(files.entries[0]), files.size + 1);
-            files.entries[files.size++] = h2o_strdup(pool, dent.d_name, SIZE_MAX).base;
+            files.push_back(pool, h2o_strdup(pool, dent.d_name, SIZE_MAX).base);
         }
-        qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);
+        qsort(files.entries, files.size, sizeof(files[0]), cmpstrptr);
     }
 
     h2o_buffer_t *_;
@@ -53,7 +52,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
     h2o_buffer_init(&_, &h2o_socket_buffer_prototype);
 
     {
-        h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("<!DOCTYPE html>\n<TITLE>Index of ")));
+        h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("<!DOCTYPE html>\n<TITLE>Index of "));
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
         h2o_buffer_reserve(&_, _s.len);
@@ -69,7 +68,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         _->size += _s.len;
     }
     {
-        h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("</TITLE>\n<H2>Index of ")));
+        h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("</TITLE>\n<H2>Index of "));
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
         h2o_buffer_reserve(&_, _s.len);
@@ -85,7 +84,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         _->size += _s.len;
     }
     {
-        h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("</H2>\n<UL>\n<LI><A HREF=\"..\">Parent Directory</A>\n")));
+        h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("</H2>\n<UL>\n<LI><A HREF=\"..\">Parent Directory</A>\n"));
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
         h2o_buffer_reserve(&_, _s.len);
@@ -95,11 +94,11 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
 
     size_t i;
     for (i = 0; i != files.size; ++i) {
-        h2o_iovec_t link_escaped = h2o_uri_escape(pool, files.entries[i], strlen(files.entries[i]), NULL);
+        h2o_iovec_t link_escaped = h2o_uri_escape(pool, files[i], strlen(files[i]), NULL);
         link_escaped = h2o_htmlescape(pool, link_escaped.base, link_escaped.len);
-        h2o_iovec_t label_escaped = h2o_htmlescape(pool, files.entries[i], strlen(files.entries[i]));
+        h2o_iovec_t label_escaped = h2o_htmlescape(pool, files[i], strlen(files[i]));
         {
-            h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("<LI><A HREF=\"")));
+            h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("<LI><A HREF=\""));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
             h2o_buffer_reserve(&_, _s.len);
@@ -115,7 +114,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             _->size += _s.len;
         }
         {
-            h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("\">")));
+            h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("\">"));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
             h2o_buffer_reserve(&_, _s.len);
@@ -131,7 +130,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             _->size += _s.len;
         }
         {
-            h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("</A>\n")));
+            h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("</A>\n"));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
             h2o_buffer_reserve(&_, _s.len);

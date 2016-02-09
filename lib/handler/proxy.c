@@ -32,22 +32,22 @@ struct rp_handler_t {
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    struct rp_handler_t *self = (void *)_self;
-    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
+    auto self = (rp_handler_t *)_self;
+    auto overrides = req->pool.alloc_for<h2o_req_overrides_t>();
     const h2o_url_scheme_t *scheme;
     h2o_iovec_t *authority;
 
     /* setup overrides */
-    *overrides = (h2o_req_overrides_t){};
+    *overrides = {};
     if (self->sockpool != NULL) {
         overrides->socketpool = self->sockpool;
     } else if (self->config.preserve_host) {
         overrides->hostport.host = self->upstream.host;
-        overrides->hostport.port = h2o_url_get_port(&self->upstream);
+        overrides->hostport.port = self->upstream.get_port();
     }
     overrides->location_rewrite.match = &self->upstream;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
-    overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+    overrides->client_ctx = (h2o_http1client_ctx_t*)req->conn->ctx->get_handler_context(&self->super);
 
     /* determine the scheme and authority */
     if (self->config.preserve_host) {
@@ -59,17 +59,17 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     /* request reprocess */
-    h2o_reprocess_request(req, req->method, scheme, *authority,
-                          h2o_concat(&req->pool, self->upstream.path, h2o_iovec_init(req->path.base + req->pathconf->path.len,
-                                                                                     req->path.len - req->pathconf->path.len)),
-                          overrides, 0);
+    h2o_iovec_t req_cat;
+    h2o_concat(req_cat, &req->pool, self->upstream.path, h2o_iovec_t::create(req->path.base + req->pathconf->path.len,
+                                                                req->path.len - req->pathconf->path.len));
+    req->reprocess_request(req->method, scheme, *authority, req_cat, overrides, 0);
 
     return 0;
 }
 
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
-    struct rp_handler_t *self = (void *)_self;
+    auto self = (rp_handler_t *)_self;
 
     /* use the loop of first context for handling socketpool timeouts */
     if (self->sockpool != NULL && self->sockpool->timeout == UINT64_MAX)
@@ -79,78 +79,82 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout && !self->config.websocket.enabled)
         return;
 
-    h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
+    auto client_ctx = h2o_mem_alloc_for<h2o_http1client_ctx_t>();
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout) {
         client_ctx->io_timeout = &ctx->proxy.io_timeout;
     } else {
-        client_ctx->io_timeout = h2o_mem_alloc(sizeof(*client_ctx->io_timeout));
-        h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, self->config.io_timeout);
+        client_ctx->io_timeout = h2o_mem_alloc_for<h2o_timeout_t>();
+        client_ctx->io_timeout->init(client_ctx->loop, self->config.io_timeout);
     }
     if (self->config.websocket.enabled) {
         /* FIXME avoid creating h2o_timeout_t for every path-level context in case the timeout values are the same */
-        client_ctx->websocket_timeout = h2o_mem_alloc(sizeof(*client_ctx->websocket_timeout));
-        h2o_timeout_init(client_ctx->loop, client_ctx->websocket_timeout, self->config.websocket.timeout);
+        client_ctx->websocket_timeout = h2o_mem_alloc_for<h2o_timeout_t>();
+        client_ctx->websocket_timeout->init(client_ctx->loop, self->config.websocket.timeout);
     } else {
         client_ctx->websocket_timeout = NULL;
     }
 
-    h2o_context_set_handler_context(ctx, &self->super, client_ctx);
+    ctx->set_handler_context(&self->super, client_ctx);
 }
 
 static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 {
-    struct rp_handler_t *self = (void *)_self;
-    h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
+    auto self = (rp_handler_t *)_self;
+    auto client_ctx = (h2o_http1client_ctx_t*)ctx->get_handler_context(&self->super);
 
     if (client_ctx == NULL)
         return;
 
     if (client_ctx->io_timeout != &ctx->proxy.io_timeout) {
-        h2o_timeout_dispose(client_ctx->loop, client_ctx->io_timeout);
-        free(client_ctx->io_timeout);
+        h2o_timeout_t::dispose(client_ctx->loop, client_ctx->io_timeout);
+        h2o_mem_free(client_ctx->io_timeout);
     }
     if (client_ctx->websocket_timeout != NULL) {
-        h2o_timeout_dispose(client_ctx->loop, client_ctx->websocket_timeout);
-        free(client_ctx->websocket_timeout);
+        h2o_timeout_t::dispose(client_ctx->loop, client_ctx->websocket_timeout);
+        h2o_mem_free(client_ctx->websocket_timeout);
     }
-    free(client_ctx);
+    h2o_mem_free(client_ctx);
 }
 
 static void on_handler_dispose(h2o_handler_t *_self)
 {
-    struct rp_handler_t *self = (void *)_self;
+    auto self = (rp_handler_t *)_self;
 
-    free(self->upstream.host.base);
-    free(self->upstream.path.base);
+    h2o_mem_free(self->upstream.host.base);
+    h2o_mem_free(self->upstream.path.base);
     if (self->sockpool != NULL) {
         h2o_socketpool_dispose(self->sockpool);
-        free(self->sockpool);
+        h2o_mem_free(self->sockpool);
     }
 
-    free(self);
+    h2o_mem_free(self);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_proxy_config_vars_t *config)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf,
+        h2o_url_t *upstream, h2o_proxy_config_vars_t *config)
 {
-    struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
+    h2o_create_new_handler_for(self, pathconf, struct rp_handler_t);
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
     if (config->keepalive_timeout != 0) {
-        self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
+        self->sockpool = h2o_mem_alloc_for<h2o_socketpool_t>();
         struct sockaddr_un sa;
         const char *to_sa_err;
-        if ((to_sa_err = h2o_url_host_to_sun(upstream->host, &sa)) == h2o_url_host_to_sun_err_is_not_unix_socket) {
-            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host, h2o_url_get_port(upstream), SIZE_MAX /* FIXME */);
+        if ((to_sa_err = h2o_url_host_to_sun(upstream->host, &sa))
+                == h2o_url_host_to_sun_err_is_not_unix_socket) {
+            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host,
+                    upstream->get_port(), SIZE_MAX /* FIXME */);
         } else {
             assert(to_sa_err == NULL);
-            h2o_socketpool_init_by_address(self->sockpool, (void *)&sa, sizeof(sa), SIZE_MAX /* FIXME */);
+            h2o_socketpool_init_by_address(self->sockpool, (sockaddr *)&sa,
+                    sizeof(sa), SIZE_MAX /* FIXME */);
         }
     }
-    h2o_url_copy(NULL, &self->upstream, upstream);
-    h2o_strtolower(self->upstream.host.base, self->upstream.host.len);
+    self->upstream.copy(NULL, upstream);
+    h2o_strtolower(self->upstream.host);
     self->config = *config;
 }

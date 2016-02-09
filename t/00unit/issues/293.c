@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include "../test.h"
 
-static h2o_context_t ctx;
+static h2o_context_t *ctx;
 
 static void register_authority(h2o_globalconf_t *globalconf, h2o_iovec_t host, uint16_t port)
 {
@@ -33,9 +33,9 @@ static void register_authority(h2o_globalconf_t *globalconf, h2o_iovec_t host, u
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, "/");
     h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
 
-    char *authority = h2o_mem_alloc(host.len + sizeof(":65535"));
+    auto authority = h2o_mem_alloc_for<char>(host.len + sizeof(":65535"));
     sprintf(authority, "%.*s:%" PRIu16, (int)host.len, host.base, port);
-    h2o_headers_command_t *cmds = h2o_mem_alloc(sizeof(*cmds) * 2);
+    auto cmds = h2o_mem_alloc_for<h2o_headers_command_t>(2);
     cmds[0] = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, &x_authority, {authority, strlen(authority)}};
     cmds[1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
     h2o_headers_register(pathconf, cmds);
@@ -43,20 +43,20 @@ static void register_authority(h2o_globalconf_t *globalconf, h2o_iovec_t host, u
 
 static void check(const h2o_url_scheme_t *scheme, const char *host, const char *expected)
 {
-    h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+    h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
 
-    conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+    conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
     conn->req.input.scheme = scheme;
-    conn->req.input.authority = h2o_iovec_init(host, strlen(host));
-    conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+    conn->req.input.authority = h2o_iovec_t::create(host, strlen(host));
+    conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
     h2o_loopback_run_loop(conn);
     ok(conn->req.res.status == 200);
 
-    size_t index = h2o_find_header_by_str(&conn->req.res.headers, H2O_STRLIT("x-authority"), SIZE_MAX);
+    size_t index = conn->req.res.headers.find(H2O_STRLIT("x-authority"), SIZE_MAX);
     ok(index != SIZE_MAX);
 
     if (index != SIZE_MAX) {
-        ok(h2o_memis(conn->req.res.headers.entries[index].value.base, conn->req.res.headers.entries[index].value.len, expected,
+        ok(h2o_memis(conn->req.res.headers[index].value.base, conn->req.res.headers[index].value.len, expected,
                      strlen(expected)));
     }
 
@@ -65,19 +65,19 @@ static void check(const h2o_url_scheme_t *scheme, const char *host, const char *
 
 void test_issues293()
 {
-    h2o_globalconf_t globalconf;
-
-    h2o_config_init(&globalconf);
+    h2o_globalconf_t globalconf; //should be declared before h2o_context_t
+    h2o_context_t test_ctx;
 
     /* register two hosts, using 80 and 443 */
-    register_authority(&globalconf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
-    register_authority(&globalconf, h2o_iovec_init(H2O_STRLIT("host1")), 80);
-    register_authority(&globalconf, h2o_iovec_init(H2O_STRLIT("host1")), 443);
-    register_authority(&globalconf, h2o_iovec_init(H2O_STRLIT("host2")), 80);
-    register_authority(&globalconf, h2o_iovec_init(H2O_STRLIT("host2")), 443);
-    register_authority(&globalconf, h2o_iovec_init(H2O_STRLIT("host3")), 65535);
+    register_authority(&globalconf, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
+    register_authority(&globalconf, h2o_iovec_t::create(H2O_STRLIT("host1")), 80);
+    register_authority(&globalconf, h2o_iovec_t::create(H2O_STRLIT("host1")), 443);
+    register_authority(&globalconf, h2o_iovec_t::create(H2O_STRLIT("host2")), 80);
+    register_authority(&globalconf, h2o_iovec_t::create(H2O_STRLIT("host2")), 443);
+    register_authority(&globalconf, h2o_iovec_t::create(H2O_STRLIT("host3")), 65535);
 
-    h2o_context_init(&ctx, test_loop, &globalconf);
+    test_ctx.init(test_loop, &globalconf);
+    ctx = &test_ctx;
 
     /* run the tests */
     check(&H2O_URL_SCHEME_HTTP, "host1", "host1:80");
@@ -110,7 +110,4 @@ void test_issues293()
     check(&H2O_URL_SCHEME_HTTP, "HoST1:80", "host1:80");
     check(&H2O_URL_SCHEME_HTTPS, "HoST1", "host1:443");
     check(&H2O_URL_SCHEME_HTTPS, "HoST1:443", "host1:443");
-
-    h2o_context_dispose(&ctx);
-    h2o_config_dispose(&globalconf);
 }

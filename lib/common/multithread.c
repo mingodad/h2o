@@ -25,7 +25,7 @@
 #include "cloexec.h"
 #include "h2o/multithread.h"
 
-struct st_h2o_multithread_queue_t {
+struct h2o_multithread_queue_t {
 #if H2O_USE_LIBUV
     uv_async_t async;
 #else
@@ -45,21 +45,21 @@ static void queue_cb(h2o_multithread_queue_t *queue)
 {
     pthread_mutex_lock(&queue->mutex);
 
-    while (!h2o_linklist_is_empty(&queue->receivers.active)) {
-        h2o_multithread_receiver_t *receiver =
+    while (!queue->receivers.active.is_empty()) {
+        auto receiver =
             H2O_STRUCT_FROM_MEMBER(h2o_multithread_receiver_t, _link, queue->receivers.active.next);
         /* detach all the messages from the receiver */
         h2o_linklist_t messages;
-        h2o_linklist_init_anchor(&messages);
-        h2o_linklist_insert_list(&messages, &receiver->_messages);
+        messages.init_anchor();
+        messages.insert_list(&receiver->_messages);
         /* relink the receiver to the inactive list */
-        h2o_linklist_unlink(&receiver->_link);
-        h2o_linklist_insert(&queue->receivers.inactive, &receiver->_link);
+        receiver->_link.unlink();
+        queue->receivers.inactive.insert(&receiver->_link);
 
         /* dispatch the messages */
         pthread_mutex_unlock(&queue->mutex);
         receiver->cb(receiver, &messages);
-        assert(h2o_linklist_is_empty(&messages));
+        assert(messages.is_empty());
         pthread_mutex_lock(&queue->mutex);
     }
 
@@ -81,7 +81,7 @@ static void on_read(h2o_socket_t *sock, int status)
     }
 
     h2o_buffer_consume(&sock->input, sock->input->size);
-    queue_cb(sock->data);
+    queue_cb((h2o_multithread_queue_t*)sock->data);
 }
 
 static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
@@ -96,15 +96,15 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
     queue->async.write = fds[1];
     queue->async.read = h2o_evloop_socket_create(loop, fds[0], 0);
     queue->async.read->data = queue;
-    h2o_socket_read_start(queue->async.read, on_read);
+    queue->async.read->read_start(on_read);
 }
 
 #endif
 
 h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
 {
-    h2o_multithread_queue_t *queue = h2o_mem_alloc(sizeof(*queue));
-    *queue = (h2o_multithread_queue_t){};
+    auto queue = h2o_mem_alloc_for<h2o_multithread_queue_t>();
+    *queue = {};
 
 #if H2O_USE_LIBUV
     uv_async_init(loop, &queue->async, (void *)queue_cb);
@@ -112,21 +112,21 @@ h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
     init_async(queue, loop);
 #endif
     pthread_mutex_init(&queue->mutex, NULL);
-    h2o_linklist_init_anchor(&queue->receivers.active);
-    h2o_linklist_init_anchor(&queue->receivers.inactive);
+    queue->receivers.active.init_anchor();
+    queue->receivers.inactive.init_anchor();
 
     return queue;
 }
 
 void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 {
-    assert(h2o_linklist_is_empty(&queue->receivers.active));
-    assert(h2o_linklist_is_empty(&queue->receivers.inactive));
+    assert(queue->receivers.active.is_empty());
+    assert(queue->receivers.inactive.is_empty());
 #if H2O_USE_LIBUV
     uv_close((uv_handle_t *)&queue->async, (void *)free);
 #else
-    h2o_socket_read_stop(queue->async.read);
-    h2o_socket_close(queue->async.read);
+    queue->async.read->read_stop();
+    h2o_socket_t::close(queue->async.read);
     close(queue->async.write);
 #endif
     pthread_mutex_destroy(&queue->mutex);
@@ -136,44 +136,44 @@ void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multi
                                        h2o_multithread_receiver_cb cb)
 {
     receiver->queue = queue;
-    receiver->_link = (h2o_linklist_t){};
-    h2o_linklist_init_anchor(&receiver->_messages);
+    receiver->_link = {};
+    receiver->_messages.init_anchor();
     receiver->cb = cb;
 
     pthread_mutex_lock(&queue->mutex);
-    h2o_linklist_insert(&queue->receivers.inactive, &receiver->_link);
+    queue->receivers.inactive.insert(&receiver->_link);
     pthread_mutex_unlock(&queue->mutex);
 }
 
 void h2o_multithread_unregister_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver)
 {
     assert(queue == receiver->queue);
-    assert(h2o_linklist_is_empty(&receiver->_messages));
+    assert(receiver->_messages.is_empty());
     pthread_mutex_lock(&queue->mutex);
-    h2o_linklist_unlink(&receiver->_link);
+    receiver->_link.unlink();
     pthread_mutex_unlock(&queue->mutex);
 }
 
-void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_multithread_message_t *message)
+void h2o_multithread_receiver_t::send_message(h2o_multithread_message_t *message)
 {
     int do_send = 0;
 
-    assert(!h2o_linklist_is_linked(&message->link));
+    assert(!message->link.is_linked());
 
-    pthread_mutex_lock(&receiver->queue->mutex);
-    if (h2o_linklist_is_empty(&receiver->_messages)) {
-        h2o_linklist_unlink(&receiver->_link);
-        h2o_linklist_insert(&receiver->queue->receivers.active, &receiver->_link);
+    pthread_mutex_lock(&this->queue->mutex);
+    if (this->_messages.is_empty()) {
+        this->_link.unlink();
+        this->queue->receivers.active.insert(&this->_link);
         do_send = 1;
     }
-    h2o_linklist_insert(&receiver->_messages, &message->link);
-    pthread_mutex_unlock(&receiver->queue->mutex);
+    this->_messages.insert(&message->link);
+    pthread_mutex_unlock(&this->queue->mutex);
 
     if (do_send) {
 #if H2O_USE_LIBUV
-        uv_async_send(&receiver->queue->async);
+        uv_async_send(&this->queue->async);
 #else
-        while (write(receiver->queue->async.write, "", 1) == -1 && errno == EINTR)
+        while (write(this->queue->async.write, "", 1) == -1 && errno == EINTR)
             ;
 #endif
     }

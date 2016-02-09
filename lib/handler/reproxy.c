@@ -21,7 +21,8 @@
  */
 #include "h2o.h"
 
-static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs,
+        size_t inbufcnt, int is_final)
 {
     /* nothing to do */
 }
@@ -32,12 +33,12 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     ssize_t xru_index;
 
     /* obtain x-reproxy-url header, or skip to next ostream */
-    if ((xru_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_REPROXY_URL, -1)) == -1) {
-        h2o_setup_next_ostream(req, slot);
+    if ((xru_index = req->res.headers.find(H2O_TOKEN_X_REPROXY_URL, -1)) == -1) {
+        req->setup_next_ostream(slot);
         return;
     }
-    dest = req->res.headers.entries[xru_index].value;
-    h2o_delete_header(&req->res.headers, xru_index);
+    dest = req->res.headers[xru_index].value;
+    req->res.headers.remove(xru_index);
 
     /* setup params */
     switch (req->res.status) {
@@ -46,21 +47,21 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         method = req->method;
         break;
     default:
-        method = h2o_iovec_init(H2O_STRLIT("GET"));
-        req->entity = (h2o_iovec_t){};
+        method.init(H2O_STRLIT("GET"));
+        req->entity = {};
         break;
     }
 
     /* request internal redirect (is deferred) */
-    h2o_send_redirect_internal(req, method, dest.base, dest.len, 0);
+    req->send_redirect_internal(method, dest, 0);
 
     /* setup filter (that swallows the response until the timeout gets fired) */
-    h2o_ostream_t *ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
+    h2o_ostream_t *ostream = req->add_ostream(sizeof(*ostream), slot);
     ostream->do_send = on_send;
 }
 
 void h2o_reproxy_register(h2o_pathconf_t *pathconf)
 {
-    h2o_filter_t *self = h2o_create_filter(pathconf, sizeof(*self));
+    h2o_create_new_filter_for(self, pathconf, h2o_filter_t);
     self->on_setup_ostream = on_setup_ostream;
 }

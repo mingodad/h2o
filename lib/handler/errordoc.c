@@ -22,8 +22,7 @@
 #include "h2o.h"
 
 /* used to rewrite status code to the original code */
-struct st_errordoc_prefilter_t {
-    h2o_req_prefilter_t super;
+struct errordoc_prefilter_t : h2o_req_prefilter_t {
     h2o_headers_t req_headers;
     int status;
     const char *reason;
@@ -31,20 +30,20 @@ struct st_errordoc_prefilter_t {
 };
 
 /* used to capture an error response */
-struct st_errordoc_filter_t {
-    h2o_filter_t super;
-    H2O_VECTOR(h2o_errordoc_t) errordocs;
+struct errordoc_filter_t : h2o_filter_t {
+    H2O_VECTOR<h2o_errordoc_t> errordocs;
 };
 
-static void add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_header_t *header)
+static void add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers,
+        const h2o_header_t *header)
 {
-    h2o_vector_reserve(pool, (void *)headers, sizeof(headers->entries[0]), headers->size + 1);
-    headers->entries[headers->size++] = *header;
+    headers->push_back(pool, *header);
 }
 
-static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
+static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self,
+        h2o_req_t *req, h2o_ostream_t **slot)
 {
-    struct st_errordoc_prefilter_t *self = (void *)_self;
+    auto self = (errordoc_prefilter_t *)_self;
     h2o_headers_t headers_merged = {};
     size_t i;
 
@@ -55,19 +54,21 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
 
     /* generate response headers (by merging the preserved and given) */
     for (i = 0; i != self->res_headers.size; ++i)
-        add_header(&req->pool, &headers_merged, self->res_headers.entries + i);
+        add_header(&req->pool, &headers_merged, &self->res_headers[i]);
     for (i = 0; i != req->res.headers.size; ++i) {
-        const h2o_header_t *header = req->res.headers.entries + i;
-        if (header->name == &H2O_TOKEN_CONTENT_TYPE->buf || header->name == &H2O_TOKEN_CONTENT_LANGUAGE->buf ||
-            header->name == &H2O_TOKEN_SET_COOKIE->buf)
-            add_header(&req->pool, &headers_merged, header);
+        const auto header = req->res.headers[i];
+        if (header.name == &H2O_TOKEN_CONTENT_TYPE->buf ||
+            header.name == &H2O_TOKEN_CONTENT_LANGUAGE->buf ||
+            header.name == &H2O_TOKEN_SET_COOKIE->buf)
+            add_header(&req->pool, &headers_merged, &header);
     }
     req->res.headers = headers_merged;
 
-    h2o_setup_next_prefilter(&self->super, req, slot);
+    h2o_setup_next_prefilter(self, req, slot);
 }
 
-static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req,
+        h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
     /* nothing to do */
 }
@@ -81,11 +82,12 @@ static int prefilter_is_registered(h2o_req_t *req)
     return 0;
 }
 
-static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
+static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req,
+        h2o_ostream_t **slot)
 {
-    struct st_errordoc_filter_t *self = (void *)_self;
+    auto self = (errordoc_filter_t *)_self;
     h2o_errordoc_t *errordoc;
-    struct st_errordoc_prefilter_t *prefilter;
+    errordoc_prefilter_t *prefilter;
     h2o_iovec_t method;
     h2o_ostream_t *ostream;
     size_t i;
@@ -100,46 +102,47 @@ static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ost
     }
 
     /* bypass to the next filter */
-    h2o_setup_next_ostream(req, slot);
+    req->setup_next_ostream(slot);
     return;
 
 Found:
     /* register prefilter that rewrites the status code after the internal redirect is processed */
-    prefilter = (void *)h2o_add_prefilter(req, sizeof(*prefilter));
-    prefilter->super.on_setup_ostream = on_prefilter_setup_stream;
+    prefilter = (errordoc_prefilter_t*)req->add_prefilter(sizeof(errordoc_prefilter_t));
+    prefilter->on_setup_ostream = on_prefilter_setup_stream;
     prefilter->req_headers = req->headers;
     prefilter->status = req->res.status;
     prefilter->reason = req->res.reason;
-    prefilter->res_headers = (h2o_headers_t){};
+    prefilter->res_headers = {};
     for (i = 0; i != req->res.headers.size; ++i) {
         const h2o_header_t *header = req->res.headers.entries + i;
-        if (!(header->name == &H2O_TOKEN_CONTENT_TYPE->buf || header->name == &H2O_TOKEN_CONTENT_LANGUAGE->buf))
+        if (!(header->name == &H2O_TOKEN_CONTENT_TYPE->buf ||
+                header->name == &H2O_TOKEN_CONTENT_LANGUAGE->buf))
             add_header(&req->pool, &prefilter->res_headers, header);
     }
     /* redirect internally to the error document */
     method = req->method;
-    if (h2o_memis(method.base, method.len, H2O_STRLIT("POST")))
-        method = h2o_iovec_init(H2O_STRLIT("GET"));
-    req->headers = (h2o_headers_t){};
-    req->res.headers = (h2o_headers_t){};
-    h2o_send_redirect_internal(req, method, errordoc->url.base, errordoc->url.len, 0);
+    if (method.isEq("POST"))
+        method.init(H2O_STRLIT("GET"));
+    req->headers = {};
+    req->res.headers = {};
+    req->send_redirect_internal(method, errordoc->url, 0);
     /* create fake ostream that swallows the contents emitted by the generator */
-    ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
+    ostream = req->add_ostream(sizeof(*ostream), slot);
     ostream->do_send = on_ostream_send;
 }
 
 void h2o_errordoc_register(h2o_pathconf_t *pathconf, h2o_errordoc_t *errdocs, size_t cnt)
 {
-    struct st_errordoc_filter_t *self = (void *)h2o_create_filter(pathconf, sizeof(*self));
+    h2o_create_new_filter_for(self, pathconf, struct errordoc_filter_t);
     size_t i;
 
-    self->super.on_setup_ostream = on_filter_setup_ostream;
-    h2o_vector_reserve(NULL, (void *)&self->errordocs, sizeof(self->errordocs.entries[0]), cnt);
+    self->on_setup_ostream = on_filter_setup_ostream;
+    self->errordocs.reserve(NULL, cnt);
     self->errordocs.size = cnt;
     for (i = 0; i != cnt; ++i) {
         const h2o_errordoc_t *src = errdocs + i;
         h2o_errordoc_t *dst = self->errordocs.entries + i;
         dst->status = src->status;
-        dst->url = h2o_strdup(NULL, src->url.base, src->url.len);
+        dst->url.strdup(src->url);
     }
 }

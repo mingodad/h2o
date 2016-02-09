@@ -67,7 +67,7 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.google.com/"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
     h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
 
     return 0;
@@ -94,7 +94,7 @@ static h2o_context_t ctx;
 static h2o_multithread_receiver_t libmemcached_receiver;
 static h2o_accept_ctx_t accept_ctx;
 
-#if H2O_USE_LIBUV2
+#if H2O_USE_LIBUV
 
 static void on_accept(uv_stream_t *listener, int status)
 {
@@ -171,8 +171,7 @@ static int create_listener(void)
         return -1;
     }
 
-    //sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-    sock = h2o_evloop_socket_create(ctx.loop, fd, &addr, sizeof(addr), H2O_SOCKET_FLAG_IS_ACCEPT);
+    sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
     h2o_socket_read_start(sock, on_accept);
 
     return 0;
@@ -229,7 +228,7 @@ int main(int argc, char **argv)
     h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
     h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, NULL, 0);
 
-#if H2O_USE_LIBUV2
+#if H2O_USE_LIBUV
     uv_loop_t loop;
     uv_loop_init(&loop);
     h2o_context_init(&ctx, &loop, &config);
@@ -253,7 +252,7 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-#if H2O_USE_LIBUV2
+#if H2O_USE_LIBUV
     uv_run(ctx.loop, UV_RUN_DEFAULT);
 #else
     while (h2o_evloop_run(ctx.loop) == 0)

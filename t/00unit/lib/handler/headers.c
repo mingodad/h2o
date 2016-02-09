@@ -28,8 +28,8 @@ static int headers_are(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char 
     h2o_iovec_t flattened = {};
 
     for (i = 0; i != headers->size; ++i) {
-        flattened = h2o_concat(pool, flattened, *headers->entries[i].name, h2o_iovec_init(H2O_STRLIT(": ")),
-                               headers->entries[i].value, h2o_iovec_init(H2O_STRLIT("\n")));
+        h2o_concat(flattened, pool, flattened, *headers->entries[i].name, h2o_iovec_t::create(H2O_STRLIT(": ")),
+                               headers->entries[i].value, h2o_iovec_t::create(H2O_STRLIT("\n")));
     }
 
     return h2o_memis(flattened.base, flattened.len, s, len);
@@ -38,10 +38,10 @@ static int headers_are(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char 
 static void setup_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers)
 {
     *headers = (h2o_headers_t){};
-    h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-    h2o_add_header(pool, headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("public, max-age=86400"));
-    h2o_add_header(pool, headers, H2O_TOKEN_SET_COOKIE, H2O_STRLIT("a=b"));
-    h2o_add_header_by_str(pool, headers, H2O_STRLIT("x-foo"), 0, H2O_STRLIT("bar"));
+    headers->add(pool, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    headers->add(pool, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("public, max-age=86400"));
+    headers->add(pool, H2O_TOKEN_SET_COOKIE, H2O_STRLIT("a=b"));
+    headers->add(pool, H2O_STRLIT("x-foo"), 0, H2O_STRLIT("bar"));
 }
 
 void test_lib__handler__headers_c(void)
@@ -51,7 +51,7 @@ void test_lib__handler__headers_c(void)
     h2o_headers_command_t cmd;
     h2o_iovec_t header_str;
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
     /* tests using token headers */
     setup_headers(&pool, &headers);
@@ -90,7 +90,7 @@ void test_lib__handler__headers_c(void)
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
     /* tests using non-token headers */
-    header_str = h2o_iovec_init(H2O_STRLIT("x-foo"));
+    header_str = h2o_iovec_t::create(H2O_STRLIT("x-foo"));
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, &header_str, {H2O_STRLIT("baz")}};
     rewrite_headers(&pool, &headers, &cmd);
@@ -123,5 +123,5 @@ void test_lib__handler__headers_c(void)
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 }

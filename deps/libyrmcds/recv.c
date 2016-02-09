@@ -103,10 +103,10 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
 
     const char* pkey = c->recvbuf + (BINARY_HEADER_SIZE + extras_len);
     r->length = BINARY_HEADER_SIZE + total_len;
-    r->command = *(unsigned char*)(c->recvbuf + 1);
+    r->command = (yrmcds_command)(*(unsigned char*)(c->recvbuf + 1));
     r->key = key_len ? pkey : NULL;
     r->key_len = key_len;
-    r->status = ntoh16(c->recvbuf + 6);
+    r->status = (yrmcds_status)ntoh16(c->recvbuf + 6);
     memcpy(&(r->serial), c->recvbuf + 12, 4);
     r->cas_unique = ntoh64(c->recvbuf + 16);
     r->flags = 0;

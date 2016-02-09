@@ -31,7 +31,7 @@
 
 #define H2O_FILECACHE_ETAG_MAXLEN (sizeof("\"deadbeef-deadbeefdeadbeef\"") - 1)
 
-typedef struct st_h2o_filecache_ref_t {
+struct h2o_filecache_ref_t {
     int fd;
     struct stat st;
     struct {
@@ -45,17 +45,23 @@ typedef struct st_h2o_filecache_ref_t {
     size_t _refcnt;
     h2o_linklist_t _lru;
     char _path[1];
-} h2o_filecache_ref_t;
 
-typedef struct st_h2o_filecache_t h2o_filecache_t;
+    struct tm *get_last_modified(char *outbuf);
+    size_t get_etag(char *outbuf);
+};
 
-h2o_filecache_t *h2o_filecache_create(size_t capacity);
-void h2o_filecache_destroy(h2o_filecache_t *cache);
-void h2o_filecache_clear(h2o_filecache_t *cache);
+struct h2o_filecache_t {
+    void *hash_table;
+    h2o_linklist_t lru;
+    size_t capacity;
 
-h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char *path, int oflag);
-void h2o_filecache_close_file(h2o_filecache_ref_t *ref);
-struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbuf);
-size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf);
+    static h2o_filecache_t *create(size_t capacity);
+    static void destroy(h2o_filecache_t *cache);
+    void clear();
+
+    h2o_filecache_ref_t *open_file(const char *path, int oflag);
+    static void close_file(h2o_filecache_ref_t *ref);
+};
+
 
 #endif

@@ -22,7 +22,7 @@
 #ifndef h2o__http2_h
 #define h2o__http2_h
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 extern "C" {
 #endif
 
@@ -38,29 +38,29 @@ extern const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS;
 #define H2O_HTTP2_SETTINGS_MAX_FRAME_SIZE 5
 #define H2O_HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE 6
 
-typedef struct st_h2o_http2_settings_t {
+struct h2o_http2_settings_t {
     uint32_t header_table_size;
     uint32_t enable_push;
     uint32_t max_concurrent_streams;
     uint32_t initial_window_size;
     uint32_t max_frame_size;
-} h2o_http2_settings_t;
+};
 
 extern const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT;
 extern const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST;
 
-typedef struct st_h2o_http2_priority_t {
+struct h2o_http2_priority_t {
     int exclusive;
     uint32_t dependency;
     uint16_t weight;
-} h2o_http2_priority_t;
+};
 
 extern const h2o_http2_priority_t h2o_http2_default_priority;
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
 int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at);
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 }
 #endif
 

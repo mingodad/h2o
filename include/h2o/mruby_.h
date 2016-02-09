@@ -66,18 +66,18 @@ enum {
     H2O_MRUBY_NUM_CONSTANTS
 };
 
-typedef struct st_h2o_mruby_config_vars_t {
+struct h2o_mruby_config_vars_t {
     h2o_iovec_t source;
     char *path;
     int lineno;
-} h2o_mruby_config_vars_t;
+};
 
-typedef struct st_h2o_mruby_handler_t {
+struct h2o_mruby_handler_t {
     h2o_handler_t super;
     h2o_mruby_config_vars_t config;
-} h2o_mruby_handler_t;
+};
 
-typedef struct st_h2o_mruby_context_t {
+struct h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_state *mrb;
     mrb_value proc;
@@ -90,18 +90,18 @@ typedef struct st_h2o_mruby_context_t {
         mrb_sym sym_body;
         mrb_sym sym_async;
     } symbols;
-} h2o_mruby_context_t;
+};
 
-typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
-typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;
+struct h2o_mruby_chunked_t;
+struct h2o_mruby_http_request_context_t;
 
-typedef struct st_h2o_mruby_generator_t {
+struct h2o_mruby_generator_t {
     h2o_generator_t super;
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
     h2o_mruby_chunked_t *chunked;
-} h2o_mruby_generator_t;
+};
 
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
 #define H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS -2

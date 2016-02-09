@@ -26,7 +26,7 @@ static void test_normalize_path(void)
 {
     h2o_mem_pool_t pool;
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
     size_t q;
     h2o_iovec_t b = h2o_url_normalize_path(&pool, H2O_STRLIT("/"), &q);
@@ -99,7 +99,7 @@ static void test_normalize_path(void)
     ok(memcmp(b.base, H2O_STRLIT("/%")) == 0);
     ok(q == SIZE_MAX);
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 }
 
 static void test_hostport(void)
@@ -108,39 +108,39 @@ static void test_hostport(void)
     uint16_t port;
     const char *ret;
 
-    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1"));
+    input = h2o_iovec_t::create(H2O_STRLIT("127.0.0.1"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(ret == input.base + input.len);
     ok(h2o_memis(host.base, host.len, H2O_STRLIT("127.0.0.1")));
     ok(port == 65535);
 
-    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1/"));
+    input = h2o_iovec_t::create(H2O_STRLIT("127.0.0.1/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(strcmp(ret, "/") == 0);
     ok(h2o_memis(host.base, host.len, H2O_STRLIT("127.0.0.1")));
     ok(port == 65535);
 
-    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:8081/"));
+    input = h2o_iovec_t::create(H2O_STRLIT("127.0.0.1:8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(strcmp(ret, "/") == 0);
     ok(h2o_memis(host.base, host.len, H2O_STRLIT("127.0.0.1")));
     ok(port == 8081);
 
-    input = h2o_iovec_init(H2O_STRLIT("[::ffff:192.0.2.1]:8081/"));
+    input = h2o_iovec_t::create(H2O_STRLIT("[::ffff:192.0.2.1]:8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(strcmp(ret, "/") == 0);
     ok(h2o_memis(host.base, host.len, H2O_STRLIT("::ffff:192.0.2.1")));
     ok(port == 8081);
 
-    input = h2o_iovec_init(H2O_STRLIT("[::ffff:192.0.2.1:8081/"));
+    input = h2o_iovec_t::create(H2O_STRLIT("[::ffff:192.0.2.1:8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(ret == NULL);
 
-    input = h2o_iovec_init(H2O_STRLIT(":8081/"));
+    input = h2o_iovec_t::create(H2O_STRLIT(":8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(ret == NULL);
 
-    input = h2o_iovec_init(H2O_STRLIT("[]:8081/"));
+    input = h2o_iovec_t::create(H2O_STRLIT("[]:8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(ret == NULL);
 }
@@ -150,85 +150,85 @@ static void test_parse(void)
     h2o_url_t parsed;
     int ret;
 
-    ret = h2o_url_parse("http://example.com/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse("http://example.com/abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("example.com")));
     ok(parsed._port == 65535);
-    ok(h2o_url_get_port(&parsed) == 80);
+    ok(parsed.get_port() == 80);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_url_parse("http://example.com", SIZE_MAX, &parsed);
+    ret = parsed.parse("http://example.com", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("example.com")));
     ok(parsed._port == 65535);
-    ok(h2o_url_get_port(&parsed) == 80);
+    ok(parsed.get_port() == 80);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/")));
 
-    ret = h2o_url_parse("http://example.com:81/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse("http://example.com:81/abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com:81")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("example.com")));
     ok(parsed._port == 81);
-    ok(h2o_url_get_port(&parsed) == 81);
+    ok(parsed.get_port() == 81);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_url_parse("http://example.com:81", SIZE_MAX, &parsed);
+    ret = parsed.parse("http://example.com:81", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com:81")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("example.com")));
     ok(parsed._port == 81);
-    ok(h2o_url_get_port(&parsed) == 81);
+    ok(parsed.get_port() == 81);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/")));
 
-    ret = h2o_url_parse("https://example.com/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse("https://example.com/abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTPS);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("example.com")));
     ok(parsed._port == 65535);
-    ok(h2o_url_get_port(&parsed) == 443);
+    ok(parsed.get_port() == 443);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_url_parse("http:/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse("http:/abc", SIZE_MAX);
     ok(ret != 0);
 
-    ret = h2o_url_parse("ftp://example.com/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse("ftp://example.com/abc", SIZE_MAX);
     ok(ret != 0);
 
-    ret = h2o_url_parse("http://abc:111111/def", SIZE_MAX, &parsed);
+    ret = parsed.parse("http://abc:111111/def", SIZE_MAX);
     ok(ret != 0);
 
-    ret = h2o_url_parse("http://[::ffff:192.0.2.128]", SIZE_MAX, &parsed);
+    ret = parsed.parse("http://[::ffff:192.0.2.128]", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("[::ffff:192.0.2.128]")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("::ffff:192.0.2.128")));
     ok(parsed._port == 65535);
-    ok(h2o_url_get_port(&parsed) == 80);
+    ok(parsed.get_port() == 80);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/")));
 
-    ret = h2o_url_parse("https://[::ffff:192.0.2.128]/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse("https://[::ffff:192.0.2.128]/abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTPS);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("[::ffff:192.0.2.128]")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("::ffff:192.0.2.128")));
     ok(parsed._port == 65535);
-    ok(h2o_url_get_port(&parsed) == 443);
+    ok(parsed.get_port() == 443);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_url_parse("https://[::ffff:192.0.2.128]:111/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse("https://[::ffff:192.0.2.128]:111/abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTPS);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("[::ffff:192.0.2.128]:111")));
     ok(h2o_memis(parsed.host.base, parsed.host.len, H2O_STRLIT("::ffff:192.0.2.128")));
     ok(parsed._port == 111);
-    ok(h2o_url_get_port(&parsed) == 111);
+    ok(parsed.get_port() == 111);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 }
 
@@ -238,7 +238,7 @@ static void test_parse_relative(void)
     int ret;
 
     memset(&parsed, 0x55, sizeof(parsed));
-    ret = h2o_url_parse_relative("abc", SIZE_MAX, &parsed);
+    ret = parsed.parse_relative("abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == NULL);
     ok(parsed.authority.base == NULL);
@@ -247,7 +247,7 @@ static void test_parse_relative(void)
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("abc")));
 
     memset(&parsed, 0x55, sizeof(parsed));
-    ret = h2o_url_parse_relative("/abc", SIZE_MAX, &parsed);
+    ret = parsed.parse_relative("/abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == NULL);
     ok(parsed.authority.base == NULL);
@@ -256,7 +256,7 @@ static void test_parse_relative(void)
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
     memset(&parsed, 0x55, sizeof(parsed));
-    ret = h2o_url_parse_relative("http:abc", SIZE_MAX, &parsed);
+    ret = parsed.parse_relative("http:abc", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTP);
     ok(parsed.authority.base == NULL);
@@ -265,7 +265,7 @@ static void test_parse_relative(void)
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("abc")));
 
     memset(&parsed, 0x55, sizeof(parsed));
-    ret = h2o_url_parse_relative("//host", SIZE_MAX, &parsed);
+    ret = parsed.parse_relative("//host", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == NULL);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("host")));
@@ -274,7 +274,7 @@ static void test_parse_relative(void)
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/")));
 
     memset(&parsed, 0x55, sizeof(parsed));
-    ret = h2o_url_parse_relative("//host:12345/path", SIZE_MAX, &parsed);
+    ret = parsed.parse_relative("//host:12345/path", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == NULL);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("host:12345")));
@@ -283,7 +283,7 @@ static void test_parse_relative(void)
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/path")));
 
     memset(&parsed, 0x55, sizeof(parsed));
-    ret = h2o_url_parse_relative("https://host:12345/path", SIZE_MAX, &parsed);
+    ret = parsed.parse_relative("https://host:12345/path", SIZE_MAX);
     ok(ret == 0);
     ok(parsed.scheme == &H2O_URL_SCHEME_HTTPS);
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("host:12345")));
@@ -299,100 +299,100 @@ static void test_resolve(void)
     h2o_iovec_t final;
     int ret;
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
-    ret = h2o_url_parse("http://example.com/dir/index.html", SIZE_MAX, &base);
+    ret = base.parse("http://example.com/dir/index.html", SIZE_MAX);
     ok(ret == 0);
 
-    ret = h2o_url_parse_relative("../assets/jquery.js", SIZE_MAX, &relative);
+    ret = relative.parse_relative("../assets/jquery.js", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.com/assets/jquery.js")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.com")));
     ok(resolved._port == 65535);
-    ok(h2o_url_get_port(&resolved) == 80);
+    ok(resolved.get_port() == 80);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/assets/jquery.js")));
 
-    ret = h2o_url_parse_relative("foo.html", SIZE_MAX, &relative);
+    ret = relative.parse_relative("foo.html", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.com/dir/foo.html")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.com")));
     ok(resolved._port == 65535);
-    ok(h2o_url_get_port(&resolved) == 80);
+    ok(resolved.get_port() == 80);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/dir/foo.html")));
 
-    ret = h2o_url_parse_relative("./bar.txt", SIZE_MAX, &relative);
+    ret = relative.parse_relative("./bar.txt", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.com/dir/bar.txt")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.com")));
     ok(resolved._port == 65535);
-    ok(h2o_url_get_port(&resolved) == 80);
+    ok(resolved.get_port() == 80);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/dir/bar.txt")));
 
-    ret = h2o_url_parse_relative("../../../traverse", SIZE_MAX, &relative);
+    ret = relative.parse_relative("../../../traverse", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.com/traverse")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.com")));
     ok(resolved._port == 65535);
-    ok(h2o_url_get_port(&resolved) == 80);
+    ok(resolved.get_port() == 80);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/traverse")));
 
-    ret = h2o_url_parse_relative("http:foo.html", SIZE_MAX, &relative);
+    ret = relative.parse_relative("http:foo.html", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.com/dir/foo.html")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.com")));
     ok(resolved._port == 65535);
-    ok(h2o_url_get_port(&resolved) == 80);
+    ok(resolved.get_port() == 80);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/dir/foo.html")));
 
-    ret = h2o_url_parse_relative("http:/icon.ico", SIZE_MAX, &relative);
+    ret = relative.parse_relative("http:/icon.ico", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.com/icon.ico")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.com")));
     ok(resolved._port == 65535);
-    ok(h2o_url_get_port(&resolved) == 80);
+    ok(resolved.get_port() == 80);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/icon.ico")));
 
-    ret = h2o_url_parse_relative("https:/icon.ico", SIZE_MAX, &relative);
+    ret = relative.parse_relative("https:/icon.ico", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("https://example.com/icon.ico")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTPS);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.com")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.com")));
     ok(resolved._port == 65535);
-    ok(h2o_url_get_port(&resolved) == 443);
+    ok(resolved.get_port() == 443);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/icon.ico")));
 
-    ret = h2o_url_parse_relative("//example.jp:81/icon.ico", SIZE_MAX, &relative);
+    ret = relative.parse_relative("//example.jp:81/icon.ico", SIZE_MAX);
     ok(ret == 0);
-    final = h2o_url_resolve(&pool, &base, &relative, &resolved);
+    final = resolved.resolve(&pool, &base, &relative);
     ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.jp:81/icon.ico")));
     ok(resolved.scheme == &H2O_URL_SCHEME_HTTP);
     ok(h2o_memis(resolved.authority.base, resolved.authority.len, H2O_STRLIT("example.jp:81")));
     ok(h2o_memis(resolved.host.base, resolved.host.len, H2O_STRLIT("example.jp")));
     ok(resolved._port == 81);
-    ok(h2o_url_get_port(&resolved) == 81);
+    ok(resolved.get_port() == 81);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/icon.ico")));
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 }
 
 void test_lib__common__url_c(void)

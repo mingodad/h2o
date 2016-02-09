@@ -31,7 +31,9 @@
 #include <sys/types.h>
 #include "h2o/multithread.h"
 
-typedef struct st_h2o_hostinfo_getaddr_req_t h2o_hostinfo_getaddr_req_t;
+#define LOOKUP_THREAD_STACK_SIZE (100 * 1024)
+
+struct h2o_hostinfo_getaddr_req_t;
 
 typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, struct addrinfo *res, void *cbdata);
 
@@ -40,9 +42,13 @@ extern size_t h2o_hostinfo_max_threads;
 /**
  * dispatches a (possibly) asynchronous hostname lookup
  */
-h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, h2o_iovec_t name, h2o_iovec_t serv,
-                                                 int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb,
-                                                 void *cbdata);
+h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver,
+                                                 h2o_iovec_t name, h2o_iovec_t serv,
+                                                 h2o_hostinfo_getaddr_cb cb, void *cbdata,
+                                                 int family=AF_UNSPEC,
+                                                 int socktype=SOCK_STREAM,
+                                                 int protocol=IPPROTO_TCP,
+                                                 int flags=AI_ADDRCONFIG | AI_NUMERICSERV);
 /**
  *
  */

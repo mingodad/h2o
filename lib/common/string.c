@@ -26,21 +26,25 @@
 #include <time.h>
 #include "h2o/string_.h"
 
-h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
+void h2o_strdup_to(h2o_iovec_t *dest, h2o_mem_pool_t *pool, const char *s, size_t slen)
 {
-    h2o_iovec_t ret;
-
     if (slen == SIZE_MAX)
         slen = strlen(s);
 
     if (pool != NULL) {
-        ret.base = h2o_mem_alloc_pool(pool, slen + 1);
+        dest->base = pool->alloc_for<char>(slen + 1);
     } else {
-        ret.base = h2o_mem_alloc(slen + 1);
+        dest->base = h2o_mem_alloc_for<char>(slen + 1);
     }
-    memcpy(ret.base, s, slen);
-    ret.base[slen] = '\0';
-    ret.len = slen;
+    memcpy(dest->base, s, slen);
+    dest->base[slen] = '\0';
+    dest->len = slen;
+}
+
+h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
+{
+    h2o_iovec_t ret;
+    h2o_strdup_to(&ret, pool, s, slen);
     return ret;
 }
 
@@ -49,7 +53,7 @@ h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *src, size_t len
     h2o_iovec_t ret;
 
     ret.len = len != SIZE_MAX ? len : strlen(src);
-    ret.base = pool != NULL ? h2o_mem_alloc_pool(pool, ret.len + 2) : h2o_mem_alloc(ret.len + 2);
+    ret.base = pool != NULL ? pool->alloc_for<char>(ret.len + 2) : h2o_mem_alloc_for<char>(ret.len + 2);
     memcpy(ret.base, src, ret.len);
     if (ret.len != 0 && ret.base[ret.len - 1] != '/')
         ret.base[ret.len++] = '/';
@@ -99,11 +103,12 @@ size_t h2o_strtosizefwd(char **s, size_t len)
 {
     uint64_t v, c;
     char *p = *s, *p_end = *s + len;
+    int ch;
 
     if (len == 0)
         goto Error;
 
-    int ch = *p++;
+    ch = *p++;
     if (!('0' <= ch && ch <= '9'))
         goto Error;
     v = ch - '0';
@@ -174,7 +179,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
-    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
+    decoded.base = pool != NULL ? pool->alloc_for<char>(decoded.len + 1) : h2o_mem_alloc_for<char>(decoded.len + 1);
     dst = (uint8_t *)decoded.base;
 
     while (len >= 4) {
@@ -218,7 +223,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     return decoded;
 
 Error:
-    return h2o_iovec_init(NULL, 0);
+    return h2o_iovec_t::create(NULL, 0);
 }
 
 size_t h2o_base64_encode(char *_dst, const void *_src, size_t len, int url_encoded)
@@ -231,7 +236,7 @@ size_t h2o_base64_encode(char *_dst, const void *_src, size_t len, int url_encod
                                          "0123456789-_";
 
     char *dst = _dst;
-    const uint8_t *src = _src;
+    auto src = (const uint8_t *)_src;
     const char *map = url_encoded ? MAP_URL_ENCODED : MAP;
     uint32_t quad;
 
@@ -277,7 +282,7 @@ static int decode_hex(int ch)
 
 int h2o_hex_decode(void *_dst, const char *src, size_t src_len)
 {
-    unsigned char *dst = _dst;
+    auto dst = (unsigned char *)_dst;
 
     if (src_len % 2 != 0)
         return -1;
@@ -292,7 +297,8 @@ int h2o_hex_decode(void *_dst, const char *src, size_t src_len)
 
 void h2o_hex_encode(char *dst, const void *_src, size_t src_len)
 {
-    const unsigned char *src = _src, *src_end = src + src_len;
+    auto src = (const unsigned char *)_src;
+    auto src_end = src + src_len;
     for (; src != src_end; ++src) {
         *dst++ = "0123456789abcdef"[*src >> 4];
         *dst++ = "0123456789abcdef"[*src & 0xf];
@@ -305,7 +311,7 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
     h2o_iovec_t encoded;
     size_t i, capacity = l * 3 + 1;
 
-    encoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, capacity) : h2o_mem_alloc(capacity);
+    encoded.base = pool != NULL ? pool->alloc_for<char>(capacity) : h2o_mem_alloc_for<char>(capacity);
     encoded.len = 0;
 
     /* RFC 3986:
@@ -339,12 +345,12 @@ h2o_iovec_t h2o_get_filext(const char *path, size_t len)
 
     while (--p != path) {
         if (*p == '.') {
-            return h2o_iovec_init(p + 1, end - (p + 1));
+            return h2o_iovec_t::create(p + 1, end - (p + 1));
         } else if (*p == '/') {
             break;
         }
     }
-    return h2o_iovec_init(NULL, 0);
+    return h2o_iovec_t::create(NULL, 0);
 }
 
 static int is_ws(int ch)
@@ -366,7 +372,7 @@ h2o_iovec_t h2o_str_stripws(const char *s, size_t len)
             break;
         --end;
     }
-    return h2o_iovec_init(s, end - s);
+    return h2o_iovec_t::create(s, end - s);
 }
 
 size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len)
@@ -415,23 +421,23 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
     }
 
     /* found */
-    *iter = h2o_iovec_init(cur, end - cur);
+    (*iter).init(cur, end - cur);
     *element_len = token_end - token_start;
     if (value != NULL)
         *value = (h2o_iovec_t){};
     return token_start;
 
 FindValue:
-    *iter = h2o_iovec_init(cur, end - cur);
+    (*iter).init(cur, end - cur);
     *element_len = token_end - token_start;
     if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL)
-        *value = (h2o_iovec_t){"", 0};
+        *value = {(char*)"", 0};
     return token_start;
 }
 
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len, int separator)
 {
-    h2o_iovec_t iter = h2o_iovec_init(haysack, haysack_len);
+    auto iter = h2o_iovec_t::create(haysack, haysack_len);
     const char *token = NULL;
     size_t token_len = 0;
 
@@ -471,7 +477,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
     /* escape and return the result if necessary */
     if (add_size != 0) {
         /* allocate buffer and fill in the chars that are known not to require escaping */
-        h2o_iovec_t escaped = {h2o_mem_alloc_pool(pool, len + add_size + 1), 0};
+        h2o_iovec_t escaped = {pool->alloc_for<char>(len + add_size + 1), 0};
         /* fill-in the rest */
         for (s = src; s != end; ++s) {
             switch (*s) {
@@ -496,7 +502,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
 #undef ENTITY_MAP
 
     /* no need not escape; return the original */
-    return h2o_iovec_init(src, len);
+    return h2o_iovec_t::create(src, len);
 }
 
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count)
@@ -510,10 +516,7 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
     }
 
     /* allocate memory */
-    if (pool != NULL)
-        ret.base = h2o_mem_alloc_pool(pool, ret.len + 1);
-    else
-        ret.base = h2o_mem_alloc(ret.len + 1);
+    ret.base = (pool != NULL) ? pool->alloc_for<char>(ret.len + 1) : h2o_mem_alloc_for<char>(ret.len + 1);
 
     /* concatenate */
     ret.len = 0;

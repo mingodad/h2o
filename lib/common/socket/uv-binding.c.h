@@ -84,7 +84,7 @@ static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unu
 
 static void on_do_write_complete(uv_write_t *wreq, int status)
 {
-    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _wreq, wreq);
+    auto sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _wreq, wreq);
     if (sock->super._cb.write != NULL)
         on_write_complete(&sock->super, status);
 }
@@ -93,7 +93,7 @@ static void free_sock(uv_handle_t *handle)
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
     uv_close_cb cb = sock->uv.close_cb;
-    free(sock);
+    h2o_mem_free(sock);
     cb(handle);
 }
 
@@ -134,7 +134,7 @@ static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop)
     uv_tcp_t *tcp = h2o_mem_alloc(sizeof(*tcp));
 
     if (uv_tcp_init(loop, tcp) != 0) {
-        free(tcp);
+        h2o_mem_free(tcp);
         return NULL;
     }
     return (void *)h2o_uv_socket_create((void *)tcp, (void *)free);
@@ -175,7 +175,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_mem_alloc(sizeof(*sock));
 
-    memset(sock, 0, sizeof(*sock));
+    h2o_clearmem(sock);
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
     sock->uv.stream = stream;
     sock->uv.close_cb = close_cb;
@@ -185,7 +185,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb)
 
 static void on_connect(uv_connect_t *conn, int status)
 {
-    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _creq, conn);
+    auto sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _creq, conn);
     h2o_socket_cb cb = sock->super._cb.write;
     sock->super._cb.write = NULL;
     cb(&sock->super, status);
@@ -231,7 +231,7 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 
 static void on_timeout(uv_timer_t *timer)
 {
-    h2o_timeout_t *timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _backend.timer, timer);
+    auto timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _backend.timer, timer);
 
     h2o_timeout_run(timer->loop, timeout, h2o_now(timer->loop));
     if (!h2o_linklist_is_empty(&timeout->_entries))
@@ -240,7 +240,7 @@ static void on_timeout(uv_timer_t *timer)
 
 void schedule_timer(h2o_timeout_t *timeout)
 {
-    h2o_timeout_entry_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_entry_t, _link, timeout->_entries.next);
+    auto entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_entry_t, _link, timeout->_entries.next);
     uv_timer_start(&timeout->_backend.timer, on_timeout,
                    entry->registered_at + timeout->timeout - h2o_now(timeout->_backend.timer.loop), 0);
 }

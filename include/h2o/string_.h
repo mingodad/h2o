@@ -22,7 +22,7 @@
 #ifndef h2o__string_h
 #define h2o__string_h
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 extern "C" {
 #endif
 
@@ -34,7 +34,7 @@ extern "C" {
 #define H2O_TO__STR(n) #n
 #define H2O_TO_STR(n) H2O_TO__STR(n)
 
-#define H2O_STRLIT(s) (s), sizeof(s) - 1
+#define H2O_STRLIT(s) (char*)(s), sizeof(s) - 1
 
 /**
  * duplicates given string
@@ -55,7 +55,7 @@ static int h2o_tolower(int ch);
 /**
  * tr/A-Z/a-z/
  */
-static void h2o_strtolower(char *s, size_t len);
+static void h2o_strtolower_n(char *s, size_t len);
 /**
  * tr/a-z/A-Z/
  */
@@ -72,6 +72,7 @@ static int h2o_lcstris(const char *target, size_t target_len, const char *test, 
  * parses a positive number of return SIZE_MAX if failed
  */
 size_t h2o_strtosize(const char *s, size_t len);
+#define h2o_pht_header_value_tosize(pht_header) h2o_strtosize(pht_header.value, pht_header.value_len)
 /**
  * parses first positive number contained in *s or return SIZE_MAX if failed.
  * *s will set to right after the number in string or right after the end of string.
@@ -81,6 +82,16 @@ size_t h2o_strtosizefwd(char **s, size_t len);
 * base64 url decoder
 */
 h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t len);
+
+inline h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, h2o_iovec_t &src)
+{
+    return h2o_decode_base64url(pool, src.base, src.len);
+}
+
+inline h2o_iovec_t h2o_decode_base64url(h2o_iovec_t &src)
+{
+    return h2o_decode_base64url(nullptr, src.base, src.len);
+}
 /**
  * base64 encoder (note: the function emits trailing '\0')
  */
@@ -128,8 +139,14 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len);
 /**
  * concatenates a list of iovecs (with NUL termination)
  */
+/*
 #define h2o_concat(pool, ...)                                                                                                      \
     h2o_concat_list(pool, (h2o_iovec_t[]){__VA_ARGS__}, sizeof((h2o_iovec_t[]){__VA_ARGS__}) / sizeof(h2o_iovec_t))
+*/
+
+#define h2o_concat(res, pool, ...) \
+    {h2o_iovec_t _iov_[] =  {__VA_ARGS__};res = h2o_concat_list(pool, _iov_, sizeof(_iov_) / sizeof(h2o_iovec_t));}
+
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count);
 /**
  * emits a two-line string to buf that graphically points to given location within the source string
@@ -146,11 +163,13 @@ inline int h2o_tolower(int ch)
     return 'A' <= ch && ch <= 'Z' ? ch + 0x20 : ch;
 }
 
-inline void h2o_strtolower(char *s, size_t len)
+inline void h2o_strtolower_n(char *s, size_t len)
 {
     for (; len != 0; ++s, --len)
         *s = h2o_tolower(*s);
 }
+#define h2o_strtolower(str) h2o_strtolower_n(str.base, str.len)
+#define h2o_phr_headertolower(header) h2o_strtolower_n((char*)header.name, header.name_len)
 
 inline int h2o_toupper(int ch)
 {
@@ -169,8 +188,10 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
         return 0;
     return h2o__lcstris_core(target, test, test_len);
 }
+#define h2o_io_vector_lcis(io_vec1, io_vec2) h2o_lcstris(io_vec1.base, io_vec1.len, io_vec2.base, io_vec2.len)
+#define h2o_io_vector_literal_lcis(io_vec1, literal) h2o_lcstris(io_vec1.base, io_vec1.len, H2O_STRLIT(literal))
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 }
 #endif
 

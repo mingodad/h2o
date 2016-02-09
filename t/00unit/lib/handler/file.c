@@ -23,14 +23,14 @@
 #include "../../test.h"
 #include "../../../../lib/handler/file.c"
 
-static h2o_context_t ctx;
+static h2o_context_t *ctx;
 
 static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const char *expected)
 {
-    size_t index = h2o_find_header(&res->headers, header_name, SIZE_MAX);
+    size_t index = res->headers.find(header_name, SIZE_MAX);
     if (index == SIZE_MAX)
         return 0;
-    return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
+    return h2o_lcstris(res->headers[index].value.base, res->headers[index].value.len, expected, strlen(expected));
 }
 
 static int check_multirange_body(char *resbody, const char *boundary, const h2o_iovec_t *expected, size_t partlen)
@@ -75,10 +75,10 @@ static void test_process_range(void)
     h2o_mem_pool_t testpool;
     size_t ret, *ranges;
     h2o_iovec_t testrange;
-    h2o_mem_init_pool(&testpool);
+    testpool.init();
 
     { /* check single range within filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=, 0-10"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=, 0-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 0);
@@ -86,7 +86,7 @@ static void test_process_range(void)
     }
 
     { /* check single range with only start */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=60-"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=60-"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 60);
@@ -94,7 +94,7 @@ static void test_process_range(void)
     }
 
     { /* check single suffix range */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-10"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 90);
@@ -102,7 +102,7 @@ static void test_process_range(void)
     }
 
     { /* this and next two check multiple ranges within filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=0-10, -10"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=0-10, -10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 2);
         ok(*ranges++ == 0);
@@ -112,7 +112,7 @@ static void test_process_range(void)
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=0-0, 20-89"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=0-0, 20-89"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 2);
         ok(*ranges++ == 0);
@@ -122,7 +122,7 @@ static void test_process_range(void)
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-10,-20"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=-10,-20"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 2);
         ok(*ranges++ == 90);
@@ -132,19 +132,19 @@ static void test_process_range(void)
     }
 
     { /* check ranges entirely out of filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=100-102"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     { /* check ranges with "negative" length */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=70-21"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=70-21"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     { /* check ranges with one side inside filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=90-102"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=90-102"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 90);
@@ -152,7 +152,7 @@ static void test_process_range(void)
     }
 
     { /* check suffix range larger than filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-200"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=-200"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 0);
@@ -160,7 +160,7 @@ static void test_process_range(void)
     }
 
     { /* check multiple ranges with unsatisfiable ranges, but also contain satisfiable ranges */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102,  90-102, 72-30,-22, 95-"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=100-102,  90-102, 72-30,-22, 95-"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 3);
         ok(*ranges++ == 90);
@@ -172,49 +172,49 @@ static void test_process_range(void)
     }
 
     { /* this and next 6 check malformed ranges */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes 20-1002"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes 20-1002"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes="));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes="));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bsdfeadsfjwleakjf"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bsdfeadsfjwleakjf"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102, 90-102, -72-30,-22,95-"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=100-102, 90-102, -72-30,-22,95-"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=10-12-13, 90-102, -72, -22, 95-"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=10-12-13, 90-102, -72, -22, 95-"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102, 90-102, 70-39, -22$"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=100-102, 90-102, 70-39, -22$"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-0"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=-0"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     { /* check same ranges with different filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=20-200"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=20-200"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 20);
@@ -229,7 +229,7 @@ static void test_process_range(void)
     }
 
     { /* check a range with plenty of WS and COMMA */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 2);
         ok(*ranges++ == 1);
@@ -239,19 +239,19 @@ static void test_process_range(void)
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes= 1-3"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes= 1-3"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-3 5-10"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=1-3 5-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-\t,5-10"));
+        testrange = h2o_iovec_t::create(H2O_STRLIT("bytes=1-\t,5-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 2);
         ok(*ranges++ == 1);
@@ -260,7 +260,7 @@ static void test_process_range(void)
         ok(*ranges == 6);
     }
 
-    h2o_mem_clear_pool(&testpool);
+    testpool.clear();
 }
 
 static void test_if_modified_since(void)
@@ -268,39 +268,39 @@ static void test_if_modified_since(void)
     char lm_date[H2O_TIMESTR_RFC1123_LEN + 1];
 
     { /* obtain last-modified */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
         ssize_t lm_index;
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
-        if ((lm_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_LAST_MODIFIED, -1)) == -1) {
+        if ((lm_index = conn->req.res.headers.find(H2O_TOKEN_LAST_MODIFIED, -1)) == -1) {
             ok(0);
             return;
         }
-        ok(conn->req.res.headers.entries[lm_index].value.len == H2O_TIMESTR_RFC1123_LEN);
-        memcpy(lm_date, conn->req.res.headers.entries[lm_index].value.base, H2O_TIMESTR_RFC1123_LEN);
+        ok(conn->req.res.headers[lm_index].value.len == H2O_TIMESTR_RFC1123_LEN);
+        memcpy(lm_date, conn->req.res.headers[lm_index].value.base, H2O_TIMESTR_RFC1123_LEN);
         lm_date[H2O_TIMESTR_RFC1123_LEN] = '\0';
         h2o_loopback_destroy(conn);
     }
 
     { /* send if-modified-since using the obtained last-modified */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, lm_date, H2O_TIMESTR_RFC1123_LEN);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_IF_MODIFIED_SINCE, lm_date, H2O_TIMESTR_RFC1123_LEN);
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
         ok(conn->body->size == 0);
-        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_ETAG, -1) != -1);
+        ok(conn->req.res.headers.find(H2O_TOKEN_ETAG, -1) != -1);
         h2o_loopback_destroy(conn);
     }
 
     { /* send if-modified-since using an old date */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE,
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_IF_MODIFIED_SINCE,
                        H2O_STRLIT("Sun, 06 Nov 1994 08:49:37 GMT"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
@@ -308,15 +308,15 @@ static void test_if_modified_since(void)
     }
 
     { /* send if-modified-since using a date in the future */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE,
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_IF_MODIFIED_SINCE,
                        H2O_STRLIT("Wed, 18 May 2033 12:33:20 GMT"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
         ok(conn->body->size == 0);
-        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_ETAG, -1) != -1);
+        ok(conn->req.res.headers.find(H2O_TOKEN_ETAG, -1) != -1);
         h2o_loopback_destroy(conn);
     }
 }
@@ -326,41 +326,41 @@ static void test_if_match(void)
     h2o_iovec_t etag = {};
 
     { /* obtain etag */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
         ssize_t etag_index;
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
-        if ((etag_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_ETAG, -1)) == -1) {
+        if ((etag_index = conn->req.res.headers.find(H2O_TOKEN_ETAG, -1)) == -1) {
             ok(0);
             return;
         }
-        etag = h2o_strdup(NULL, conn->req.res.headers.entries[etag_index].value.base,
-                          conn->req.res.headers.entries[etag_index].value.len);
+        etag = h2o_strdup(NULL, conn->req.res.headers[etag_index].value.base,
+                          conn->req.res.headers[etag_index].value.len);
         h2o_loopback_destroy(conn);
     }
 
     { /* send if-non-match using the obtained etag */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_NONE_MATCH, etag.base, etag.len);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_IF_NONE_MATCH, etag.base, etag.len);
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
         ok(conn->body->size == 0);
         h2o_loopback_destroy(conn);
     }
 
-    free(etag.base);
+    h2o_mem_free(etag.base);
 }
 
 static void test_range_req(void)
 {
     { /* check if accept-ranges is "bytes" */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -374,10 +374,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* check a normal single range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -387,10 +387,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* check an over range single range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=990-1100"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=990-1100"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -400,10 +400,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* check a single range without end */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=989-"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=989-"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -413,10 +413,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* check a single suffix range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-21"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-21"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -426,10 +426,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* check a single suffix range over filesize */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-2100"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-2100"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -439,10 +439,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* malformed range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0-10, 9-, -10"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0-10, 9-, -10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -452,10 +452,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* malformed range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10-12, 9-, -10"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10-12, 9-, -10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -465,10 +465,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* malformed range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytfasdf"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytfasdf"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -478,10 +478,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* half-malformed range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -491,10 +491,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* single range over filesize */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=1000-1001"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=1000-1001"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -504,10 +504,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* single range with "negative" length */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=900-100"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=900-100"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -517,10 +517,10 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* check a half-malformed range with a normal range */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-0"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-0"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -530,61 +530,61 @@ static void test_range_req(void)
         h2o_loopback_destroy(conn);
     }
     { /* multiple ranges */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
         ssize_t content_type_index;
         h2o_iovec_t content_type, expected[2] = {};
         char boundary[BOUNDARY_SIZE + 1];
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-9,-11"));
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-9,-11"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
-        if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
+        if ((content_type_index = conn->req.res.headers.find( H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
             ok(0);
             return;
         }
-        content_type = conn->req.res.headers.entries[content_type_index].value;
+        content_type = conn->req.res.headers[content_type_index].value;
         ok(h2o_memis(content_type.base, mimebaselen, "multipart/byteranges; boundary=", mimebaselen));
         memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
         boundary[BOUNDARY_SIZE] = 0;
-        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[0].base = conn->req.pool.alloc_for<char>(256);
         expected[0].len =
             sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 0-9/1000\r\n\r\n%s", "text/plain", "123456789\n");
-        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[1].base = conn->req.pool.alloc_for<char>(256);
         expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 989-999/1000\r\n\r\n%s", "text/plain",
                                   "\n123456789\n");
-        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
+        ok(conn->req.res.headers.find( H2O_TOKEN_CONTENT_RANGE, -1) == -1);
         ok(conn->body->size == conn->req.res.content_length);
         ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
         h2o_loopback_destroy(conn);
     }
     { /* multiple ranges with plenty of WS and COMMA */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
         ssize_t content_type_index;
         h2o_iovec_t content_type, expected[2] = {};
         char boundary[BOUNDARY_SIZE + 1];
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
+        conn->req.headers.add(&conn->req.pool, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
-        if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
+        if ((content_type_index = conn->req.res.headers.find( H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
             ok(0);
             return;
         }
-        content_type = conn->req.res.headers.entries[content_type_index].value;
+        content_type = conn->req.res.headers[content_type_index].value;
         ok(h2o_memis(content_type.base, mimebaselen, "multipart/byteranges; boundary=", mimebaselen));
         memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
         boundary[BOUNDARY_SIZE] = 0;
-        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[0].base = conn->req.pool.alloc_for<char>(256);
         expected[0].len =
             sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 1-3/1000\r\n\r\n%s", "text/plain", "234");
-        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[1].base = conn->req.pool.alloc_for<char>(256);
         expected[1].len =
             sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 5-9/1000\r\n\r\n%s", "text/plain", "6789\n");
-        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
+        ok(conn->req.res.headers.find( H2O_TOKEN_CONTENT_RANGE, -1) == -1);
         ok(conn->body->size == conn->req.res.content_length);
         ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
         h2o_loopback_destroy(conn);
@@ -593,21 +593,22 @@ static void test_range_req(void)
 
 void test_lib__handler__file_c()
 {
-    h2o_globalconf_t globalconf;
+    h2o_globalconf_t globalconf; //should be declared before h2o_context_t
+    h2o_context_t test_ctx;
     h2o_hostconf_t *hostconf;
     h2o_pathconf_t *pathconf;
 
-    h2o_config_init(&globalconf);
-    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
+    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
     pathconf = h2o_config_register_path(hostconf, "/");
     h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
 
-    h2o_context_init(&ctx, test_loop, &globalconf);
+    test_ctx.init(test_loop, &globalconf);
+    ctx = &test_ctx;
 
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
@@ -615,9 +616,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
@@ -625,9 +626,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index.html"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
@@ -635,9 +636,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index.html"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
@@ -645,9 +646,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -655,9 +656,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000.txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -666,9 +667,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000000.txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -676,9 +677,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/1000000.txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -687,9 +688,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index_txt/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -697,9 +698,9 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index_txt/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -707,36 +708,36 @@ void test_lib__handler__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index_txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index_txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index_txt_as_dir/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
+        h2o_loopback_conn_t *conn = h2o_loopback_create(ctx, ctx->globalconf->hosts);
+        conn->req.input.method = h2o_iovec_t::create(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_t::create(H2O_STRLIT("/index_txt_as_dir/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
@@ -746,7 +747,4 @@ void test_lib__handler__file_c()
     subtest("if-match", test_if_match);
     subtest("process_range()", test_process_range);
     subtest("range request", test_range_req);
-
-    h2o_context_dispose(&ctx);
-    h2o_config_dispose(&globalconf);
 }

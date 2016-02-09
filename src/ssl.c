@@ -35,12 +35,14 @@
 #include "h2o/configurator.h"
 #include "standalone.h"
 
-struct st_session_ticket_generating_updater_conf_t {
+#define CONF_LIFETIME_QUARTER (conf.lifetime / 4)
+
+struct session_ticket_generating_updater_conf_t {
     const EVP_CIPHER *cipher;
     const EVP_MD *md;
 };
 
-struct st_session_ticket_file_updater_conf_t {
+struct session_ticket_file_updater_conf_t {
     const char *filename;
 };
 
@@ -50,19 +52,19 @@ static struct {
         union {
             struct {
                 size_t num_threads;
-                char *prefix;
+                const char *prefix;
             } memcached;
         } vars;
     } cache;
     struct {
         void *(*update_thread)(void *conf);
         union {
-            struct st_session_ticket_generating_updater_conf_t generating;
+            struct session_ticket_generating_updater_conf_t generating;
             struct {
-                struct st_session_ticket_generating_updater_conf_t generating; /* at same address as conf.ticket.vars.generating */
+                struct session_ticket_generating_updater_conf_t generating; /* at same address as conf.ticket.vars.generating */
                 h2o_iovec_t key;
             } memcached;
-            struct st_session_ticket_file_updater_conf_t file;
+            struct session_ticket_file_updater_conf_t file;
         } vars;
     } ticket;
     unsigned lifetime;
@@ -74,20 +76,20 @@ static struct {
 
 H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
 {
-    SSL_CTX **contexts = _contexts;
+    auto contexts = (SSL_CTX **)_contexts;
 
     while (1) {
         size_t i;
         for (i = 0; contexts[i] != NULL; ++i)
             SSL_CTX_flush_sessions(contexts[i], time(NULL));
-        sleep(conf.lifetime / 4);
+        sleep(CONF_LIFETIME_QUARTER);
     }
 }
 
 static void spawn_cache_cleanup_thread(SSL_CTX **_contexts, size_t num_contexts)
 {
     /* copy the list of contexts */
-    SSL_CTX **contexts = malloc(sizeof(*contexts) * (num_contexts + 1));
+    auto contexts = h2o_mem_alloc_for<SSL_CTX *>((num_contexts + 1));
     memcpy(contexts, _contexts, sizeof(*contexts) * num_contexts);
     contexts[num_contexts] = NULL;
 
@@ -118,7 +120,7 @@ static void setup_cache_internal(SSL_CTX **contexts, size_t num_contexts)
 
 static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 {
-    h2o_memcached_context_t *memc_ctx = h2o_memcached_create_context(
+    h2o_memcached_context_t *memc_ctx = h2o_memcached_context_t::create(
         conf.memcached.host, conf.memcached.port, conf.cache.vars.memcached.num_threads, conf.cache.vars.memcached.prefix);
     h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.lifetime);
     size_t i;
@@ -137,7 +139,7 @@ static void cache_init_defaults(void)
 
 #if H2O_USE_SESSION_TICKETS
 
-struct st_session_ticket_t {
+struct session_ticket_t {
     unsigned char name[16];
     struct {
         const EVP_CIPHER *cipher;
@@ -151,7 +153,7 @@ struct st_session_ticket_t {
     uint64_t not_after;
 };
 
-typedef H2O_VECTOR(struct st_session_ticket_t *) session_ticket_vector_t;
+typedef H2O_VECTOR<session_ticket_t *> session_ticket_vector_t;
 
 static struct {
     pthread_rwlock_t rwlock;
@@ -167,10 +169,10 @@ static struct {
     {} /* tickets */
 };
 
-struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
+struct session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
                                        int fill_in)
 {
-    struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
+    auto ticket = (session_ticket_t*)h2o_mem_alloc(sizeof(session_ticket_t) + cipher->key_len + md->block_size);
 
     ticket->cipher.cipher = cipher;
     ticket->cipher.key = (unsigned char *)ticket + sizeof(*ticket);
@@ -187,15 +189,14 @@ struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *m
     return ticket;
 }
 
-static void free_ticket(struct st_session_ticket_t *ticket)
+static void free_ticket(struct session_ticket_t *ticket)
 {
-    h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + ticket->cipher.cipher->key_len + ticket->hmac.md->block_size);
-    free(ticket);
+    h2o_mem_free_secure(ticket, sizeof(*ticket) + ticket->cipher.cipher->key_len + ticket->hmac.md->block_size);
 }
 
 static int ticket_sort_compare(const void *_x, const void *_y)
 {
-    struct st_session_ticket_t *x = *(void **)_x, *y = *(void **)_y;
+    auto x = *(session_ticket_t **)_x, y = *(session_ticket_t **)_y;
 
     if (x->not_before != y->not_before)
         return x->not_before > y->not_before ? -1 : 1;
@@ -207,16 +208,16 @@ static void free_tickets(session_ticket_vector_t *tickets)
     size_t i;
     for (i = 0; i != tickets->size; ++i)
         free_ticket(tickets->entries[i]);
-    free(tickets->entries);
-    memset(tickets, 0, sizeof(*tickets));
+    h2o_mem_free(tickets->entries);
+    h2o_clearmem(tickets);
 }
 
-static struct st_session_ticket_t *find_ticket_for_encryption(session_ticket_vector_t *tickets, uint64_t now)
+static struct session_ticket_t *find_ticket_for_encryption(session_ticket_vector_t *tickets, uint64_t now)
 {
     size_t i;
 
     for (i = 0; i != tickets->size; ++i) {
-        struct st_session_ticket_t *ticket = tickets->entries[i];
+        struct session_ticket_t *ticket = tickets->entries[i];
         if (ticket->not_before <= now) {
             if (now <= ticket->not_after) {
                 return ticket;
@@ -235,7 +236,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
 
     if (enc) {
         RAND_bytes(iv, EVP_MAX_IV_LENGTH);
-        struct st_session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL)), *temp_ticket = NULL;
+        struct session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL)), *temp_ticket = NULL;
         if (ticket != NULL) {
         } else {
             /* create a dummy ticket and use (this is the only way to continue the handshake; contrary to the man pages, OpenSSL
@@ -249,7 +250,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
             free_ticket(ticket);
         ret = 1;
     } else {
-        struct st_session_ticket_t *ticket;
+        struct session_ticket_t *ticket;
         size_t i;
         for (i = 0; i != session_tickets.tickets.size; ++i) {
             ticket = session_tickets.tickets.entries[i];
@@ -276,7 +277,7 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
 
     /* remove old entries */
     while (tickets->size != 0) {
-        struct st_session_ticket_t *oldest = tickets->entries[tickets->size - 1];
+        struct session_ticket_t *oldest = tickets->entries[tickets->size - 1];
         if (now <= oldest->not_after)
             break;
         tickets->entries[--tickets->size] = NULL;
@@ -286,14 +287,11 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
 
     /* create new entry if necessary */
     has_valid_ticket = find_ticket_for_encryption(tickets, now) != NULL;
-    if (!has_valid_ticket || (tickets->entries[0]->not_before + conf.lifetime / 4 < now)) {
+    if (!has_valid_ticket || (tickets->entries[0]->not_before + CONF_LIFETIME_QUARTER < now)) {
         uint64_t not_before = has_valid_ticket ? now + 60 : now;
-        struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
+        struct session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
                                                         not_before, not_before + conf.lifetime - 1, 1);
-        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
-        memmove(tickets->entries + 1, tickets->entries, sizeof(tickets->entries[0]) * tickets->size);
-        ++tickets->size;
-        tickets->entries[0] = ticket;
+        tickets->push_front(NULL, ticket);
         altered = 1;
     }
 
@@ -311,15 +309,15 @@ H2O_NORETURN static void *ticket_internal_updater(void *unused)
     }
 }
 
-static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_ticket_t *ticket)
+static int serialize_ticket_entry(char *buf, size_t bufsz, struct session_ticket_t *ticket)
 {
-    char *name_buf = alloca(sizeof(ticket->name) * 2 + 1);
+    auto name_buf = (char*)h2o_mem_alloca(sizeof(ticket->name) * 2 + 1);
     h2o_hex_encode(name_buf, ticket->name, sizeof(ticket->name));
-    char *key_buf = alloca((ticket->cipher.cipher->key_len + ticket->hmac.md->block_size) * 2 + 1);
+    auto key_buf = (char *)h2o_mem_alloca((ticket->cipher.cipher->key_len + ticket->hmac.md->block_size) * 2 + 1);
     h2o_hex_encode(key_buf, ticket->cipher.key, ticket->cipher.cipher->key_len);
     h2o_hex_encode(key_buf + (ticket->cipher.cipher->key_len) * 2, ticket->hmac.key, ticket->hmac.md->block_size);
 
-    return snprintf(buf, bufsz, "- name: %s\n"
+    int result = snprintf(buf, bufsz, "- name: %s\n"
                                 "  cipher: %s\n"
                                 "  hash: %s\n"
                                 "  key: %s\n"
@@ -327,13 +325,16 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
                                 "  not_after: %" PRIu64 "\n",
                     name_buf, OBJ_nid2sn(EVP_CIPHER_type(ticket->cipher.cipher)), OBJ_nid2sn(EVP_MD_type(ticket->hmac.md)), key_buf,
                     ticket->not_before, ticket->not_after);
+    h2o_mem_alloca_free(name_buf);
+    h2o_mem_alloca_free(key_buf);
+    return result;
 }
 
-static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *errstr)
+static struct session_ticket_t *parse_ticket_entry(yoml_t *element, char *errstr)
 {
     yoml_t *t;
-    struct st_session_ticket_t *ticket;
-    unsigned char name[sizeof(ticket->name) + 1], *key;
+    struct session_ticket_t *ticket = NULL;
+    unsigned char name[sizeof(ticket->name) + 1], *key = NULL;
     const EVP_CIPHER *cipher;
     const EVP_MD *hash;
     uint64_t not_before, not_after;
@@ -342,18 +343,18 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
 
     if (element->type != YOML_TYPE_MAPPING) {
         strcpy(errstr, "node is not a mapping");
-        return NULL;
+        goto CleanAlloca;
     }
 
 #define FETCH(n, post)                                                                                                             \
     do {                                                                                                                           \
         if ((t = yoml_get(element, n)) == NULL) {                                                                                  \
             strcpy(errstr, " mandatory attribute `" n "` is missing");                                                             \
-            return NULL;                                                                                                           \
+            goto CleanAlloca;                                                                                                           \
         }                                                                                                                          \
         if (t->type != YOML_TYPE_SCALAR) {                                                                                         \
             strcpy(errstr, "attribute `" n "` is not a string");                                                                   \
-            return NULL;                                                                                                           \
+            goto CleanAlloca;                                                                                                          \
         }                                                                                                                          \
         post                                                                                                                       \
     } while (0)
@@ -361,23 +362,23 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
     FETCH("name", {
         if (strlen(t->data.scalar) != sizeof(ticket->name) * 2) {
             strcpy(errstr, "length of `name` attribute is not 32 bytes");
-            return NULL;
+            goto CleanAlloca;
         }
         if (h2o_hex_decode(name, t->data.scalar, sizeof(ticket->name) * 2) != 0) {
             strcpy(errstr, "failed to decode the hex-encoded name");
-            return NULL;
+            goto CleanAlloca;
         }
     });
     FETCH("cipher", {
         if ((cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
             strcpy(errstr, "cannot find the named cipher algorithm");
-            return NULL;
+            goto CleanAlloca;
         }
     });
     FETCH("hash", {
         if ((hash = EVP_get_digestbyname(t->data.scalar)) == NULL) {
             strcpy(errstr, "cannot find the named hash algorgithm");
-            return NULL;
+            goto CleanAlloca;
         }
     });
     FETCH("key", {
@@ -385,29 +386,29 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
         if (strlen(t->data.scalar) != keylen * 2) {
             sprintf(errstr, "length of the `key` attribute is incorrect (is %zu, must be %zu)\n", strlen(t->data.scalar),
                     keylen * 2);
-            return NULL;
+            goto CleanAlloca;
         }
-        key = alloca(keylen + 1);
+        key = (unsigned char*)h2o_mem_alloca(keylen + 1);
         if (h2o_hex_decode(key, t->data.scalar, keylen * 2) != 0) {
             strcpy(errstr, "failed to decode the hex-encoded key");
-            return NULL;
+            goto CleanAlloca;
         }
     });
     FETCH("not_before", {
         if (sscanf(t->data.scalar, "%" SCNu64, &not_before) != 1) {
             strcpy(errstr, "failed to parse the `not_before` attribute");
-            return NULL;
+            goto CleanAlloca;
         }
     });
     FETCH("not_after", {
         if (sscanf(t->data.scalar, "%" SCNu64, &not_after) != 1) {
             strcpy(errstr, "failed to parse the `not_after` attribute");
-            return NULL;
+            goto CleanAlloca;
         }
     });
     if (!(not_before <= not_after)) {
         strcpy(errstr, "`not_after` is not equal to or greater than `not_before`");
-        return NULL;
+        goto CleanAlloca;
     }
 
 #undef FETCH
@@ -416,6 +417,9 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
     memcpy(ticket->name, name, sizeof(ticket->name));
     memcpy(ticket->cipher.key, key, cipher->key_len);
     memcpy(ticket->hmac.key, key + cipher->key_len, hash->block_size);
+
+CleanAlloca:
+    h2o_mem_alloca_free(key);
     return ticket;
 }
 
@@ -425,10 +429,10 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
     yoml_t *doc;
     size_t i;
 
-    *tickets = (session_ticket_vector_t){};
+    *tickets = {};
     yaml_parser_initialize(&parser);
 
-    yaml_parser_set_input_string(&parser, src, len);
+    yaml_parser_set_input_string(&parser, (const unsigned char*)src, len);
     if ((doc = yoml_parse_document(&parser, NULL, h2o_mem_set_secure, NULL)) == NULL) {
         sprintf(errstr, "parse error at line %d:%s\n", (int)parser.problem_mark.line, parser.problem);
         goto Error;
@@ -439,13 +443,12 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
     }
     for (i = 0; i != doc->data.sequence.size; ++i) {
         char errbuf[256];
-        struct st_session_ticket_t *ticket = parse_ticket_entry(doc->data.sequence.elements[i], errbuf);
+        struct session_ticket_t *ticket = parse_ticket_entry(doc->data.sequence.elements[i], errbuf);
         if (ticket == NULL) {
             sprintf(errstr, "at element index %zu:%s\n", i, errbuf);
             goto Error;
         }
-        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
-        tickets->entries[tickets->size++] = ticket;
+        tickets->push_back(NULL, ticket);
     }
 
     yoml_free(doc, h2o_mem_set_secure);
@@ -461,11 +464,11 @@ Error:
 
 static h2o_iovec_t serialize_tickets(session_ticket_vector_t *tickets)
 {
-    h2o_iovec_t data = {h2o_mem_alloc(tickets->size * 1024 + 1), 0};
+    h2o_iovec_t data = {h2o_mem_alloc_for<char>(tickets->size * 1024 + 1), 0};
     size_t i;
 
     for (i = 0; i != tickets->size; ++i) {
-        struct st_session_ticket_t *ticket = tickets->entries[i];
+        struct session_ticket_t *ticket = tickets->entries[i];
         size_t l = serialize_ticket_entry(data.base + data.len, 1024, ticket);
         if (l > 1024) {
             fprintf(stderr, "[src/ssl.c] %s:internal buffer overflow\n", __func__);
@@ -476,8 +479,8 @@ static h2o_iovec_t serialize_tickets(session_ticket_vector_t *tickets)
 
     return data;
 Error:
-    free(data.base);
-    return (h2o_iovec_t){};
+    h2o_mem_free(data.base);
+    return {};
 }
 
 static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t now)
@@ -600,7 +603,7 @@ static int load_tickets_file(const char *fn)
 
     ret = 0;
 Exit:
-    free(data.base);
+    h2o_mem_free(data.base);
     free_tickets(&tickets);
     return ret;
 
@@ -651,25 +654,25 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     yoml_t *t;
 
     if ((t = yoml_get(node, "mode")) == NULL) {
-        h2o_configurator_errprintf(cmd, node, "mandatory attribute `mode` is missing");
+        cmd->errprintf(node, "mandatory attribute `mode` is missing");
         return -1;
     }
     if (t->type == YOML_TYPE_SCALAR) {
-        if (strcasecmp(t->data.scalar, "off") == 0) {
+        if (isScalar(t, "off")) {
             modes = 0;
-        } else if (strcasecmp(t->data.scalar, "all") == 0) {
+        } else if (isScalar(t, "all")) {
             modes = MODE_CACHE;
 #if H2O_USE_SESSION_TICKETS
             modes |= MODE_TICKET;
 #endif
-        } else if (strcasecmp(t->data.scalar, "cache") == 0) {
+        } else if (isScalar(t, "cache")) {
             modes = MODE_CACHE;
-        } else if (strcasecmp(t->data.scalar, "ticket") == 0) {
+        } else if (isScalar(t, "ticket")) {
             modes = MODE_TICKET;
         }
     }
     if (modes == -1) {
-        h2o_configurator_errprintf(cmd, t, "value of `mode` must be one of: off | all | cache | ticket");
+        cmd->errprintf(t, "value of `mode` must be one of: off | all | cache | ticket");
         return -1;
     }
 
@@ -677,16 +680,16 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         cache_init_defaults();
         if ((t = yoml_get(node, "cache-store")) != NULL) {
             if (t->type == YOML_TYPE_SCALAR) {
-                if (strcasecmp(t->data.scalar, "internal") == 0) {
+                if (isScalar(t, "internal")) {
                     /* preserve the default */
                     t = NULL;
-                } else if (strcasecmp(t->data.scalar, "memcached") == 0) {
+                } else if (isScalar(t, "memcached")) {
                     conf.cache.setup = setup_cache_memcached;
                     t = NULL;
                 }
             }
             if (t != NULL) {
-                h2o_configurator_errprintf(cmd, t, "value of `cache-store` must be one of: internal | memcached");
+                cmd->errprintf(t, "value of `cache-store` must be one of: internal | memcached");
                 return -1;
             }
         }
@@ -696,13 +699,13 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             if ((t = yoml_get(node, "cache-memcached-num-threads")) != NULL) {
                 if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%zu", &conf.cache.vars.memcached.num_threads) == 1 &&
                       conf.cache.vars.memcached.num_threads != 0)) {
-                    h2o_configurator_errprintf(cmd, t, "`cache-memcached-num-threads` must be a positive number");
+                    cmd->errprintf(t, "`cache-memcached-num-threads` must be a positive number");
                     return -1;
                 }
             }
             if ((t = yoml_get(node, "cache-memcached-prefix")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, t, "`cache-memcached-prefix` must be a string");
+                    cmd->errprintf(t, "`cache-memcached-prefix` must be a string");
                     return -1;
                 }
                 conf.cache.vars.memcached.prefix = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
@@ -717,19 +720,19 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         ticket_init_defaults();
         if ((t = yoml_get(node, "ticket-store")) != NULL) {
             if (t->type == YOML_TYPE_SCALAR) {
-                if (strcasecmp(t->data.scalar, "internal") == 0) {
+                if (isScalar(t, "internal")) {
                     /* ok, preserve the defaults */
                     t = NULL;
-                } else if (strcasecmp(t->data.scalar, "file") == 0) {
+                } else if (isScalar(t, "file")) {
                     conf.ticket.update_thread = ticket_file_updater;
                     t = NULL;
-                } else if (strcasecmp(t->data.scalar, "memcached") == 0) {
+                } else if (isScalar(t, "memcached")) {
                     conf.ticket.update_thread = ticket_memcached_updater;
                     t = NULL;
                 }
             }
             if (t != NULL) {
-                h2o_configurator_errprintf(cmd, t, "value of `ticket-store` must be one of: internal | file");
+                cmd->errprintf(t, "value of `ticket-store` must be one of: internal | file");
                 return -1;
             }
         }
@@ -738,22 +741,22 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             if ((t = yoml_get(node, "ticket-cipher")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR ||
                     (conf.ticket.vars.generating.cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
-                    h2o_configurator_errprintf(cmd, t, "unknown cipher algorithm");
+                    cmd->errprintf(t, "unknown cipher algorithm");
                     return -1;
                 }
             }
             if ((t = yoml_get(node, "ticket-hash")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR ||
                     (conf.ticket.vars.generating.md = EVP_get_digestbyname(t->data.scalar)) == NULL) {
-                    h2o_configurator_errprintf(cmd, t, "unknown hash algorithm");
+                    cmd->errprintf(t, "unknown hash algorithm");
                     return -1;
                 }
             }
             if (conf.ticket.update_thread == ticket_memcached_updater) {
-                conf.ticket.vars.memcached.key = h2o_iovec_init(H2O_STRLIT("h2o:ssl-session-key"));
+                conf.ticket.vars.memcached.key.init(H2O_STRLIT("h2o:ssl-session-key"));
                 if ((t = yoml_get(node, "ticket-memcached-prefix")) != NULL) {
                     if (t->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, t, "`ticket-memcached-key` must be a string");
+                        cmd->errprintf(t, "`ticket-memcached-key` must be a string");
                         return -1;
                     }
                     conf.ticket.vars.memcached.key = h2o_strdup(NULL, t->data.scalar, SIZE_MAX);
@@ -762,11 +765,11 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         } else if (conf.ticket.update_thread == ticket_file_updater) {
             /* file updater reads the contents of the file and uses it as the session ticket secret */
             if ((t = yoml_get(node, "ticket-file")) == NULL) {
-                h2o_configurator_errprintf(cmd, node, "mandatory attribute `file` is missing");
+                cmd->errprintf(node, "mandatory attribute `file` is missing");
                 return -1;
             }
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "`file` must be a string");
+                cmd->errprintf(node, "`file` must be a string");
                 return -1;
             }
             conf.ticket.vars.file.filename = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
@@ -788,27 +791,27 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             if (value == t)
                 continue;
             if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, key, "attribute must be a string");
+                cmd->errprintf(key, "attribute must be a string");
                 return -1;
             }
             if (strcmp(key->data.scalar, "host") == 0) {
                 if (value->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, value, "`host` must be a string");
+                    cmd->errprintf(value, "`host` must be a string");
                     return -1;
                 }
                 conf.memcached.host = h2o_strdup(NULL, value->data.scalar, SIZE_MAX).base;
             } else if (strcmp(key->data.scalar, "port") == 0) {
                 if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &conf.memcached.port) == 1)) {
-                    h2o_configurator_errprintf(cmd, value, "`port` must be a number");
+                    cmd->errprintf(value, "`port` must be a number");
                     return -1;
                 }
             } else {
-                h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
+                cmd->errprintf(key, "unknown attribute: %s", key->data.scalar);
                 return -1;
             }
         }
         if (conf.memcached.host == NULL) {
-            h2o_configurator_errprintf(cmd, t, "mandatory attribute `host` is missing");
+            cmd->errprintf(t, "mandatory attribute `host` is missing");
             return -1;
         }
     }
@@ -818,13 +821,13 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     uses_memcached = (uses_memcached || conf.ticket.update_thread == ticket_memcached_updater);
 #endif
     if (uses_memcached && conf.memcached.host == NULL) {
-        h2o_configurator_errprintf(cmd, node, "configuration of memcached is missing");
+        cmd->errprintf(node, "configuration of memcached is missing");
         return -1;
     }
 
     if ((t = yoml_get(node, "lifetime")) != NULL) {
         if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &conf.lifetime) == 1 && conf.lifetime != 0)) {
-            h2o_configurator_errprintf(cmd, t, "value of `lifetime` must be a positive number");
+            cmd->errprintf(t, "value of `lifetime` must be a positive number");
             return -1;
         }
     }
@@ -880,7 +883,7 @@ static unsigned long thread_id_callback(void)
 void init_openssl(void)
 {
     int nlocks = CRYPTO_num_locks(), i;
-    mutexes = h2o_mem_alloc(sizeof(*mutexes) * nlocks);
+    mutexes = h2o_mem_alloc_for<pthread_mutex_t>(nlocks);
     for (i = 0; i != nlocks; ++i)
         pthread_mutex_init(mutexes + i, NULL);
     CRYPTO_set_locking_callback(lock_callback);

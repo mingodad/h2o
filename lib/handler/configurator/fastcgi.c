@@ -33,36 +33,35 @@
 #include "h2o/configurator.h"
 #include "h2o/serverutil.h"
 
-struct fastcgi_configurator_t {
-    h2o_configurator_t super;
+struct fastcgi_configurator_t : h2o_configurator_t {
     h2o_fastcgi_config_vars_t *vars;
     h2o_fastcgi_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->io_timeout);
+    fastcgi_configurator_t *self = (fastcgi_configurator_t *)cmd->configurator;
+    return cmd->scanf(node, "%" PRIu64, &self->vars->io_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->keepalive_timeout);
+    fastcgi_configurator_t *self = (fastcgi_configurator_t *)cmd->configurator;
+    return cmd->scanf(node, "%" PRIu64, &self->vars->keepalive_timeout);
 }
 
 static int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    fastcgi_configurator_t *self = (fastcgi_configurator_t *)cmd->configurator;
 
     if (node->data.scalar[0] == '\0') {
         /* unset */
-        self->vars->document_root = h2o_iovec_init(NULL, 0);
+        self->vars->document_root.init(NULL, 0);
     } else if (node->data.scalar[0] == '/') {
         /* set */
-        self->vars->document_root = h2o_iovec_init(node->data.scalar, strlen(node->data.scalar));
+        self->vars->document_root.init(node->data.scalar, strlen(node->data.scalar));
     } else {
-        h2o_configurator_errprintf(cmd, node, "value does not start from `/`");
+        cmd->errprintf(node, "value does not start from `/`");
         return -1;
     }
     return 0;
@@ -70,18 +69,16 @@ static int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configur
 
 static int on_config_send_delegated_uri(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    ssize_t v;
-
-    if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+    ssize_t v = cmd->get_one_of(node, "OFF,ON");
+    if (v == -1)
         return -1;
-    self->vars->send_delegated_uri = (int)v;
+    ((fastcgi_configurator_t *)cmd->configurator)->vars->send_delegated_uri = (int)v;
     return 0;
 }
 
 static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    fastcgi_configurator_t *self = (fastcgi_configurator_t *)cmd->configurator;
     const char *hostname = "127.0.0.1", *servname = NULL, *type = "tcp";
 
     /* fetch servname (and hostname) */
@@ -93,30 +90,30 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         yoml_t *t;
         if ((t = yoml_get(node, "host")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`host` is not a string");
+                cmd->errprintf(t, "`host` is not a string");
                 return -1;
             }
             hostname = t->data.scalar;
         }
         if ((t = yoml_get(node, "port")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
+            cmd->errprintf(node, "cannot find mandatory property `port`");
             return -1;
         }
         if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "`port` is not a string");
+            cmd->errprintf(node, "`port` is not a string");
             return -1;
         }
         servname = t->data.scalar;
         if ((t = yoml_get(node, "type")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`type` is not a string");
+                cmd->errprintf(t, "`type` is not a string");
                 return -1;
             }
             type = t->data.scalar;
         }
     } break;
     default:
-        h2o_configurator_errprintf(cmd, node,
+        cmd->errprintf(node,
                                    "value must be a string or a mapping (with keys: `port` and optionally `host` and `type`)");
         return -1;
     }
@@ -125,22 +122,22 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         /* unix socket */
         struct sockaddr_un sa = {};
         if (strlen(servname) >= sizeof(sa.sun_path)) {
-            h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
+            cmd->errprintf(node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
         sa.sun_family = AF_UNIX;
         strcpy(sa.sun_path, servname);
-        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), self->vars);
+        h2o_fastcgi_register_by_address(ctx->pathconf, (sockaddr *)&sa, sizeof(sa), self->vars);
     } else if (strcmp(type, "tcp") == 0) {
         /* tcp socket */
         uint16_t port;
         if (sscanf(servname, "%" SCNu16, &port) != 1) {
-            h2o_configurator_errprintf(cmd, node, "invalid port number:%s", servname);
+            cmd->errprintf(node, "invalid port number:%s", servname);
             return -1;
         }
         h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
     } else {
-        h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
+        cmd->errprintf(node, "unknown listen type: %s", type);
         return -1;
     }
 
@@ -159,26 +156,26 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
 
     /* create socket */
     if ((listen_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        h2o_configurator_errprintf(cmd, node, "socket(2) failed: %s", strerror(errno));
+        cmd->errprintf(node, "socket(2) failed: %s", strerror(errno));
         goto Error;
     }
-    if (bind(listen_fd, (void *)sa, sizeof(*sa)) != 0) {
-        h2o_configurator_errprintf(cmd, node, "bind(2) failed: %s", strerror(errno));
+    if (bind(listen_fd, (sockaddr *)sa, sizeof(*sa)) != 0) {
+        cmd->errprintf(node, "bind(2) failed: %s", strerror(errno));
         goto Error;
     }
     if (listen(listen_fd, H2O_SOMAXCONN) != 0) {
-        h2o_configurator_errprintf(cmd, node, "listen(2) failed: %s", strerror(errno));
+        cmd->errprintf(node, "listen(2) failed: %s", strerror(errno));
         goto Error;
     }
     /* change ownership of socket */
     if (pw != NULL && chown(sa->sun_path, pw->pw_uid, pw->pw_gid) != 0) {
-        h2o_configurator_errprintf(cmd, node, "chown(2) failed to change ownership of socket:%s:%s", sa->sun_path, strerror(errno));
+        cmd->errprintf(node, "chown(2) failed to change ownership of socket:%s:%s", sa->sun_path, strerror(errno));
         goto Error;
     }
 
     /* create pipe which is used to notify the termination of the server */
     if (pipe(pipe_fds) != 0) {
-        h2o_configurator_errprintf(cmd, node, "pipe(2) failed: %s", strerror(errno));
+        cmd->errprintf(node, "pipe(2) failed: %s", strerror(errno));
         pipe_fds[0] = -1;
         pipe_fds[1] = -1;
         goto Error;
@@ -186,13 +183,15 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
     fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC);
 
     /* spawn */
-    int mapped_fds[] = {listen_fd, 0,   /* listen_fd to 0 */
-                        pipe_fds[0], 5, /* pipe_fds[0] to 5 */
-                        -1};
-    pid_t pid = h2o_spawnp(argv[0], argv, mapped_fds, 0);
-    if (pid == -1) {
-        fprintf(stderr, "[lib/handler/fastcgi.c] failed to launch helper program %s:%s\n", argv[0], strerror(errno));
-        goto Error;
+    {
+        int mapped_fds[] = {listen_fd, 0,   /* listen_fd to 0 */
+                            pipe_fds[0], 5, /* pipe_fds[0] to 5 */
+                            -1};
+        pid_t pid = h2o_spawnp(argv[0], argv, mapped_fds, 0);
+        if (pid == -1) {
+            fprintf(stderr, "[lib/handler/fastcgi.c] failed to launch helper program %s:%s\n", argv[0], strerror(errno));
+            goto Error;
+        }
     }
 
     close(listen_fd);
@@ -221,11 +220,11 @@ void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
 
 static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    char *spawn_user = NULL, *spawn_cmd;
+    fastcgi_configurator_t *self = (fastcgi_configurator_t *)cmd->configurator;
+    const char *spawn_user = NULL, *spawn_cmd;
     char *kill_on_close_cmd_path = NULL, *setuidgid_cmd_path = NULL;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
-    char *argv[10];
+    const char *argv[10];
     int spawner_fd;
     struct sockaddr_un sa = {};
     h2o_fastcgi_config_vars_t config_vars;
@@ -241,25 +240,25 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     case YOML_TYPE_MAPPING: {
         yoml_t *t;
         if ((t = yoml_get(node, "command")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory attribute `command` does not exist");
+            cmd->errprintf(node, "mandatory attribute `command` does not exist");
             return -1;
         }
         if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "attribute `command` must be scalar");
+            cmd->errprintf(node, "attribute `command` must be scalar");
             return -1;
         }
         spawn_cmd = t->data.scalar;
         spawn_user = ctx->globalconf->user;
         if ((t = yoml_get(node, "user")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "attribute `user` must be scalar");
+                cmd->errprintf(node, "attribute `user` must be scalar");
                 return -1;
             }
             spawn_user = t->data.scalar;
         }
     } break;
     default:
-        h2o_configurator_errprintf(cmd, node, "argument must be scalar or mapping");
+        cmd->errprintf(node, "argument must be scalar or mapping");
         return -1;
     }
 
@@ -267,11 +266,11 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     if (spawn_user != NULL) {
         /* change ownership of temporary directory */
         if (getpwnam_r(spawn_user, &spawn_pwbuf, spawn_buf, sizeof(spawn_buf), &spawn_pw) != 0) {
-            h2o_configurator_errprintf(cmd, node, "getpwnam_r(3) failed to get password file entry");
+            cmd->errprintf(node, "getpwnam_r(3) failed to get password file entry");
             goto Exit;
         }
         if (spawn_pw == NULL) {
-            h2o_configurator_errprintf(cmd, node, "unknown user:%s", spawn_user);
+            cmd->errprintf(node, "unknown user:%s", spawn_user);
             goto Exit;
         }
     } else {
@@ -303,19 +302,19 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     } else {
         /* create temporary directory */
         if (mkdtemp(dirname) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mkdtemp(3) failed to create temporary directory:%s:%s", dirname,
+            cmd->errprintf(node, "mkdtemp(3) failed to create temporary directory:%s:%s", dirname,
                                        strerror(errno));
             dirname[0] = '\0';
             goto Exit;
         }
         /* change ownership of temporary directory */
         if (spawn_pw != NULL && chown(dirname, spawn_pw->pw_uid, spawn_pw->pw_gid) != 0) {
-            h2o_configurator_errprintf(cmd, node, "chown(2) failed to change ownership of temporary directory:%s:%s", dirname,
+            cmd->errprintf(node, "chown(2) failed to change ownership of temporary directory:%s:%s", dirname,
                                        strerror(errno));
             goto Exit;
         }
         /* launch spawnfcgi command */
-        if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sa, spawn_pw)) == -1) {
+        if ((spawner_fd = create_spawnproc(cmd, node, dirname, (char*const*)argv, &sa, spawn_pw)) == -1) {
             goto Exit;
         }
     }
@@ -323,20 +322,20 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     config_vars = *self->vars;
     config_vars.callbacks.dispose = spawnproc_on_dispose;
     config_vars.callbacks.data = (char *)NULL + spawner_fd;
-    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), &config_vars);
+    h2o_fastcgi_register_by_address(ctx->pathconf, (sockaddr *)&sa, sizeof(sa), &config_vars);
 
     ret = 0;
 Exit:
     if (dirname[0] != '\0')
         unlink(dirname);
-    free(kill_on_close_cmd_path);
-    free(setuidgid_cmd_path);
+    h2o_mem_free(kill_on_close_cmd_path);
+    h2o_mem_free(setuidgid_cmd_path);
     return ret;
 }
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)_self;
+    fastcgi_configurator_t *self = (fastcgi_configurator_t *)_self;
 
     memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
     ++self->vars;
@@ -345,7 +344,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct fastcgi_configurator_t *self = (void *)_self;
+    fastcgi_configurator_t *self = (fastcgi_configurator_t *)_self;
 
     --self->vars;
     return 0;
@@ -353,7 +352,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
 {
-    struct fastcgi_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    auto c = conf->configurator_create<fastcgi_configurator_t>();
 
     /* set default vars */
     c->vars = c->_vars_stack;
@@ -361,24 +360,17 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
     c->vars->keepalive_timeout = 0;
 
     /* setup handlers */
-    c->super.enter = on_config_enter;
-    c->super.exit = on_config_exit;
+    c->enter = on_config_enter;
+    c->exit = on_config_exit;
 
-    h2o_configurator_define_command(&c->super, "fastcgi.connect",
-                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_connect);
-    h2o_configurator_define_command(&c->super, "fastcgi.spawn",
-                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_spawn);
-    h2o_configurator_define_command(&c->super, "fastcgi.timeout.io",
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);
-    h2o_configurator_define_command(&c->super, "fastcgi.timeout.keepalive",
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_timeout_keepalive);
-    h2o_configurator_define_command(&c->super, "fastcgi.document_root",
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_document_root);
-    h2o_configurator_define_command(&c->super, "fastcgi.send-delegated-uri",
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_send_delegated_uri);
+    auto cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION
+                                    | H2O_CONFIGURATOR_FLAG_DEFERRED);
+    c->define_command("fastcgi.connect", cf, on_config_connect);
+    c->define_command("fastcgi.spawn", cf, on_config_spawn);
+
+    cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR);
+    c->define_command("fastcgi.timeout.io", cf, on_config_timeout_io);
+    c->define_command("fastcgi.timeout.keepalive", cf, on_config_timeout_keepalive);
+    c->define_command("fastcgi.document_root", cf, on_config_document_root);
+    c->define_command("fastcgi.send-delegated-uri", cf, on_config_send_delegated_uri);
 }

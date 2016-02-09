@@ -77,7 +77,7 @@ static void test_next_token(void)
         return;                                                                                                                    \
     }
 
-    iter = h2o_iovec_init(H2O_STRLIT("public, max-age=86400, must-revalidate"));
+    iter = h2o_iovec_t::create(H2O_STRLIT("public, max-age=86400, must-revalidate"));
     NEXT();
     ok(h2o_memis(token, token_len, H2O_STRLIT("public")));
     NEXT();
@@ -87,7 +87,7 @@ static void test_next_token(void)
     token = h2o_next_token(&iter, ',', &token_len, NULL);
     ok(token == NULL);
 
-    iter = h2o_iovec_init(H2O_STRLIT("  public  ,max-age=86400  ,"));
+    iter = h2o_iovec_t::create(H2O_STRLIT("  public  ,max-age=86400  ,"));
     NEXT();
     ok(h2o_memis(token, token_len, H2O_STRLIT("public")));
     NEXT();
@@ -95,11 +95,11 @@ static void test_next_token(void)
     token = h2o_next_token(&iter, ',', &token_len, NULL);
     ok(token == NULL);
 
-    iter = h2o_iovec_init(H2O_STRLIT(""));
+    iter = h2o_iovec_t::create(H2O_STRLIT(""));
     token = h2o_next_token(&iter, ',', &token_len, NULL);
     ok(token == NULL);
 
-    iter = h2o_iovec_init(H2O_STRLIT(", ,a, "));
+    iter = h2o_iovec_t::create(H2O_STRLIT(", ,a, "));
     NEXT();
     ok(token_len == 0);
     NEXT();
@@ -124,7 +124,7 @@ static void test_next_token2(void)
         return;                                                                                                                    \
     }
 
-    iter = h2o_iovec_init(H2O_STRLIT("public, max-age=86400, must-revalidate"));
+    iter = h2o_iovec_t::create(H2O_STRLIT("public, max-age=86400, must-revalidate"));
     NEXT();
     ok(h2o_memis(name, name_len, H2O_STRLIT("public")));
     ok(value.base == NULL);
@@ -139,7 +139,7 @@ static void test_next_token2(void)
     name = h2o_next_token(&iter, ',', &name_len, &value);
     ok(name == NULL);
 
-    iter = h2o_iovec_init(H2O_STRLIT("public, max-age = 86400 = c , must-revalidate="));
+    iter = h2o_iovec_t::create(H2O_STRLIT("public, max-age = 86400 = c , must-revalidate="));
     NEXT();
     ok(h2o_memis(name, name_len, H2O_STRLIT("public")));
     ok(value.base == NULL);
@@ -160,7 +160,7 @@ static void test_decode_base64(void)
     h2o_mem_pool_t pool;
     char buf[256];
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
     h2o_iovec_t src = {H2O_STRLIT("The quick brown fox jumps over the lazy dog.")}, decoded;
     h2o_base64_encode(buf, (const uint8_t *)src.base, src.len, 1);
@@ -169,13 +169,13 @@ static void test_decode_base64(void)
     ok(src.len == decoded.len);
     ok(strcmp(decoded.base, src.base) == 0);
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 }
 
 static void test_htmlescape(void)
 {
     h2o_mem_pool_t pool;
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
 #define TEST(src, expected)                                                                                                        \
     do {                                                                                                                           \
@@ -189,7 +189,7 @@ static void test_htmlescape(void)
 
 #undef TEST
 
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 }
 
 static void test_at_position(void)

@@ -44,7 +44,7 @@ h2o_iovec_t h2o_file_read(const char *fn)
         errno = ENOMEM;
         goto Error;
     }
-    if ((ret.base = malloc((size_t)st.st_size)) == NULL)
+    if ((ret.base = h2o_mem_alloc_for<char>((size_t)st.st_size)) == NULL)
         goto Error;
     /* read */
     while (ret.len != (size_t)st.st_size) {
@@ -62,6 +62,6 @@ h2o_iovec_t h2o_file_read(const char *fn)
 Error:
     if (fd != -1)
         close(fd);
-    free(ret.base);
+    h2o_mem_free(ret.base);
     return (h2o_iovec_t){};
 }

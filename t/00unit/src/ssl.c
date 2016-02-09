@@ -26,6 +26,7 @@ const uint64_t UTC2000 = (365 * 30 + 7) * 86400;
 
 static void test_load_tickets_file(void)
 {
+    session_ticket_t *ticket;
     int ret = load_tickets_file("t/assets/session_tickets.yaml");
     ok(ret == 0);
     if (ret != 0)
@@ -37,7 +38,7 @@ static void test_load_tickets_file(void)
         goto Exit;
 
     /* first entry should be the newer one */
-    struct st_session_ticket_t *ticket = session_tickets.tickets.entries[0];
+    ticket = session_tickets.tickets[0];
     ok(memcmp(ticket->name, H2O_STRLIT("\xe7\xe3\xc6\x98\x0b\x18\x32\xbd\x5d\x23\x91\x75\x72\xe8\x44\x8f")) == 0);
     ok(ticket->cipher.cipher == EVP_aes_256_cbc());
     ok(memcmp(ticket->cipher.key, H2O_STRLIT("\xf6\xe0\x71\xd9\x93\xb0\x5f\x77\xce\x51\xcb\x0f\xe2\xe0\xe1\x8c\x72\x00\xc2\xa7"
@@ -51,7 +52,7 @@ static void test_load_tickets_file(void)
     ok(ticket->not_after == 1437096929);
 
     /* second is the older one */
-    ticket = session_tickets.tickets.entries[1];
+    ticket = session_tickets.tickets[1];
     ok(memcmp(ticket->name, H2O_STRLIT("\xa3\x97\xb6\xb7\xfa\xb9\x29\x36\x62\x03\xf1\x6f\xc8\x1f\xfb\xed")) == 0);
     ok(ticket->cipher.cipher == EVP_aes_128_cbc());
     ok(memcmp(ticket->cipher.key, H2O_STRLIT("\xf1\xed\x89\xcd\xe6\x87\x63\x63\x0e\x80\xd2\xbe\x82\x7c\xfb\x98")) == 0);
@@ -66,17 +67,17 @@ static void test_load_tickets_file(void)
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437092429);
     ok(ticket == NULL);
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437092430);
-    ok(ticket == session_tickets.tickets.entries[1]);
+    ok(ticket == session_tickets.tickets[1]);
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437093329);
-    ok(ticket == session_tickets.tickets.entries[1]);
+    ok(ticket == session_tickets.tickets[1]);
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437093330);
-    ok(ticket == session_tickets.tickets.entries[0]);
+    ok(ticket == session_tickets.tickets[0]);
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437096029);
-    ok(ticket == session_tickets.tickets.entries[0]);
+    ok(ticket == session_tickets.tickets[0]);
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437096030);
-    ok(ticket == session_tickets.tickets.entries[0]);
+    ok(ticket == session_tickets.tickets[0]);
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437096929);
-    ok(ticket == session_tickets.tickets.entries[0]);
+    ok(ticket == session_tickets.tickets[0]);
     ticket = find_ticket_for_encryption(&session_tickets.tickets, 1437096930);
     ok(ticket == NULL);
 
@@ -93,9 +94,9 @@ static void test_serialize_tickets(void)
     int ret;
     size_t i;
 
-    h2o_vector_reserve(NULL, (void *)&orig, sizeof(orig.entries[0]), orig.size + 2);
-    orig.entries[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000, UTC2000 + 3600, 1);
-    orig.entries[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000 + 600, UTC2000 + 4200, 1);
+    orig.reserve(NULL, orig.size + 2);
+    orig[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000, UTC2000 + 3600, 1);
+    orig[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000 + 600, UTC2000 + 4200, 1);
 
     serialized = serialize_tickets(&orig);
     ok(serialized.base != NULL);
@@ -105,13 +106,13 @@ static void test_serialize_tickets(void)
 
     ok(parsed.size == orig.size);
     for (i = 0; i != parsed.size; ++i) {
-#define OK_VALUE(n) ok(parsed.entries[i]->n == orig.entries[i]->n)
-#define OK_MEMCMP(n, s) ok(memcmp(parsed.entries[i]->n, orig.entries[i]->n, (s)) == 0)
-        OK_MEMCMP(name, sizeof(parsed.entries[i]->name));
+#define OK_VALUE(n) ok(parsed[i]->n == orig[i]->n)
+#define OK_MEMCMP(n, s) ok(memcmp(parsed[i]->n, orig[i]->n, (s)) == 0)
+        OK_MEMCMP(name, sizeof(parsed[i]->name));
         OK_VALUE(cipher.cipher);
-        OK_MEMCMP(cipher.key, parsed.entries[i]->cipher.cipher->key_len);
+        OK_MEMCMP(cipher.key, parsed[i]->cipher.cipher->key_len);
         OK_VALUE(hmac.md);
-        OK_MEMCMP(hmac.key, parsed.entries[i]->hmac.md->block_size);
+        OK_MEMCMP(hmac.key, parsed[i]->hmac.md->block_size);
         OK_VALUE(not_before);
         OK_VALUE(not_after);
 #undef OK_VALUE
@@ -120,7 +121,7 @@ static void test_serialize_tickets(void)
 
     free_tickets(&orig);
     free_tickets(&parsed);
-    free(serialized.base);
+    h2o_mem_free(serialized.base);
 }
 
 static void test_memcached_ticket_update(void)
@@ -159,36 +160,36 @@ static void test_memcached_ticket_update(void)
         return;
 
     /* set a new entry that immediately becomes active */
-    int retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000);
+    int retry = ticket_memcached_update_tickets(&conn, h2o_iovec_t::create(H2O_STRLIT(TEST_KEY)), UTC2000);
     ok(retry == 1); /* first attempt should return a retry, since valid ticket does not exist */
-    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + 1);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_t::create(H2O_STRLIT(TEST_KEY)), UTC2000 + 1);
     ok(retry == 0);
     ok(session_tickets.tickets.size == 1);
-    ok(session_tickets.tickets.entries[0]->not_before == UTC2000);
+    ok(session_tickets.tickets[0]->not_before == UTC2000);
 
     /* continue using existing one */
-    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime / 8);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_t::create(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime / 8);
     ok(retry == 0);
     ok(session_tickets.tickets.size == 1);
-    ok(session_tickets.tickets.entries[0]->not_before == UTC2000);
+    ok(session_tickets.tickets[0]->not_before == UTC2000);
 
     /* schedule a new entry */
-    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime / 2);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_t::create(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime / 2);
     ok(retry == 1);
-    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime / 2);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_t::create(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime / 2);
     ok(retry == 0);
     ok(session_tickets.tickets.size == 2);
-    ok(session_tickets.tickets.entries[0]->not_before > UTC2000 + conf.lifetime / 2);
-    ok(session_tickets.tickets.entries[1]->not_before == UTC2000);
+    ok(session_tickets.tickets[0]->not_before > UTC2000 + conf.lifetime / 2);
+    ok(session_tickets.tickets[1]->not_before == UTC2000);
 
     /* old entry gets removed when expired, and new entry is scheduled */
-    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_t::create(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime);
     ok(retry == 1);
-    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_t::create(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime);
     ok(retry == 0);
     ok(session_tickets.tickets.size == 2);
-    ok(session_tickets.tickets.entries[0]->not_before > UTC2000 + conf.lifetime);
-    ok(session_tickets.tickets.entries[1]->not_before > UTC2000 + conf.lifetime / 2);
+    ok(session_tickets.tickets[0]->not_before > UTC2000 + conf.lifetime);
+    ok(session_tickets.tickets[1]->not_before > UTC2000 + conf.lifetime / 2);
 
     /* disconnect */
     yrmcds_close(&conn);

@@ -22,7 +22,7 @@
 #ifndef h2o__socket_pool_h
 #define h2o__socket_pool_h
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 extern "C" {
 #endif
 
@@ -110,7 +110,7 @@ inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *
     return sock->on_close.data == pool;
 }
 
-#ifdef __cplusplus
+#if defined( __cplusplus) && !defined(__c_as_cpp)
 }
 #endif
 

@@ -45,7 +45,7 @@ void h2o_set_signal_handler(int signo, void (*cb)(int signo))
 {
     struct sigaction action;
 
-    memset(&action, 0, sizeof(action));
+    h2o_clearmem(&action);
     sigemptyset(&action.sa_mask);
     action.sa_handler = cb;
     sigaction(signo, &action, NULL);
@@ -54,7 +54,7 @@ void h2o_set_signal_handler(int signo, void (*cb)(int signo))
 int h2o_setuidgid(const char *user)
 {
     struct passwd pwbuf, *pw;
-    char buf[65536]; /* should be large enough */
+    char buf[16384]; /* should be large enough, but how much is enough ?*/
 
     errno = 0;
     if (getpwnam_r(user, &pwbuf, buf, sizeof(buf), &pw) != 0) {
@@ -85,7 +85,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
 {
     const char *ports_env, *start, *end, *eq;
     size_t t;
-    H2O_VECTOR(int)fds = {};
+    H2O_VECTOR<int>fds;
 
     if ((ports_env = getenv("SERVER_STARTER_PORT")) == NULL)
         return 0;
@@ -98,7 +98,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
     for (start = ports_env; *start != '\0'; start = *end == ';' ? end + 1 : end) {
         if ((end = strchr(start, ';')) == NULL)
             end = start + strlen(start);
-        if ((eq = memchr(start, '=', end - start)) == NULL) {
+        if ((eq = (const char*)memchr(start, '=', end - start)) == NULL) {
             fprintf(stderr, "invalid $SERVER_STARTER_PORT, an element without `=` in: %s\n", ports_env);
             return SIZE_MAX;
         }
@@ -106,8 +106,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
             fprintf(stderr, "invalid file descriptor number in $SERVER_STARTER_PORT: %s\n", ports_env);
             return SIZE_MAX;
         }
-        h2o_vector_reserve(NULL, (void *)&fds, sizeof(fds.entries[0]), fds.size + 1);
-        fds.entries[fds.size++] = (int)t;
+        fds.push_back(NULL, t);
     }
 
     *_fds = fds.entries;
@@ -125,7 +124,7 @@ static char **build_spawn_env(void)
             return NULL;
 
     /* not found */
-    char **newenv = h2o_mem_alloc(sizeof(*newenv) * (num + 2) + sizeof("H2O_ROOT=" H2O_TO_STR(H2O_ROOT)));
+    char **newenv = (char**)h2o_mem_alloc(sizeof(*newenv) * (num + 2) + sizeof("H2O_ROOT=" H2O_TO_STR(H2O_ROOT)));
     memcpy(newenv, environ, sizeof(*newenv) * num);
     newenv[num] = (char *)(newenv + num + 2);
     newenv[num + 1] = NULL;
@@ -222,7 +221,7 @@ Error:
     errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, env != NULL ? env : environ);
     if (!cloexec_mutex_is_locked)
         pthread_mutex_unlock(&cloexec_mutex);
-    free(env);
+    h2o_mem_free(env);
     if (errno != 0)
         return -1;
 
@@ -231,7 +230,7 @@ Error:
 #endif
 }
 
-int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status)
+int h2o_read_command(const char *cmd, const char **argv, h2o_buffer_t **resp, int *child_status)
 {
     int respfds[2] = {-1, -1};
     pid_t pid = -1;
@@ -248,10 +247,12 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     fcntl(respfds[0], F_SETFD, O_CLOEXEC);
 
     /* spawn */
-    int mapped_fds[] = {respfds[1], 1, /* stdout of the child process is read from the pipe */
-                        -1};
-    if ((pid = h2o_spawnp(cmd, argv, mapped_fds, 1)) == -1)
-        goto Exit;
+    {
+        int mapped_fds[] = {respfds[1], 1, /* stdout of the child process is read from the pipe */
+                            -1};
+        if ((pid = h2o_spawnp(cmd, (char*const*)argv, mapped_fds, 1)) == -1)
+            goto Exit;
+    }
     close(respfds[1]);
     respfds[1] = -1;
 
