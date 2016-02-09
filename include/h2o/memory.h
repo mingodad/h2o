@@ -466,7 +466,7 @@ struct h2o_buffer_t {
 
     static void dispose_linked(void *p);
 
-    void append(const char *src, size_t len)
+    void append(const void *src, size_t len)
     {
     }
     void append(const h2o_iovec_t &src)

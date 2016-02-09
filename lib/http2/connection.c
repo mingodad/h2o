@@ -373,7 +373,7 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn,
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    conn->_headers_unparsed->append((const char*)frame.payload, frame.length);
+    conn->_headers_unparsed->append(frame.payload, frame.length);
 
     if (conn->_headers_unparsed->size <= H2O_MAX_REQLEN) {
         if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
@@ -480,7 +480,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame,
     } else {
         h2o_iovec_t buf = stream->_req_body->reserve(payload.length);
         if (buf.base != NULL) {
-            stream->_req_body->append((const char *)payload.data, payload.length);
+            stream->_req_body->append(payload.data, payload.length);
             /* handle request if request body is complete */
             if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
                 stream->req.entity.init(stream->_req_body->bytes, stream->_req_body->size);
@@ -563,7 +563,7 @@ PREPARE_FOR_CONTINUATION:
     /* request is not complete, store in buffer */
     conn->_read_expect = expect_continuation_of_headers;
     conn->_headers_unparsed->init(&h2o_socket_buffer_prototype);
-    conn->_headers_unparsed->append((const char*)payload.headers, payload.headers_len);
+    conn->_headers_unparsed->append(payload.headers, payload.headers_len);
     return 0;
 }
 
