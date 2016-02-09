@@ -435,7 +435,7 @@ struct h2o_buffer_t {
     void link_to_pool(h2o_mem_pool_t *pool)
     {
         /*
-        h2o_buffer_t **slot = (h2o_buffer_t **)pool->alloc_shared(sizeof(*slot), h2o_buffer__dispose_linked);
+        h2o_buffer_t **slot = (h2o_buffer_t **)pool->alloc_shared(sizeof(*slot), dispose_linked);
         *slot = buffer;
         */
     }
@@ -452,13 +452,27 @@ struct h2o_buffer_t {
      * exponential backoff for already-allocated buffers.
      */
     h2o_iovec_t reserve(size_t min_guarantee);
+    h2o_iovec_t reserve_resize(size_t min_guarantee)
+    {
+        h2o_iovec_t t = this->reserve(min_guarantee);
+        this->size += min_guarantee;
+        return t;
+    }
     /**
      * throws away given size of the data from the buffer.
      * @param delta number of octets to be drained from the buffer
      */
     void consume(size_t delta);
 
-    void dispose_linked(void *p);
+    static void dispose_linked(void *p);
+
+    void append(const char *src, size_t len)
+    {
+    }
+    void append(const h2o_iovec_t &src)
+    {
+        append(src.base, src.len);
+    }
 };
 
 struct h2o_buffer_mmap_settings_t {

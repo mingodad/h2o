@@ -373,9 +373,7 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn,
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    conn->_headers_unparsed->reserve(frame.length);
-    memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
-    conn->_headers_unparsed->size += frame.length;
+    conn->_headers_unparsed->append((const char*)frame.payload, frame.length);
 
     if (conn->_headers_unparsed->size <= H2O_MAX_REQLEN) {
         if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
@@ -482,8 +480,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame,
     } else {
         h2o_iovec_t buf = stream->_req_body->reserve(payload.length);
         if (buf.base != NULL) {
-            memcpy(buf.base, payload.data, payload.length);
-            stream->_req_body->size += payload.length;
+            stream->_req_body->append((const char *)payload.data, payload.length);
             /* handle request if request body is complete */
             if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
                 stream->req.entity.init(stream->_req_body->bytes, stream->_req_body->size);
@@ -566,9 +563,7 @@ PREPARE_FOR_CONTINUATION:
     /* request is not complete, store in buffer */
     conn->_read_expect = expect_continuation_of_headers;
     conn->_headers_unparsed->init(&h2o_socket_buffer_prototype);
-    conn->_headers_unparsed->reserve(payload.headers_len);
-    memcpy(conn->_headers_unparsed->bytes, payload.headers, payload.headers_len);
-    conn->_headers_unparsed->size = payload.headers_len;
+    conn->_headers_unparsed->append((const char*)payload.headers, payload.headers_len);
     return 0;
 }
 
@@ -636,9 +631,8 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         if (ret != 0)
             return ret;
         { /* schedule ack */
-            h2o_iovec_t header_buf = conn->_write.buf->reserve(H2O_HTTP2_FRAME_HEADER_SIZE);
+            h2o_iovec_t header_buf = conn->_write.buf->reserve_resize(H2O_HTTP2_FRAME_HEADER_SIZE);
             h2o_http2_encode_frame_header((uint8_t *)header_buf.base, 0, H2O_HTTP2_FRAME_TYPE_SETTINGS, H2O_HTTP2_FRAME_FLAG_ACK, 0);
-            conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE;
             conn->request_write();
         }
         /* apply the change to window size (to all the streams but not the connection, see 6.9.2 of draft-15) */
@@ -796,9 +790,7 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     }
 
     { /* send SETTINGS */
-        h2o_iovec_t vec = conn->_write.buf->reserve(SETTINGS_HOST_BIN.len);
-        memcpy(vec.base, SETTINGS_HOST_BIN.base, SETTINGS_HOST_BIN.len);
-        conn->_write.buf->size += SETTINGS_HOST_BIN.len;
+        conn->_write.buf->append(SETTINGS_HOST_BIN);
         conn->request_write();
     }
 

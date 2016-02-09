@@ -210,9 +210,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
             chunked->bytes_left -= len;
         }
         if (len != 0) {
-            chunked->callback.receiving->reserve(len);
-            memcpy(chunked->callback.receiving->bytes + chunked->callback.receiving->size, s, len);
-            chunked->callback.receiving->size += len;
+            chunked->callback.receiving->append(s, len);
             if (chunked->sending.bytes_inflight == 0)
                 do_send(generator, chunked->callback.receiving, 0);
         }

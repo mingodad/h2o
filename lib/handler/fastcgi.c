@@ -535,9 +535,7 @@ static void append_content(fcgi_generator_t *generator, const void *src, size_t 
         generator->leftsize -= len;
     }
 
-    h2o_iovec_t reserved = generator->resp.receiving->reserve(len);
-    memcpy(reserved.base, src, len);
-    generator->resp.receiving->size += len;
+    generator->resp.receiving->append(src, len);
 }
 
 static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t *header) {
@@ -562,11 +560,9 @@ static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t
                 input->size, headers, &num_headers, 0);
     } else {
         size_t prevlen = generator->resp.receiving->size;
-        memcpy(generator->resp.receiving->reserve(
-                header->contentLength).base,
+        generator->resp.receiving->append(
                 input->bytes + FCGI_RECORD_HEADER_SIZE,
                 header->contentLength);
-        generator->resp.receiving->size = prevlen + header->contentLength;
         parse_result =
                 phr_parse_headers(generator->resp.receiving->bytes,
                 generator->resp.receiving->size, headers, &num_headers, prevlen);

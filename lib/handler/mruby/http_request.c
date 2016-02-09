@@ -177,9 +177,7 @@ static void post_error(struct h2o_mruby_http_request_context_t *ctx,
 
     ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
-    ctx->resp.after_closed->reserve(errstr_len);
-    memcpy(ctx->resp.after_closed->bytes + ctx->resp.after_closed->size, errstr, errstr_len);
-    ctx->resp.after_closed->size += errstr_len;
+    ctx->resp.after_closed->append(errstr, errstr_len);
     ctx->resp.has_content = 1;
 
     post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
@@ -288,12 +286,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client,
     return on_head;
 }
 
-static inline void append_to_buffer(h2o_buffer_t **buf, const void *src, size_t len)
-{
-    memcpy((*buf)->bytes + (*buf)->size, src, len);
-    (*buf)->size += len;
-}
-
 static int flatten_request_header(h2o_mruby_context_t *handler_ctx,
         h2o_iovec_t name, h2o_iovec_t value, void *_ctx)
 {
@@ -309,11 +301,10 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx,
     if (h2o_io_vector_literal_lcis(name, "transfer-encoding"))
         ctx->req.has_transfer_encoding = 1;
 
-    ctx->req.buf->reserve(name.len + value.len + sizeof(": \r\n") - 1);
-    append_to_buffer(&ctx->req.buf, name.base, name.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(": "));
-    append_to_buffer(&ctx->req.buf, value.base, value.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    ctx->req.buf->append(name.base, name.len);
+    ctx->req.buf->append(H2O_STRLIT(": "));
+    ctx->req.buf->append(value.base, value.len);
+    ctx->req.buf->append(H2O_STRLIT("\r\n"));
 
     return 0;
 }
@@ -360,15 +351,12 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     }
 
     /* start building the request */
-    ctx->req.buf->reserve(method.len + 1);
-    append_to_buffer(&ctx->req.buf, method.base, method.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
-    ctx->req.buf->reserve(
-                       url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
-    append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
-    append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    ctx->req.buf->append(method.base, method.len);
+    ctx->req.buf->append(H2O_STRLIT(" "));
+    ctx->req.buf->append(url.path.base, url.path.len);
+    ctx->req.buf->append(H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+    ctx->req.buf->append(url.authority.base, url.authority.len);
+    ctx->req.buf->append(H2O_STRLIT("\r\n"));
 
     /* headers */
     if (mrb_hash_p(arg_hash)) {
@@ -403,14 +391,12 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
             if (!ctx->req.has_transfer_encoding) {
                 char buf[64];
                 size_t l = (size_t)snprintf(buf, sizeof(buf), "content-length: %zu\r\n", ctx->req.body.len);
-                ctx->req.buf->reserve(l);
-                append_to_buffer(&ctx->req.buf, buf, l);
+                ctx->req.buf->append(buf, l);
             }
         }
     }
 
-    ctx->req.buf->reserve(2);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    ctx->req.buf->append(H2O_STRLIT("\r\n"));
 
     /* build request and connect */
     ctx->client = h2o_http1client_t::connect(ctx,

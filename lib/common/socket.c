@@ -605,9 +605,7 @@ Redo:
         create_ssl(sock, ssl_ctx);
         clear_output_buffer(sock->ssl);
         encrypted->consume(encrypted->size);
-        encrypted->reserve(first_input.len);
-        memcpy(encrypted->bytes, first_input.base, first_input.len);
-        encrypted->size = first_input.len;
+        encrypted->append(first_input);
         sock->read_stop();
         goto CleanAlloca;
     }
