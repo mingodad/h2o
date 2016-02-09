@@ -1,3 +1,5 @@
+This is an attempt to convert h2o from C to C++, right now it still uses the ".c" extension to make it easy to compare with the original h2o files, it's started with h2o version 1.7, it's passing all tests that my machine can perform, to compile it's the same as the original h2o except that it uses a C++ compiler instead of C, right now it doesn't include any C++ library.
+
 H2O - an optimized HTTP server with support for HTTP/1.x and HTTP/2
 ===
 
