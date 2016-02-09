@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="h2o-tests" />
+		<Option pch_mode="2" />
+		<Option compiler="gnu_gcc_compiler_as_g" />
+		<Build>
+			<Target title="Debug">
+				<Option output="h2o-tests" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_as_g" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-fpermissive" />
+					<Add option="-std=c++1y" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="h2o-tests" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_as_g" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+			<Target title="Debug GCC 4.9">
+				<Option output="h2o-tests" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_49_c_as_c" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-fpermissive" />
+					<Add option="-std=c++1y" />
+				</Compiler>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-fpermissive" />
+			<Add option="-std=c++1y" />
+			<Add option="-DH2O_AS_CPP=1" />
+			<Add option="-D_GNU_SOURCE=1" />
+			<Add option="-DH2O_USE_EPOLL=1" />
+			<Add option="-DH2O_USE_MRUBY=1" />
+			<Add option="-D__c_as_cpp=1" />
+			<Add option="-DH2O_UNITTEST=1" />
+			<Add directory="deps/cloexec" />
+			<Add directory="deps/golombset" />
+			<Add directory="deps/klib" />
+			<Add directory="deps/libyrmcds" />
+			<Add directory="deps/mruby/include" />
+			<Add directory="deps/mruby-input-stream/src" />
+			<Add directory="deps/neverbleed" />
+			<Add directory="deps/picohttpparser" />
+			<Add directory="deps/yaml/include" />
+			<Add directory="deps/yoml" />
+			<Add directory="include" />
+			<Add directory="libressl-build/include" />
+			<Add directory="deps/picotest" />
+		</Compiler>
+		<Linker>
+			<Add library="libh2o-evloop.a" />
+			<Add library="mruby/host/lib/libmruby.a" />
+			<Add library="../h2o-to-patch2/libressl-build/lib/libssl.a" />
+			<Add library="../h2o-to-patch2/libressl-build/lib/libcrypto.a" />
+			<Add library="pthread" />
+			<Add library="m" />
+			<Add library="z" />
+			<Add library="dl" />
+			<Add directory="../h2o-to-patch" />
+		</Linker>
+		<Unit filename="deps/picotest/picotest.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/picotest/picotest.h" />
+		<Unit filename="deps/yaml/src/api.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yaml/src/dumper.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yaml/src/emitter.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yaml/src/loader.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yaml/src/parser.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yaml/src/reader.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yaml/src/scanner.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="deps/yaml/src/writer.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/issues/293.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/common/hostinfo.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/common/multithread.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/common/serverutil.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/common/socket.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/common/string.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/common/time.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/common/url.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/core/headers.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/core/proxy.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/core/util.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/handler/fastcgi.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/handler/file.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/handler/gzip.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/handler/headers.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/handler/mimemap.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/handler/redirect.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/http2/casper.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/http2/hpack.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/lib/http2/scheduler.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/src/ssl.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/test.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="t/00unit/test.h" />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<lib_finder disable_auto="1" />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
