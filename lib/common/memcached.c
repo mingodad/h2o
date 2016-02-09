@@ -62,7 +62,7 @@ struct h2o_memcached_req_t {
     } key;
 };
 
-static inline calcBase64EncodedSize(size_t unencoded_size)
+static inline size_t calcBase64EncodedSize(size_t unencoded_size)
 {
     return (unencoded_size + 2) / 3 * 4 + 1;
 }
