@@ -235,12 +235,12 @@ static void update_ocsp_stapling(listener_ssl_config_t *ssl_conf, h2o_buffer_t *
     auto &response = ssl_conf->ocsp_stapling.response;
     pthread_mutex_lock(&response.mutex);
     if (response.data != NULL)
-        h2o_buffer_dispose(&response.data);
+        h2o_buffer_t::dispose(response.data);
     response.data = resp;
     pthread_mutex_unlock(&response.mutex);
 }
 
-static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
+static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t *resp)
 {
     char *cmd_fullpath = h2o_configurator_get_cmd_path(cmd), *argv[] = {cmd_fullpath, (char *)cert_fn, NULL};
     int child_status, ret;
@@ -261,7 +261,7 @@ static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t 
     }
 
     if (!(WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
-        h2o_buffer_dispose(resp);
+        h2o_buffer_t::dispose(resp);
     if (!WIFEXITED(child_status)) {
         fprintf(stderr, "[OCSP Stapling] command %s was killed by signal %d\n", cmd_fullpath, WTERMSIG(child_status));
         ret = EX_TEMPFAIL;
@@ -292,7 +292,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
             continue;
         }
         /* fetch the response */
-        status = get_ocsp_response(ssl_conf->certificate_file, ssl_conf->ocsp_stapling.cmd, &resp);
+        status = get_ocsp_response(ssl_conf->certificate_file, ssl_conf->ocsp_stapling.cmd, resp);
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
@@ -617,9 +617,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             case RUN_MODE_TEST: {
                 h2o_buffer_t *respbuf;
                 fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
-                switch (get_ocsp_response(certificate_file->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
+                switch (get_ocsp_response(certificate_file->data.scalar, ssl_config->ocsp_stapling.cmd, respbuf)) {
                 case 0:
-                    h2o_buffer_dispose(&respbuf);
+                    h2o_buffer_t::dispose(respbuf);
                     fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
                     break;
                 case EX_TEMPFAIL:

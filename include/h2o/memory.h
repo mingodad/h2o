@@ -390,9 +390,75 @@ struct h2o_buffer_t {
     int _fd;
     char _buf[1];
 
-    //h2o_buffer_t():capacity(0),size(0),bytes(nullptr),_prototype(nullptr),_fd(-1){};
+    h2o_buffer_t():capacity(0),size(0),bytes(nullptr),_prototype(nullptr),_fd(-1){};
     //h2o_buffer_t():capacity(0),size(0),bytes(nullptr),_prototype(nullptr),_fd(-1){};
     //h2o_buffer_t(size_t initial_capacity):capacity(0),size(0),bytes(nullptr),_prototype(bp),_fd(-1){};
+
+    /**
+     * initialize the buffer using given prototype.
+     */
+    void init(h2o_buffer_prototype_t *prototype)
+    {
+        //*buffer = &prototype->_initial_buf;
+    }
+
+    /**
+     * disposes of the buffer
+     */
+    static void dispose(h2o_buffer_t *_buffer)
+    {
+        /*
+        h2o_buffer_t *buffer = *_buffer;
+        *_buffer = NULL;
+        if (buffer->bytes != NULL)
+            h2o_buffer__do_free(buffer);
+            */
+    }
+
+    /**
+     * resets the buffer prototype
+     */
+    void set_prototype(h2o_buffer_prototype_t *prototype)
+    {
+        /*
+        if ((*buffer)->_prototype != NULL)
+            (*buffer)->_prototype = prototype;
+        else
+            *buffer = &prototype->_initial_buf;
+        */
+    }
+
+    /**
+     * registers a buffer to memory pool, so that it would be freed when the pool is flushed.  Note that the buffer cannot be resized
+     * after it is linked.
+     */
+    void link_to_pool(h2o_mem_pool_t *pool)
+    {
+        /*
+        h2o_buffer_t **slot = (h2o_buffer_t **)pool->alloc_shared(sizeof(*slot), h2o_buffer__dispose_linked);
+        *slot = buffer;
+        */
+    }
+    /**
+     *
+     */
+    static void free(h2o_buffer_t *buffer);
+    /**
+     * allocates a buffer.
+     * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
+     * @param min_guarantee minimum number of bytes to reserve
+     * @return buffer to which the next data should be stored
+     * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
+     * exponential backoff for already-allocated buffers.
+     */
+    h2o_iovec_t reserve(size_t min_guarantee);
+    /**
+     * throws away given size of the data from the buffer.
+     * @param delta number of octets to be drained from the buffer
+     */
+    void consume(size_t delta);
+
+    void dispose_linked(void *p);
 };
 
 struct h2o_buffer_mmap_settings_t {
@@ -402,7 +468,7 @@ struct h2o_buffer_mmap_settings_t {
 
 struct h2o_buffer_prototype_t {
     h2o_mem_recycle_t allocator;
-    h2o_buffer_t _initial_buf;
+    size_t initial_buf_size;
     h2o_buffer_mmap_settings_t *mmap_settings;
 };
 
@@ -498,26 +564,6 @@ struct H2O_VECTOR {
 
 extern void *(*h2o_mem__set_secure)(void *, int, size_t);
 
-/**
- *
- */
-void h2o_buffer__do_free(h2o_buffer_t *buffer);
-/**
- * allocates a buffer.
- * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
- * @param min_guarantee minimum number of bytes to reserve
- * @return buffer to which the next data should be stored
- * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
- * exponential backoff for already-allocated buffers.
- */
-h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
-/**
- * throws away given size of the data from the buffer.
- * @param delta number of octets to be drained from the buffer
- */
-void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
-
-void h2o_buffer__dispose_linked(void *p);
 
 /**
  * secure memset
@@ -598,45 +644,6 @@ inline int h2o_mem_release_shared(void *p)
     return 0;
 }
 
-/**
- * initialize the buffer using given prototype.
- */
-inline void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype)
-{
-    *buffer = &prototype->_initial_buf;
-}
-
-/**
- * disposes of the buffer
- */
-inline void h2o_buffer_dispose(h2o_buffer_t **_buffer)
-{
-    h2o_buffer_t *buffer = *_buffer;
-    *_buffer = NULL;
-    if (buffer->bytes != NULL)
-        h2o_buffer__do_free(buffer);
-}
-
-/**
- * resets the buffer prototype
- */
-inline void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype)
-{
-    if ((*buffer)->_prototype != NULL)
-        (*buffer)->_prototype = prototype;
-    else
-        *buffer = &prototype->_initial_buf;
-}
-
-/**
- * registers a buffer to memory pool, so that it would be freed when the pool is flushed.  Note that the buffer cannot be resized
- * after it is linked.
- */
-inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
-{
-    h2o_buffer_t **slot = (h2o_buffer_t **)pool->alloc_shared(sizeof(*slot), h2o_buffer__dispose_linked);
-    *slot = buffer;
-}
 
 #define h2o_phr_header_name_cmp(phr_header_name1, phr_header_name2) \
     h2o_memis(phr_header_name1.name, phr_header_name1.name_len, phr_header_name2.name, phr_header_name2.name_len)

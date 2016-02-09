@@ -75,9 +75,9 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
                             int *pseudo_header_exists_map, size_t *content_length, const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
-void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+void h2o_hpack_flatten_request(h2o_buffer_t *buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id);
-void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+void h2o_hpack_flatten_response(h2o_buffer_t *buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                 size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name,
                                 size_t content_length);
 
@@ -387,7 +387,7 @@ struct h2o_http2_conn_t {
     void send_push_promise(h2o_http2_stream_t *stream)
     {
         assert(!stream->push.promise_sent);
-        h2o_hpack_flatten_request(&this->_write.buf, &this->_output_header_table, stream->stream_id, this->peer_settings.max_frame_size,
+        h2o_hpack_flatten_request(this->_write.buf, &this->_output_header_table, stream->stream_id, this->peer_settings.max_frame_size,
                                   &stream->req, stream->push.parent_stream_id);
         stream->push.promise_sent = 1;
     }
@@ -421,10 +421,10 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
 
 /* frames */
 uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
-void h2o_http2_encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum);
-void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data);
-void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, int errnum, h2o_iovec_t additional_data);
-void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment);
+void h2o_http2_encode_rst_stream_frame(h2o_buffer_t *buf, uint32_t stream_id, int errnum);
+void h2o_http2_encode_ping_frame(h2o_buffer_t *buf, int is_ack, const uint8_t *data);
+void h2o_http2_encode_goaway_frame(h2o_buffer_t *buf, uint32_t last_stream_id, int errnum, h2o_iovec_t additional_data);
+void h2o_http2_encode_window_update_frame(h2o_buffer_t *buf, uint32_t stream_id, int32_t window_size_increment);
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings,
                                const char **err_desc);
 int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc);

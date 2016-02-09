@@ -258,7 +258,7 @@ static void do_send(struct rp_generator_t *self)
     assert(self->sending.bytes_inflight == 0);
 
     vecs[0] = h2o_doublebuffer_prepare(&self->sending,
-                                       self->client != NULL ? &self->client->sock->input : &self->last_content_before_send,
+                                       self->client != NULL ? self->client->sock->input : self->last_content_before_send,
                                        self->src_req->preferred_chunk_size);
 
     if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
@@ -313,7 +313,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     if (errstr != NULL) {
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
-        h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
+        self->client->sock->input->init(&h2o_socket_buffer_prototype);
         self->client = NULL;
     }
     if (self->sending.bytes_inflight == 0)
@@ -433,7 +433,7 @@ static void on_generator_dispose(void *_self)
         self->client->cancel();
         self->client = NULL;
     }
-    h2o_buffer_dispose(&self->last_content_before_send);
+    h2o_buffer_t::dispose(self->last_content_before_send);
     h2o_doublebuffer_dispose(&self->sending);
 }
 
@@ -453,7 +453,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
     self->up_req.bufs[0] = build_request(req, keepalive, self->is_websocket_handshake);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = req->method.isEq("HEAD");
-    h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
+    self->last_content_before_send->init(&h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
 
     return self;

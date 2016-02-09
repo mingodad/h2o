@@ -49,13 +49,13 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
     h2o_buffer_t *_;
     h2o_iovec_t path_normalized_escaped = h2o_htmlescape(pool, path_normalized.base, path_normalized.len);
 
-    h2o_buffer_init(&_, &h2o_socket_buffer_prototype);
+    _->init(&h2o_socket_buffer_prototype);
 
     {
         h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("<!DOCTYPE html>\n<TITLE>Index of "));
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
-        h2o_buffer_reserve(&_, _s.len);
+        _->reserve(_s.len);
         memcpy(_->bytes + _->size, _s.base, _s.len);
         _->size += _s.len;
     }
@@ -63,7 +63,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         h2o_iovec_t _s = (path_normalized_escaped);
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
-        h2o_buffer_reserve(&_, _s.len);
+        _->reserve(_s.len);
         memcpy(_->bytes + _->size, _s.base, _s.len);
         _->size += _s.len;
     }
@@ -71,7 +71,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("</TITLE>\n<H2>Index of "));
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
-        h2o_buffer_reserve(&_, _s.len);
+        _->reserve(_s.len);
         memcpy(_->bytes + _->size, _s.base, _s.len);
         _->size += _s.len;
     }
@@ -79,7 +79,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         h2o_iovec_t _s = (path_normalized_escaped);
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
-        h2o_buffer_reserve(&_, _s.len);
+        _->reserve(_s.len);
         memcpy(_->bytes + _->size, _s.base, _s.len);
         _->size += _s.len;
     }
@@ -87,7 +87,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("</H2>\n<UL>\n<LI><A HREF=\"..\">Parent Directory</A>\n"));
         if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
             --_s.len;
-        h2o_buffer_reserve(&_, _s.len);
+        _->reserve(_s.len);
         memcpy(_->bytes + _->size, _s.base, _s.len);
         _->size += _s.len;
     }
@@ -101,7 +101,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("<LI><A HREF=\""));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
-            h2o_buffer_reserve(&_, _s.len);
+            _->reserve(_s.len);
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
@@ -109,7 +109,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_iovec_t _s = (link_escaped);
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
-            h2o_buffer_reserve(&_, _s.len);
+            _->reserve(_s.len);
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
@@ -117,7 +117,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("\">"));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
-            h2o_buffer_reserve(&_, _s.len);
+            _->reserve(_s.len);
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
@@ -125,7 +125,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_iovec_t _s = (label_escaped);
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
-            h2o_buffer_reserve(&_, _s.len);
+            _->reserve(_s.len);
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
@@ -133,7 +133,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_iovec_t _s = h2o_iovec_t::create(H2O_STRLIT("</A>\n"));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
-            h2o_buffer_reserve(&_, _s.len);
+            _->reserve(_s.len);
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }

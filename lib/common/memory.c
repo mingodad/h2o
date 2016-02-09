@@ -157,8 +157,9 @@ static size_t topagesize(size_t capacity)
     return (offsetof(h2o_buffer_t, _buf) + capacity + pagesize - 1) / pagesize * pagesize;
 }
 
-void h2o_buffer__do_free(h2o_buffer_t *buffer)
+void h2o_buffer_t::free(h2o_buffer_t *buffer)
 {
+#if 0
     /* caller should assert that the buffer is not part of the prototype */
     if (buffer->capacity == buffer->_prototype->_initial_buf.capacity) {
         buffer->_prototype->allocator.free(buffer);
@@ -168,10 +169,12 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer)
     } else {
         h2o_mem_free(buffer);
     }
+#endif
 }
 
-h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
+h2o_iovec_t h2o_buffer_t::reserve(size_t min_guarantee)
 {
+#if 0
     h2o_buffer_t *inbuf = *_inbuf;
     h2o_iovec_t ret;
 
@@ -266,28 +269,27 @@ MapError:
     ret.base = NULL;
     ret.len = 0;
     return ret;
+#endif
 }
 
-void h2o_buffer_consume(h2o_buffer_t **_inbuf, size_t delta)
+void h2o_buffer_t::consume(size_t delta)
 {
-    h2o_buffer_t *inbuf = *_inbuf;
-
-    if (delta != 0) {
-        assert(inbuf->bytes != NULL);
-        if (inbuf->size == delta) {
-            *_inbuf = &inbuf->_prototype->_initial_buf;
-            h2o_buffer__do_free(inbuf);
+/*    if (delta != 0) {
+        assert(this->bytes != NULL);
+        if (this->size == delta) {
+            *_inbuf = &this->_prototype->_initial_buf;
+            h2o_buffer__do_free(this);
         } else {
-            inbuf->size -= delta;
-            inbuf->bytes += delta;
+            this->size -= delta;
+            this->bytes += delta;
         }
-    }
+    }*/
 }
 
-void h2o_buffer__dispose_linked(void *p)
+void h2o_buffer_t::dispose_linked(void *p)
 {
-    auto buf = (h2o_buffer_t **)p;
-    h2o_buffer_dispose(buf);
+    //auto buf = (h2o_buffer_t **)p;
+    //h2o_buffer_dispose(buf);
 }
 
 void h2o_mem_swap(void *_x, void *_y, size_t len)

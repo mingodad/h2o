@@ -417,7 +417,7 @@ static void close_generator(fcgi_generator_t *generator) {
     if (generator->resp.sending.buf != NULL)
         h2o_doublebuffer_dispose(&generator->resp.sending);
     if (generator->resp.receiving != NULL)
-        h2o_buffer_dispose(&generator->resp.receiving);
+        h2o_buffer_t::dispose(generator->resp.receiving);
 }
 
 static void do_send(fcgi_generator_t *generator) {
@@ -426,7 +426,7 @@ static void do_send(fcgi_generator_t *generator) {
     int is_final;
 
     vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending,
-            &generator->resp.receiving, generator->req->preferred_chunk_size);
+            generator->resp.receiving, generator->req->preferred_chunk_size);
     veccnt = vecs[0].len != 0 ? 1 : 0;
     if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size &&
             generator->resp.receiving->size == 0) {
@@ -535,7 +535,7 @@ static void append_content(fcgi_generator_t *generator, const void *src, size_t 
         generator->leftsize -= len;
     }
 
-    h2o_iovec_t reserved = h2o_buffer_reserve(&generator->resp.receiving, len);
+    h2o_iovec_t reserved = generator->resp.receiving->reserve(len);
     memcpy(reserved.base, src, len);
     generator->resp.receiving->size += len;
 }
@@ -562,7 +562,7 @@ static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t
                 input->size, headers, &num_headers, 0);
     } else {
         size_t prevlen = generator->resp.receiving->size;
-        memcpy(h2o_buffer_reserve(&generator->resp.receiving,
+        memcpy(generator->resp.receiving->reserve(
                 header->contentLength).base,
                 input->bytes + FCGI_RECORD_HEADER_SIZE,
                 header->contentLength);
@@ -595,7 +595,7 @@ static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t
             append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE + parse_result, leftlen);
         }
     } else {
-        h2o_buffer_consume(&generator->resp.receiving, parse_result);
+        generator->resp.receiving->consume(parse_result);
     }
 
     return 0;
@@ -635,25 +635,25 @@ static void on_read(h2o_socket_t *sock, int status) {
             case FCGI_STDOUT:
                 if (handle_stdin_record(generator, &header) != 0)
                     goto Error;
-                h2o_buffer_consume(&sock->input, recsize);
+                sock->input->consume(recsize);
                 break;
             case FCGI_STDERR:
                 if (header.contentLength != 0)
                     generator->req->log_error(MODULE_NAME, "%.*s", (int) header.contentLength,
                         sock->input->bytes + FCGI_RECORD_HEADER_SIZE);
-                h2o_buffer_consume(&sock->input, recsize);
+                sock->input->consume(recsize);
                 break;
             case FCGI_END_REQUEST:
                 if (!generator->sent_headers) {
                     generator->req->log_error(MODULE_NAME, "received FCGI_END_REQUEST before end of the headers");
                     goto Error;
                 }
-                h2o_buffer_consume(&sock->input, recsize);
+                sock->input->consume(recsize);
                 can_keepalive = 1;
                 goto EOS_Received;
             default:
                 generator->req->log_error(MODULE_NAME, "received unexpected record, type: %u", header.type);
-                h2o_buffer_consume(&sock->input, recsize);
+                sock->input->consume(recsize);
                 if (!generator->sent_headers)
                     goto Error;
                 goto EOS_Received;
@@ -738,7 +738,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req) {
     generator->sock = NULL;
     generator->sent_headers = 0;
     h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
+    generator->resp.receiving->init(&h2o_socket_buffer_prototype);
     generator->timeout = {};
 
     set_timeout(generator, &generator->ctx->io_timeout, on_connect_timeout);

@@ -71,7 +71,7 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
  * @param resp the output, only available if the function returns zero
  * @param child_status result of waitpid(child_pid), only available if the function returns zero
  */
-int h2o_read_command(const char *cmd, const char **argv, h2o_buffer_t **resp, int *child_status);
+int h2o_read_command(const char *cmd, const char **argv, h2o_buffer_t *resp, int *child_status);
 
 /**
  * Gets the number of processor cores

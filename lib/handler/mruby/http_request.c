@@ -99,8 +99,8 @@ static void on_dispose(void *_ctx)
         DATA_PTR(ctx->refs.input_stream) = NULL;
 
     /* clear bufs */
-    h2o_buffer_dispose(&ctx->req.buf);
-    h2o_buffer_dispose(&ctx->resp.after_closed);
+    h2o_buffer_t::dispose(ctx->req.buf);
+    h2o_buffer_t::dispose(ctx->resp.after_closed);
 
     /* notify the app, if it is waiting to hear from us */
     if (!mrb_nil_p(ctx->receiver)) {
@@ -177,7 +177,7 @@ static void post_error(struct h2o_mruby_http_request_context_t *ctx,
 
     ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
-    h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
+    ctx->resp.after_closed->reserve(errstr_len);
     memcpy(ctx->resp.after_closed->bytes + ctx->resp.after_closed->size, errstr, errstr_len);
     ctx->resp.after_closed->size += errstr_len;
     ctx->resp.has_content = 1;
@@ -194,14 +194,14 @@ static mrb_value build_chunk(struct h2o_mruby_http_request_context_t *ctx)
     if (ctx->client != NULL) {
         assert(ctx->client->sock->input->size != 0);
         chunk = mrb_str_new(ctx->generator->ctx->mrb, ctx->client->sock->input->bytes, ctx->client->sock->input->size);
-        h2o_buffer_consume(&ctx->client->sock->input, ctx->client->sock->input->size);
+        ctx->client->sock->input->consume(ctx->client->sock->input->size);
         ctx->resp.has_content = 0;
     } else {
         if (ctx->resp.after_closed->size == 0) {
             chunk = mrb_nil_value();
         } else {
             chunk = mrb_str_new(ctx->generator->ctx->mrb, ctx->resp.after_closed->bytes, ctx->resp.after_closed->size);
-            h2o_buffer_consume(&ctx->resp.after_closed, ctx->resp.after_closed->size);
+            ctx->resp.after_closed->consume(ctx->resp.after_closed->size);
         }
         /* has_content is retained as true, so that repeated calls will return nil immediately */
     }
@@ -309,7 +309,7 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx,
     if (h2o_io_vector_literal_lcis(name, "transfer-encoding"))
         ctx->req.has_transfer_encoding = 1;
 
-    h2o_buffer_reserve(&ctx->req.buf, name.len + value.len + sizeof(": \r\n") - 1);
+    ctx->req.buf->reserve(name.len + value.len + sizeof(": \r\n") - 1);
     append_to_buffer(&ctx->req.buf, name.base, name.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(": "));
     append_to_buffer(&ctx->req.buf, value.base, value.len);
@@ -340,8 +340,8 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     h2o_clearmem(ctx);
     ctx->generator = generator;
     ctx->receiver = mrb_nil_value();
-    h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&ctx->resp.after_closed, &h2o_socket_buffer_prototype);
+    ctx->req.buf->init(&h2o_socket_buffer_prototype);
+    ctx->resp.after_closed->init(&h2o_socket_buffer_prototype);
     ctx->refs.request = mrb_nil_value();
     ctx->refs.input_stream = mrb_nil_value();
 
@@ -360,10 +360,10 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     }
 
     /* start building the request */
-    h2o_buffer_reserve(&ctx->req.buf, method.len + 1);
+    ctx->req.buf->reserve(method.len + 1);
     append_to_buffer(&ctx->req.buf, method.base, method.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
-    h2o_buffer_reserve(&ctx->req.buf,
+    ctx->req.buf->reserve(
                        url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
     append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
@@ -403,13 +403,13 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
             if (!ctx->req.has_transfer_encoding) {
                 char buf[64];
                 size_t l = (size_t)snprintf(buf, sizeof(buf), "content-length: %zu\r\n", ctx->req.body.len);
-                h2o_buffer_reserve(&ctx->req.buf, l);
+                ctx->req.buf->reserve(l);
                 append_to_buffer(&ctx->req.buf, buf, l);
             }
         }
     }
 
-    h2o_buffer_reserve(&ctx->req.buf, 2);
+    ctx->req.buf->reserve(2);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* build request and connect */
@@ -479,12 +479,12 @@ h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb,
     return ctx;
 }
 
-h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx,
+h2o_buffer_t *h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx,
         int *is_final)
 {
     *is_final = ctx->client == NULL;
     return ctx->client != NULL && ctx->resp.has_content
-            ? &ctx->client->sock->input : &ctx->resp.after_closed;
+            ? ctx->client->sock->input : ctx->resp.after_closed;
 }
 
 void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)

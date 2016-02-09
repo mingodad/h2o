@@ -104,7 +104,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     else
         peer = tunnel->sock[0];
 
-    h2o_buffer_consume(&peer->input, peer->input->size);
+    peer->input->consume(peer->input->size);
     peer->read_start(on_read);
 }
 
@@ -122,8 +122,8 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_
     tunnel->timeout->link(tunnel->ctx->loop, &tunnel->timeout_entry);
 
     /* Trash all data read before tunnel establishment */
-    h2o_buffer_consume(&sock1->input, sock1->input->size);
-    h2o_buffer_consume(&sock2->input, sock2->input->size);
+    sock1->input->consume(sock1->input->size);
+    sock2->input->consume(sock2->input->size);
 
     /* Bring up the tunnel */
     sock1->read_start(on_read);

@@ -261,7 +261,7 @@ static void on_read_proxy_line(h2o_socket_t *sock, int status)
     case -2: /* incomplete */
         return;
     default:
-        h2o_buffer_consume(&sock->input, r);
+        sock->input->consume(r);
         if (addrlen != 0)
             sock->setpeername((sockaddr *)&addr, addrlen);
         break;

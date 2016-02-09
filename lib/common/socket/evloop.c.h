@@ -109,13 +109,13 @@ static void link_to_statechanged(h2o_evloop_socket_t *sock)
     }
 }
 
-static int on_read_core(int fd, h2o_buffer_t **input)
+static int on_read_core(int fd, h2o_buffer_t *input)
 {
     int read_any = 0;
 
     while (1) {
         ssize_t rret;
-        h2o_iovec_t buf = h2o_buffer_reserve(input, 4096);
+        h2o_iovec_t buf = input->reserve(4096);
         if (buf.base == NULL) {
             /* memory allocation failed */
             return -1;
@@ -132,7 +132,7 @@ static int on_read_core(int fd, h2o_buffer_t **input)
                 return -1; /* TODO notify close */
             break;
         }
-        (*input)->size += rret;
+        input->size += rret;
         if (buf.len != size_t(rret))
             break;
         read_any = 1;
@@ -227,7 +227,7 @@ static void read_on_ready(h2o_evloop_socket_t *sock)
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    if ((status = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != 0)
+    if ((status = on_read_core(sock->fd, sock->super.ssl == NULL ? sock->super.input : sock->super.ssl->input.encrypted)) != 0)
         goto Notify;
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
@@ -363,7 +363,7 @@ h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, int flags)
 
     sock = h2o_mem_alloc_for<h2o_evloop_socket_t>();
     h2o_clearmem(sock);
-    h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
+    sock->super.input->init(&h2o_socket_buffer_prototype);
     sock->loop = loop;
     sock->fd = fd;
     sock->_flags = flags;

@@ -66,10 +66,10 @@ void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
     if (stream->_req_body != NULL)
-        h2o_buffer_dispose(&stream->_req_body);
+        h2o_buffer_t::dispose(stream->_req_body);
     h2o_req_t::dispose(&stream->req);
     if (stream->stream_id == 1 && conn->_http1_req_input != NULL)
-        h2o_buffer_dispose(&conn->_http1_req_input);
+        h2o_buffer_t::dispose(conn->_http1_req_input);
     h2o_mem_free(stream);
 }
 
@@ -129,7 +129,7 @@ static int send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
         goto Exit;
     /* reserve buffer */
-    h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size);
+    conn->_write.buf->reserve(H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size);
     /* obtain content */
     cbuf.base = conn->_write.buf->bytes + conn->_write.buf->size + H2O_HTTP2_FRAME_HEADER_SIZE;
     cbuf.len = max_payload_size;
@@ -157,7 +157,7 @@ static h2o_iovec_t *send_data_push(h2o_http2_conn_t *conn,
 
     /* reserve buffer and point dst to the payload */
     dst.base =
-        h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE +
+        conn->_write.buf->reserve(H2O_HTTP2_FRAME_HEADER_SIZE +
             max_payload_size).base + H2O_HTTP2_FRAME_HEADER_SIZE;
     dst.len = max_payload_size;
 
@@ -266,7 +266,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     /* send HEADERS, as well as start sending body */
     if (conn->is_push(stream->stream_id))
         stream->req.res.headers.add(&stream->req.pool, H2O_STRLIT("x-http2-push"), 0, H2O_STRLIT("pushed"));
-    h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
+    h2o_hpack_flatten_response(conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                conn->peer_settings.max_frame_size, &stream->req.res, &ts, &conn->super.ctx->globalconf->server_name,
                                stream->req.res.content_length);
     conn->request_write();
@@ -279,7 +279,7 @@ CancelPush:
     conn->set_state(stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
     conn->_write.streams_to_proceed.insert(&stream->_refs.link);
     if (stream->push.promise_sent) {
-        h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, H2O_HTTP2_ERROR_INTERNAL);
+        h2o_http2_encode_rst_stream_frame(conn->_write.buf, stream->stream_id, H2O_HTTP2_ERROR_INTERNAL);
         conn->request_write();
     }
     return -1;

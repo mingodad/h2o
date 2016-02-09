@@ -230,13 +230,13 @@ Error:
 #endif
 }
 
-int h2o_read_command(const char *cmd, const char **argv, h2o_buffer_t **resp, int *child_status)
+int h2o_read_command(const char *cmd, const char **argv, h2o_buffer_t *resp, int *child_status)
 {
     int respfds[2] = {-1, -1};
     pid_t pid = -1;
     int mutex_locked = 0, ret = -1;
 
-    h2o_buffer_init(resp, &h2o_socket_buffer_prototype);
+    resp->init(&h2o_socket_buffer_prototype);
 
     pthread_mutex_lock(&cloexec_mutex);
     mutex_locked = 1;
@@ -261,13 +261,13 @@ int h2o_read_command(const char *cmd, const char **argv, h2o_buffer_t **resp, in
 
     /* read the response from pipe */
     while (1) {
-        h2o_iovec_t buf = h2o_buffer_reserve(resp, 8192);
+        h2o_iovec_t buf = resp->reserve(8192);
         ssize_t r;
         while ((r = read(respfds[0], buf.base, buf.len)) == -1 && errno == EINTR)
             ;
         if (r <= 0)
             break;
-        (*resp)->size += r;
+        resp->size += r;
     }
 
 Exit:
@@ -288,7 +288,7 @@ Exit:
     if (respfds[1] != -1)
         close(respfds[1]);
     if (ret != 0)
-        h2o_buffer_dispose(resp);
+        h2o_buffer_t::dispose(resp);
 
     return ret;
 }

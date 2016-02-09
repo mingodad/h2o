@@ -80,7 +80,7 @@ static void on_read(h2o_socket_t *sock, int status)
         abort();
     }
 
-    h2o_buffer_consume(&sock->input, sock->input->size);
+    sock->input->consume(sock->input->size);
     queue_cb((h2o_multithread_queue_t*)sock->data);
 }
 

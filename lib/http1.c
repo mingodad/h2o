@@ -527,7 +527,7 @@ static void on_send_complete(h2o_socket_t *sock, int status)
 
     /* handle next request */
     init_request(conn, 1);
-    h2o_buffer_consume(&conn->sock->input, conn->_reqsize);
+    conn->sock->input->consume(conn->_reqsize);
     conn->_prevreqlen = 0;
     conn->_reqsize = 0;
     reqread_start(conn);

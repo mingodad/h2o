@@ -369,7 +369,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     closedir(dp);
 
     bodyvec.init(body->bytes, body->size);
-    h2o_buffer_link_to_pool(body, &req->pool);
+    body->link_to_pool(&req->pool);
 
     /* send response */
     req->res.status = 200;

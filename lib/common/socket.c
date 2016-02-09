@@ -92,7 +92,7 @@ h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
 
 __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     {16},                                       /* keep 16 recently used chunks */
-    {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
+    H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2, /* minimum initial capacity */
     &h2o_socket_buffer_mmap_settings};
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
@@ -116,7 +116,7 @@ static int read_bio(BIO *b, char *out, int len)
         len = (int)encrypted->size;
     }
     memcpy(out, encrypted->bytes, len);
-    h2o_buffer_consume(&encrypted, len);
+    encrypted->consume(len);
 
     return len;
 }
@@ -184,7 +184,7 @@ int decode_ssl_input(h2o_socket_t *sock)
 
     while (sock->ssl->input.encrypted->size != 0 || SSL_pending(sock->ssl->ssl)) {
         int rlen;
-        h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096); /*TODO remove magic numbers*/
+        h2o_iovec_t buf = sock->input->reserve(4096); /*TODO remove magic numbers*/
         if (buf.base == NULL)
             return errno;
         { /* call SSL_read (while detecting SSL renegotiation and reporting it as error) */
@@ -225,7 +225,7 @@ static void destroy_ssl(h2o_socket_ssl_t *ssl)
 {
     SSL_free(ssl->ssl);
     ssl->ssl = NULL;
-    h2o_buffer_dispose(&ssl->input.encrypted);
+    h2o_buffer_t::dispose(ssl->input.encrypted);
     clear_output_buffer(ssl);
     h2o_mem_free(ssl);
 }
@@ -239,7 +239,7 @@ static void dispose_socket(h2o_socket_t *sock, int status)
         destroy_ssl(sock->ssl);
         sock->ssl = NULL;
     }
-    h2o_buffer_dispose(&sock->input);
+    h2o_buffer_t::dispose(sock->input);
     if (sock->_peername != NULL) {
         h2o_mem_free(sock->_peername);
         sock->_peername = NULL;
@@ -294,7 +294,7 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info)
         destroy_ssl(info->ssl);
         info->ssl = NULL;
     }
-    h2o_buffer_dispose(&info->input);
+    h2o_buffer_t::dispose(info->input);
     close(info->fd);
     info->fd = -1;
 }
@@ -310,11 +310,11 @@ int h2o_socket_t::do_export(h2o_socket_export_t *info)
 
     if ((info->ssl = this->ssl) != NULL) {
         this->ssl = NULL;
-        h2o_buffer_set_prototype(&info->ssl->input.encrypted, &nonpooling_prototype);
+        info->ssl->input.encrypted->set_prototype(&nonpooling_prototype);
     }
     info->input = this->input;
-    h2o_buffer_set_prototype(&info->input, &nonpooling_prototype);
-    h2o_buffer_init(&this->input, &h2o_socket_buffer_prototype);
+    info->input->set_prototype(&nonpooling_prototype);
+    this->input->init(&h2o_socket_buffer_prototype);
 
     h2o_socket_t::close(this);
 
@@ -330,9 +330,9 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     sock = do_import(loop, info);
     info->fd = -1; /* just in case */
     if ((sock->ssl = info->ssl) != NULL)
-        h2o_buffer_set_prototype(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
+        sock->ssl->input.encrypted->set_prototype(&h2o_socket_buffer_prototype);
     sock->input = info->input;
-    h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);
+    sock->input->set_prototype(&h2o_socket_buffer_prototype);
     return sock;
 }
 
@@ -604,8 +604,8 @@ Redo:
         SSL_free(sock->ssl->ssl);
         create_ssl(sock, ssl_ctx);
         clear_output_buffer(sock->ssl);
-        h2o_buffer_consume(&encrypted, encrypted->size);
-        h2o_buffer_reserve(&encrypted, first_input.len);
+        encrypted->consume(encrypted->size);
+        encrypted->reserve(first_input.len);
         memcpy(encrypted->bytes, first_input.base, first_input.len);
         encrypted->size = first_input.len;
         sock->read_stop();
@@ -646,7 +646,7 @@ void h2o_socket_t::ssl_server_handshake(SSL_CTX *ssl_ctx, h2o_socket_cb handshak
     this->ssl = h2o_mem_calloc_for<h2o_socket_ssl_t>();
 
     /* setup the buffers; this->input should be empty, this->ssl->input.encrypted should contain the initial input, if any */
-    h2o_buffer_init(&this->ssl->input.encrypted, &h2o_socket_buffer_prototype);
+    this->ssl->input.encrypted->init(&h2o_socket_buffer_prototype);
     if (this->input->size != 0) {
         h2o_buffer_t *tmp = this->input;
         this->input = this->ssl->input.encrypted;

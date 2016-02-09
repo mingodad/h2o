@@ -1211,7 +1211,7 @@ struct h2o_doublebuffer_t {
 
 static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
 static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
-static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
+static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t *receiving, size_t max_bytes);
 static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* util */
@@ -1581,26 +1581,26 @@ inline void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, 
 
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
 {
-    h2o_buffer_init(&db->buf, prototype);
+    db->buf->init(prototype);
     db->bytes_inflight = 0;
 }
 
 static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
 {
-    h2o_buffer_dispose(&db->buf);
+    h2o_buffer_t::dispose(db->buf);
 }
 
-static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
+static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t *receiving, size_t max_bytes)
 {
     assert(db->bytes_inflight == 0);
 
     if (db->buf->size == 0) {
-        if ((*receiving)->size == 0)
+        if (receiving->size == 0)
             return h2o_iovec_t::create(NULL, 0);
         /* swap buffers */
         h2o_buffer_t *t = db->buf;
-        db->buf = *receiving;
-        *receiving = t;
+        db->buf = receiving;
+        receiving = t;
     }
     if ((db->bytes_inflight = db->buf->size) > max_bytes)
         db->bytes_inflight = max_bytes;
@@ -1610,7 +1610,7 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
 static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
 {
     assert(db->bytes_inflight != 0);
-    h2o_buffer_consume(&db->buf, db->bytes_inflight);
+    db->buf->consume(db->bytes_inflight);
     db->bytes_inflight = 0;
 }
 
