@@ -14,13 +14,15 @@ sub install_module {
     my $module = shift;
     print "checking if $module is installed...\n";
     if (system("perl -M$module -e '' > /dev/null 2>&1") != 0) {
-        run_cmd("cpanm --sudo --notest $module");
+#        run_cmd("cpanm --sudo --notest $module");
+        run_cmd("cpanm --notest $module");
     }
 }
 
 print "checking if cpanm is installed...\n";
 if (system("which cpanm > /dev/null 2>&1") != 0) {
-    run_cmd("curl -L http://cpanmin.us | perl - --sudo --notest App::cpanminus");
+#    run_cmd("curl -L http://cpanmin.us | perl - --sudo --notest App::cpanminus");
+    run_cmd("curl -L http://cpanmin.us | perl - --notest App::cpanminus");
 }
 
 install_module($_)

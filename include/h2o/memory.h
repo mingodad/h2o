@@ -638,6 +638,20 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
+inline void h2o_buffer_append(h2o_buffer_t **buffer, const void *src, size_t len)
+{
+    h2o_buffer_reserve(buffer, len);
+    memcpy((*buffer)->bytes + (*buffer)->size, src, len);
+    (*buffer)->size += len;
+}
+
+inline h2o_iovec_t h2o_buffer_reserve_resize(h2o_buffer_t **buffer, size_t len)
+{
+    h2o_iovec_t t = h2o_buffer_reserve(buffer, len);
+    (*buffer)->size += len;
+    return t;
+}
+
 #define h2o_phr_header_name_cmp(phr_header_name1, phr_header_name2) \
     h2o_memis(phr_header_name1.name, phr_header_name1.name_len, phr_header_name2.name, phr_header_name2.name_len)
 #define h2o_phr_header_name_is_literal(_target, literal) h2o_memis(_target.name, _target.name_len, H2O_STRLIT(literal))

@@ -177,9 +177,7 @@ static void post_error(struct h2o_mruby_http_request_context_t *ctx,
 
     ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
-    h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
-    memcpy(ctx->resp.after_closed->bytes + ctx->resp.after_closed->size, errstr, errstr_len);
-    ctx->resp.after_closed->size += errstr_len;
+    h2o_buffer_append(&ctx->resp.after_closed, errstr, errstr_len);
     ctx->resp.has_content = 1;
 
     post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
@@ -288,12 +286,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client,
     return on_head;
 }
 
-static inline void append_to_buffer(h2o_buffer_t **buf, const void *src, size_t len)
-{
-    memcpy((*buf)->bytes + (*buf)->size, src, len);
-    (*buf)->size += len;
-}
-
 static int flatten_request_header(h2o_mruby_context_t *handler_ctx,
         h2o_iovec_t name, h2o_iovec_t value, void *_ctx)
 {
@@ -310,10 +302,10 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx,
         ctx->req.has_transfer_encoding = 1;
 
     h2o_buffer_reserve(&ctx->req.buf, name.len + value.len + sizeof(": \r\n") - 1);
-    append_to_buffer(&ctx->req.buf, name.base, name.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(": "));
-    append_to_buffer(&ctx->req.buf, value.base, value.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    h2o_buffer_append(&ctx->req.buf, name.base, name.len);
+    h2o_buffer_append(&ctx->req.buf, H2O_STRLIT(": "));
+    h2o_buffer_append(&ctx->req.buf, value.base, value.len);
+    h2o_buffer_append(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     return 0;
 }
@@ -361,14 +353,14 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 
     /* start building the request */
     h2o_buffer_reserve(&ctx->req.buf, method.len + 1);
-    append_to_buffer(&ctx->req.buf, method.base, method.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
+    h2o_buffer_append(&ctx->req.buf, method.base, method.len);
+    h2o_buffer_append(&ctx->req.buf, H2O_STRLIT(" "));
     h2o_buffer_reserve(&ctx->req.buf,
                        url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
-    append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
-    append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    h2o_buffer_append(&ctx->req.buf, url.path.base, url.path.len);
+    h2o_buffer_append(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+    h2o_buffer_append(&ctx->req.buf, url.authority.base, url.authority.len);
+    h2o_buffer_append(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* headers */
     if (mrb_hash_p(arg_hash)) {
@@ -404,13 +396,13 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
                 char buf[64];
                 size_t l = (size_t)snprintf(buf, sizeof(buf), "content-length: %zu\r\n", ctx->req.body.len);
                 h2o_buffer_reserve(&ctx->req.buf, l);
-                append_to_buffer(&ctx->req.buf, buf, l);
+                h2o_buffer_append(&ctx->req.buf, buf, l);
             }
         }
     }
 
     h2o_buffer_reserve(&ctx->req.buf, 2);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    h2o_buffer_append(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* build request and connect */
     ctx->client = h2o_http1client_t::connect(ctx,

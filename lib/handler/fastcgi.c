@@ -535,9 +535,7 @@ static void append_content(fcgi_generator_t *generator, const void *src, size_t 
         generator->leftsize -= len;
     }
 
-    h2o_iovec_t reserved = h2o_buffer_reserve(&generator->resp.receiving, len);
-    memcpy(reserved.base, src, len);
-    generator->resp.receiving->size += len;
+    h2o_buffer_append(&generator->resp.receiving, src, len);
 }
 
 static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t *header) {
