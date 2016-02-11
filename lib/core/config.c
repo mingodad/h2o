@@ -98,7 +98,7 @@ h2o_globalconf_t::h2o_globalconf_t()
     this->configurators = {};
     this->configurators.init_anchor();
     this->server_name = {};
-    this->server_name.init(H2O_STRLIT("h2o/" H2O_VERSION));
+    this->server_name.init(H2O_STRLIT("h2o-cpp/" H2O_VERSION));
     this->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     this->max_delegations = H2O_DEFAULT_MAX_DELEGATIONS;
     this->user = nullptr;
