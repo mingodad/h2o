@@ -516,6 +516,10 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
  * @param delta number of octets to be drained from the buffer
  */
 void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
+inline void h2o_buffer_consume_all(h2o_buffer_t **inbuf)
+{
+    h2o_buffer_consume(inbuf, (*inbuf)->size);
+}
 
 void h2o_buffer__dispose_linked(void *p);
 

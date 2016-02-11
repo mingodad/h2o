@@ -604,7 +604,7 @@ Redo:
         SSL_free(sock->ssl->ssl);
         create_ssl(sock, ssl_ctx);
         clear_output_buffer(sock->ssl);
-        h2o_buffer_consume(&encrypted, encrypted->size);
+        h2o_buffer_consume_all(&encrypted);
         h2o_buffer_reserve(&encrypted, first_input.len);
         memcpy(encrypted->bytes, first_input.base, first_input.len);
         encrypted->size = first_input.len;

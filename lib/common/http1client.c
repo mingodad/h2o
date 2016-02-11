@@ -69,7 +69,7 @@ static void close_client(h2o_http1client_private_t *client)
     if (sock != NULL) {
         if (sockpool->pool != NULL && client->_can_keepalive) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
-            h2o_buffer_consume(&sock->input, sock->input->size);
+            h2o_buffer_consume_all(&sock->input);
             h2o_socketpool_return(sockpool->pool, sock);
         } else {
             h2o_socket_t::close(sock);
