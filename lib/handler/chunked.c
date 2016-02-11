@@ -33,7 +33,8 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req,
 {
     auto self = (chunked_encoder_t *)_self;
     auto outbufs = (h2o_iovec_t *)h2o_mem_alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
-    size_t chunk_size, outbufcnt = 0, i;
+    size_t chunk_size, i;
+    h2o_iovec_t *ob = outbufs;
 
     /* calc chunk size */
     chunk_size = 0;
@@ -42,22 +43,22 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req,
 
     /* create chunk header and output data */
     if (chunk_size != 0) {
-        outbufs[outbufcnt].base = self->buf;
-        outbufs[outbufcnt].len = sprintf(self->buf, "%zx\r\n", chunk_size);
-        assert(outbufs[outbufcnt].len < sizeof(self->buf));
-        outbufcnt++;
-        memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
-        outbufcnt += inbufcnt;
-        outbufs[outbufcnt].base = (char*)"\r\n0\r\n\r\n";
-        outbufs[outbufcnt].len = is_final ? 7 : 2;
-        outbufcnt++;
+        ob->base = self->buf;
+        ob->len = sprintf(self->buf, "%zx\r\n", chunk_size);
+        assert(ob->len < sizeof(self->buf));
+        ob++;
+        memcpy(ob, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+        ob += inbufcnt;
+        ob->base = (char*)"\r\n0\r\n\r\n";
+        ob->len = is_final ? 7 : 2;
+        ob++;
     } else if (is_final) {
-        outbufs[outbufcnt].base = (char*)"0\r\n\r\n";
-        outbufs[outbufcnt].len = 5;
-        outbufcnt++;
+        ob->base = (char*)"0\r\n\r\n";
+        ob->len = 5;
+        ob++;
     }
 
-    req->send_next(self, outbufs, outbufcnt, is_final);
+    req->send_next(self, outbufs, /*bufcount*/(ob-outbufs)/sizeof(*ob), is_final);
     h2o_mem_alloca_free(outbufs);
 }
 
