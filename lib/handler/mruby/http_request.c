@@ -76,7 +76,7 @@ static mrb_value create_downstream_closed_exception(mrb_state *mrb)
     return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
 }
 
-static mrb_value detach_receiver(struct h2o_mruby_http_request_context_t *ctx)
+static mrb_value detach_receiver(h2o_mruby_http_request_context_t *ctx)
 {
     mrb_value ret = ctx->receiver;
     assert(!mrb_nil_p(ret));
@@ -112,8 +112,8 @@ static void on_dispose(void *_ctx)
     }
 }
 
-static void post_response(struct h2o_mruby_http_request_context_t *ctx,
-        int status, const struct phr_header *headers_sorted,
+static void post_response(h2o_mruby_http_request_context_t *ctx,
+        int status, const phr_header *headers_sorted,
                           size_t num_headers)
 {
     mrb_state *mrb = ctx->generator->ctx->mrb;
@@ -169,10 +169,10 @@ static void post_response(struct h2o_mruby_http_request_context_t *ctx,
     mrb_gc_arena_restore(mrb, gc_arena);
 }
 
-static void post_error(struct h2o_mruby_http_request_context_t *ctx,
+static void post_error(h2o_mruby_http_request_context_t *ctx,
         const char *errstr)
 {
-    static const struct phr_header headers_sorted[] =
+    static const phr_header headers_sorted[] =
         {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
 
     ctx->client = NULL;
@@ -183,26 +183,28 @@ static void post_error(struct h2o_mruby_http_request_context_t *ctx,
     post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
 }
 
-static mrb_value build_chunk(struct h2o_mruby_http_request_context_t *ctx)
+static mrb_value build_chunk(h2o_mruby_http_request_context_t *ctx)
 {
     mrb_value chunk;
 
     assert(ctx->resp.has_content);
+    #define new_str_from(mx, b) mrb_str_new(mx->generator->ctx->mrb, mx->b->bytes, mx->b->size)
 
     if (ctx->client != NULL) {
         assert(ctx->client->sock->input->size != 0);
-        chunk = mrb_str_new(ctx->generator->ctx->mrb, ctx->client->sock->input->bytes, ctx->client->sock->input->size);
-        h2o_buffer_consume(&ctx->client->sock->input, ctx->client->sock->input->size);
+        chunk = new_str_from(ctx, client->sock->input);
+        h2o_buffer_consume_all(&ctx->client->sock->input);
         ctx->resp.has_content = 0;
     } else {
         if (ctx->resp.after_closed->size == 0) {
             chunk = mrb_nil_value();
         } else {
-            chunk = mrb_str_new(ctx->generator->ctx->mrb, ctx->resp.after_closed->bytes, ctx->resp.after_closed->size);
-            h2o_buffer_consume(&ctx->resp.after_closed, ctx->resp.after_closed->size);
+            chunk = new_str_from(ctx, resp.after_closed);
+            h2o_buffer_consume_all(&ctx->resp.after_closed);
         }
         /* has_content is retained as true, so that repeated calls will return nil immediately */
     }
+    #undef new_str_from
 
     return chunk;
 }
@@ -247,7 +249,7 @@ static int headers_sort_cb(const void *_x, const void *_y)
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client,
         const char *errstr, int minor_version, int status,
-        h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
+        h2o_iovec_t msg, phr_header *headers, size_t num_headers)
 {
     auto ctx = (h2o_mruby_http_request_context_t *)client->data;
 
