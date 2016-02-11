@@ -797,7 +797,7 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf,
     for (i = 0; index_files[i] != NULL; ++i)
         ;
     auto self = (h2o_file_handler_t*)
-        h2o_create_handler(pathconf, offsetof(h2o_file_handler_t,
+        pathconf->create_handler(offsetof(h2o_file_handler_t,
             index_files[0]) + sizeof(h2o_file_handler_t) * (i + 1));
 
     /* setup callbacks */

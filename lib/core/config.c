@@ -33,7 +33,7 @@ static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {
     auto hostconf = h2o_mem_alloc_for<h2o_hostconf_t>();
     *hostconf = (h2o_hostconf_t){globalconf};
-    h2o_config_init_pathconf(&hostconf->fallback_path, globalconf, NULL, globalconf->mimemap);
+    h2o_pathconf_t::init(&hostconf->fallback_path, globalconf, NULL, globalconf->mimemap);
     hostconf->mimemap = globalconf->mimemap;
     h2o_mem_addref_shared(hostconf->mimemap);
     return hostconf;
@@ -48,16 +48,16 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
     h2o_mem_free(hostconf->authority.host.base);
     for (i = 0; i != hostconf->paths.size; ++i) {
         auto pathconf = hostconf->paths[i];
-        h2o_config_dispose_pathconf(&pathconf);
+        h2o_pathconf_t::dispose(&pathconf);
     }
     h2o_mem_free(hostconf->paths.entries);
-    h2o_config_dispose_pathconf(&hostconf->fallback_path);
+    h2o_pathconf_t::dispose(&hostconf->fallback_path);
     h2o_mem_release_shared(hostconf->mimemap);
 
     h2o_mem_free(hostconf);
 }
 
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap)
+void h2o_pathconf_t::init(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap)
 {
     h2o_clearmem(pathconf);
     pathconf->global = globalconf;
@@ -68,7 +68,7 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
     pathconf->mimemap = mimemap;
 }
 
-void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
+void h2o_pathconf_t::dispose(h2o_pathconf_t *pathconf)
 {
 #define DESTROY_LIST(list) \
     do { \
@@ -124,7 +124,7 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
 {
     auto pathconf = hostconf->paths.append_new(NULL);
 
-    h2o_config_init_pathconf(pathconf, hostconf->global, pathname, hostconf->mimemap);
+    h2o_pathconf_t::init(pathconf, hostconf->global, pathname, hostconf->mimemap);
 
     return pathconf;
 }
@@ -188,35 +188,26 @@ h2o_globalconf_t::~h2o_globalconf_t()
     this->dispose_configurators();
 }
 
-h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
+h2o_handler_t *h2o_pathconf_t::create_handler(size_t sz)
 {
-    auto handler = (h2o_handler_t *)h2o_mem_calloc(sz, 1);
-
-    handler->_config_slot = conf->global->_num_config_slots++;
-
-    conf->handlers.push_back(NULL, handler);
-
+    auto handler = (h2o_handler_t*)h2o_mem_calloc(sz, 1);
+    handler->_config_slot = this->global->_num_config_slots++;
+    this->handlers.push_back(NULL, handler);
     return handler;
 }
 
-h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
+h2o_filter_t *h2o_pathconf_t::create_filter(size_t sz)
 {
-    auto filter = (h2o_filter_t *)h2o_mem_calloc(sz, 1);
-
-    filter->_config_slot = conf->global->_num_config_slots++;
-
-    conf->filters.push_front(NULL, filter);
-
+    auto filter = (h2o_filter_t*)h2o_mem_calloc(sz, 1);
+    filter->_config_slot = this->global->_num_config_slots++;
+    this->filters.push_front(NULL, filter);
     return filter;
 }
 
-h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
+h2o_logger_t *h2o_pathconf_t::create_logger(size_t sz)
 {
-    auto logger = (h2o_logger_t *)h2o_mem_calloc(sz, 1);
-
-    logger->_config_slot = conf->global->_num_config_slots++;
-
-    conf->loggers.push_back(NULL, logger);
-
+    auto logger = (h2o_logger_t*)h2o_mem_calloc(sz, 1);
+    logger->_config_slot = this->global->_num_config_slots++;
+    this->loggers.push_back(NULL, logger);
     return logger;
 }

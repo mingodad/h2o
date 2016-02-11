@@ -38,7 +38,7 @@
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
-    h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
+    h2o_handler_t *handler = pathconf->create_handler(sizeof(*handler));
     handler->on_req = on_req;
     return pathconf;
 }

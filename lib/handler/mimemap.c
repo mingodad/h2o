@@ -144,7 +144,7 @@ static h2o_mimemap_type_t *create_extension_type(const char *mime, h2o_mime_attr
 
 static void dispose_dynamic_type(h2o_mimemap_type_t *type)
 {
-    h2o_config_dispose_pathconf(&type->data.dynamic.pathconf);
+    h2o_pathconf_t::dispose(&type->data.dynamic.pathconf);
 }
 
 static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf, h2o_mimemap_t *mimemap)
@@ -153,7 +153,7 @@ static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf, h2o
 
     type->type = H2O_MIMEMAP_TYPE_DYNAMIC;
     h2o_clearmem(&type->data.dynamic);
-    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, NULL, mimemap);
+    h2o_pathconf_t::init(&type->data.dynamic.pathconf, globalconf, NULL, mimemap);
 
     return type;
 }

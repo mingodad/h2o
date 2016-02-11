@@ -194,6 +194,39 @@ struct h2o_pathconf_t {
      * mimemap
      */
     h2o_mimemap_t *mimemap;
+
+    /**
+     * initializes pathconf
+     * @param path path to serve, or NULL if fallback or extension-level
+     * @param mimemap mimemap to use, or NULL if fallback or extension-level
+     */
+    static void init(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap);
+    /**
+     *
+     */
+    static void dispose(h2o_pathconf_t *pathconf);
+
+    /**
+     * creates a handler associated to a given pathconf
+     */
+    h2o_handler_t *create_handler(size_t sz);
+    #define h2o_create_handler_for(conf, handler_type) (handler_type*)conf->create_handler(sizeof(handler_type))
+    #define h2o_create_new_handler_for(new_var_name, conf, handler_type) \
+        handler_type* new_var_name = h2o_create_handler_for(conf, handler_type)
+    /**
+     * creates a filter associated to a given pathconf
+     */
+    h2o_filter_t *create_filter(size_t sz);
+    #define h2o_create_filter_for(conf, filter_type) (filter_type*)conf->create_filter(sizeof(filter_type))
+    #define h2o_create_new_filter_for(new_var_name, conf, filter_type) \
+        filter_type* new_var_name = h2o_create_filter_for(conf, filter_type)
+    /**
+     * creates a logger associated to a given pathconf
+     */
+    h2o_logger_t *create_logger(size_t sz);
+    #define h2o_create_logger_for(conf, logger_type) (logger_type*)conf->create_logger(sizeof(logger_type))
+    #define h2o_create_new_logger_for(new_var_name, conf, logger_type) \
+        logger_type* new_var_name = h2o_create_logger_for(conf, logger_type)
 };
 
 struct h2o_hostconf_t {
@@ -1245,16 +1278,6 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
 /* config */
 
 /**
- * initializes pathconf
- * @param path path to serve, or NULL if fallback or extension-level
- * @param mimemap mimemap to use, or NULL if fallback or extension-level
- */
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap);
-/**
- *
- */
-void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf);
-/**
  * registers a host context
  */
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port);
@@ -1262,27 +1285,6 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
  * registers a path context
  */
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname);
-/**
- * creates a handler associated to a given pathconf
- */
-h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz);
-#define h2o_create_handler_for(conf, handler_type) (handler_type*)h2o_create_handler(conf, sizeof(handler_type))
-#define h2o_create_new_handler_for(new_var_name, conf, handler_type) \
-    handler_type* new_var_name = h2o_create_handler_for(conf, handler_type)
-/**
- * creates a filter associated to a given pathconf
- */
-h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz);
-#define h2o_create_filter_for(conf, filter_type) (filter_type*)h2o_create_filter(conf, sizeof(filter_type))
-#define h2o_create_new_filter_for(new_var_name, conf, filter_type) \
-    filter_type* new_var_name = h2o_create_filter_for(conf, filter_type)
-/**
- * creates a logger associated to a given pathconf
- */
-h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz);
-#define h2o_create_logger_for(conf, logger_type) (logger_type*)h2o_create_logger(conf, sizeof(logger_type))
-#define h2o_create_new_logger_for(new_var_name, conf, logger_type) \
-    logger_type* new_var_name = h2o_create_logger_for(conf, logger_type)
 
 /* context */
 
