@@ -68,13 +68,13 @@
 		<Linker>
 			<Add library="libh2o-evloop.a" />
 			<Add library="mruby/host/lib/libmruby.a" />
-			<Add library="../h2o-to-patch2/libressl-build/lib/libssl.a" />
-			<Add library="../h2o-to-patch2/libressl-build/lib/libcrypto.a" />
+			<Add library="libressl-build/lib/libssl.a" />
+			<Add library="libressl-build/lib/libcrypto.a" />
 			<Add library="pthread" />
 			<Add library="m" />
 			<Add library="z" />
 			<Add library="dl" />
-			<Add directory="../h2o-to-patch" />
+			<Add directory="." />
 		</Linker>
 		<Unit filename="deps/picotest/picotest.c">
 			<Option compilerVar="CC" />
