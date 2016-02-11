@@ -119,7 +119,7 @@ static void post_response(struct h2o_mruby_http_request_context_t *ctx,
     mrb_state *mrb = ctx->generator->ctx->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
     size_t i;
-    auto hs = ((const h2o_headers_t*)headers_sorted)->entries;
+    //auto hs = ((const h2o_headers_t*)headers_sorted)->entries;
 
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
 
@@ -130,15 +130,15 @@ static void post_response(struct h2o_mruby_http_request_context_t *ctx,
     mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
     for (i = 0; i < num_headers; ++i) {
         /* skip the headers, we determine the eos! */
-        //if (h2o_phr_header_name_is_literal(headers_sorted[i], "content-length") ||
-        //    h2o_phr_header_name_is_literal(headers_sorted[i], "transfer-encoding"))
-        if (hs[i].name->isEq("content-length") || hs[i].name->isEq("transfer-encoding"))
+        if (h2o_phr_header_name_is_literal(headers_sorted[i], "content-length") ||
+            h2o_phr_header_name_is_literal(headers_sorted[i], "transfer-encoding"))
+        //if (hs[i].name->isEq("content-length") || hs[i].name->isEq("transfer-encoding"))
             continue;
         /* build and set the hash entry */
         mrb_value k = mrb_str_new(mrb, headers_sorted[i].name, headers_sorted[i].name_len);
         mrb_value v = mrb_str_new(mrb, headers_sorted[i].value, headers_sorted[i].value_len);
-        //while (i + 1 < num_headers && h2o_phr_header_name_cmp(headers_sorted[i], headers_sorted[i + 1])) {
-        while (i + 1 < num_headers && hs[i].name->isEq(hs[i + 1].name)) {
+        while (i + 1 < num_headers && h2o_phr_header_name_cmp(headers_sorted[i], headers_sorted[i + 1])) {
+        //while (i + 1 < num_headers && hs[i].name->isEq(hs[i + 1].name)) {
             ++i;
             v = mrb_str_cat_lit(mrb, v, "\n");
             v = mrb_str_cat(mrb, v, headers_sorted[i].value, headers_sorted[i].value_len);

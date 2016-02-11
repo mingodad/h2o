@@ -35,7 +35,7 @@ static void on_read(h2o_socket_t *sock, int status)
     if (status != 0) {
         /* read failed */
         fprintf(stderr, "read failed\n");
-        h2o_socket_close(sock);
+        h2o_socket_t::close(sock);
         exit_loop = 1;
         return;
     }
@@ -48,27 +48,27 @@ static void on_write(h2o_socket_t *sock, int status)
     if (status != 0) {
         /* write failed */
         fprintf(stderr, "write failed\n");
-        h2o_socket_close(sock);
+        h2o_socket_t::close(sock);
         exit_loop = 1;
         return;
     }
 
-    h2o_socket_read_start(sock, on_read);
+    sock->read_start(on_read);
 }
 
 static void on_connect(h2o_socket_t *sock, int status)
 {
-    h2o_iovec_t *send_data = sock->data;
+     auto send_data = (h2o_iovec_t*)sock->data;
 
     if (status != 0) {
         /* connection failed */
         fprintf(stderr, "failed to connect to host:%s\n", strerror(status));
-        h2o_socket_close(sock);
+        h2o_socket_t::close(sock);
         exit_loop = 1;
         return;
     }
 
-    h2o_socket_write(sock, send_data, 1, on_write);
+    sock->write(send_data, 1, on_write);
 }
 
 int main(int argc, char **argv)

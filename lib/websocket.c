@@ -45,7 +45,7 @@ static void on_close(h2o_websocket_conn_t *conn)
 
 static void on_recv(h2o_socket_t *sock, int status)
 {
-    h2o_websocket_conn_t *conn = sock->data;
+    auto conn = (h2o_websocket_conn_t *)sock->data;
 
     if (status == -1) {
         on_close(conn);
@@ -56,7 +56,7 @@ static void on_recv(h2o_socket_t *sock, int status)
 
 static void on_write_complete(h2o_socket_t *sock, int status)
 {
-    h2o_websocket_conn_t *conn = sock->data;
+     auto conn = (h2o_websocket_conn_t *)sock->data;
 
     if (status == -1) {
         on_close(conn);
@@ -67,7 +67,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
 
 static ssize_t recv_callback(wslay_event_context_ptr ctx, uint8_t *buf, size_t len, int flags, void *_conn)
 {
-    h2o_websocket_conn_t *conn = _conn;
+     auto conn = (h2o_websocket_conn_t *)_conn;
 
     /* return WOULDBLOCK if no data */
     if (conn->sock->input->size == 0) {
@@ -84,11 +84,11 @@ static ssize_t recv_callback(wslay_event_context_ptr ctx, uint8_t *buf, size_t l
 
 static ssize_t send_callback(wslay_event_context_ptr ctx, const uint8_t *data, size_t len, int flags, void *_conn)
 {
-    h2o_websocket_conn_t *conn = _conn;
+    auto conn = (h2o_websocket_conn_t *)_conn;
     h2o_iovec_t buf;
 
     /* return WOULDBLOCK if pending (TODO: queue fixed number of chunks, instead of only one) */
-    if (h2o_socket_is_writing(conn->sock)) {
+    if (conn->sock->is_writing()) {
         wslay_event_set_error(conn->ws_ctx, WSLAY_ERR_WOULDBLOCK);
         return -1;
     }
@@ -98,22 +98,22 @@ static ssize_t send_callback(wslay_event_context_ptr ctx, const uint8_t *data, s
     memcpy(conn->_write_buf, data, len);
 
     /* write */
-    buf.base = conn->_write_buf;
+    buf.base = (char*)conn->_write_buf;
     buf.len = len;
-    h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
+    conn->sock->write(&buf, 1, on_write_complete);
 
     return len;
 }
 
 static void on_msg_callback(wslay_event_context_ptr ctx, const struct wslay_event_on_msg_recv_arg *arg, void *_conn)
 {
-    h2o_websocket_conn_t *conn = _conn;
+     auto conn = (h2o_websocket_conn_t *)_conn;
     (*conn->cb)(conn, arg);
 }
 
 static void on_complete(void *user_data, h2o_socket_t *sock, size_t reqsize)
 {
-    h2o_websocket_conn_t *conn = user_data;
+    auto conn = (h2o_websocket_conn_t *)user_data;
 
     /* close the connection on error */
     if (sock == NULL) {
@@ -129,7 +129,7 @@ static void on_complete(void *user_data, h2o_socket_t *sock, size_t reqsize)
 
 h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_req_t *req, const char *client_key, void *data, h2o_websocket_msg_callback cb)
 {
-    h2o_websocket_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
+     auto conn = h2o_mem_alloc_for<h2o_websocket_conn_t>();
     char accept_key[29];
 
     /* only for http1 connection */
@@ -150,8 +150,8 @@ h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_req_t *req, const char *clien
     create_accept_key(accept_key, client_key);
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
-    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("sec-websocket-accept"), 0, accept_key, strlen(accept_key));
+    req->res.headers.add(&req->pool, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
+    req->res.headers.add(&req->pool, H2O_STRLIT("sec-websocket-accept"), 0, accept_key, strlen(accept_key));
 
     /* send */
     h2o_http1_upgrade(req, NULL, 0, on_complete, conn);
@@ -179,7 +179,7 @@ int h2o_is_websocket_handshake(h2o_req_t *req, const char **ws_client_key)
         return 0;
     }
     /* sec-websocket-key header */
-    if ((key_header_index = h2o_find_header_by_str(&req->headers, H2O_STRLIT("sec-websocket-key"), -1)) != -1) {
+    if ((key_header_index = req->headers.find(H2O_STRLIT("sec-websocket-key"), -1)) != -1) {
         if (req->headers.entries[key_header_index].value.len != 24) {
             return -1;
         }
@@ -194,7 +194,7 @@ int h2o_is_websocket_handshake(h2o_req_t *req, const char **ws_client_key)
 void h2o_websocket_close(h2o_websocket_conn_t *conn)
 {
     if (conn->sock != NULL)
-        h2o_socket_close(conn->sock);
+        h2o_socket_t::close(conn->sock);
     free(conn->_write_buf);
     wslay_event_context_free(conn->ws_ctx);
     free(conn);
@@ -207,7 +207,7 @@ void h2o_websocket_proceed(h2o_websocket_conn_t *conn)
     /* run the loop until getting to a point where no more progress can be achieved */
     do {
         handled = 0;
-        if (!h2o_socket_is_writing(conn->sock) && wslay_event_want_write(conn->ws_ctx)) {
+        if (!conn->sock->is_writing() && wslay_event_want_write(conn->ws_ctx)) {
             if (wslay_event_send(conn->ws_ctx) != 0) {
                 goto Close;
             }
@@ -222,9 +222,9 @@ void h2o_websocket_proceed(h2o_websocket_conn_t *conn)
     } while (handled);
 
     if (wslay_event_want_read(conn->ws_ctx)) {
-        h2o_socket_read_start(conn->sock, on_recv);
-    } else if (h2o_socket_is_writing(conn->sock) || wslay_event_want_write(conn->ws_ctx)) {
-        h2o_socket_read_stop(conn->sock);
+        conn->sock->read_start(on_recv);
+    } else if (conn->sock->is_writing() || wslay_event_want_write(conn->ws_ctx)) {
+        conn->sock->read_stop();
     } else {
         /* nothing is going on... close the socket */
         goto Close;

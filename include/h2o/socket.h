@@ -56,7 +56,7 @@ struct h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 
-#if H2O_USE_LIBUV2
+#if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
 #else
 #include "socket/evloop.h"

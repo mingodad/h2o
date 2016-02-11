@@ -53,9 +53,9 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
     h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-    h2o_start_response(req, &generator);
-    h2o_send(req, &body, 1, 1);
+    req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    req->start_response(&generator);
+    req->send(&body, 1, 1);
 
     return 0;
 }
@@ -67,8 +67,8 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
-    h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
+    req->res.headers.add(&req->pool, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
+    req->send_inline(H2O_STRLIT("you should never see this!\n"));
 
     return 0;
 }
@@ -80,9 +80,9 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
         static h2o_generator_t generator = {NULL, NULL};
         req->res.status = 200;
         req->res.reason = "OK";
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
-        h2o_start_response(req, &generator);
-        h2o_send(req, &req->entity, 1, 1);
+        req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+        req->start_response(&generator);
+        req->send(&req->entity, 1, 1);
         return 0;
     }
 
@@ -104,7 +104,7 @@ static void on_accept(uv_stream_t *listener, int status)
     if (status != 0)
         return;
 
-    conn = h2o_mem_alloc(sizeof(*conn));
+    conn = h2o_mem_alloc_for<uv_tcp_t>();
     uv_tcp_init(listener->loop, conn);
 
     if (uv_accept(listener, (uv_stream_t *)conn) != 0) {
@@ -190,7 +190,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 
     if (USE_MEMCACHED) {
         accept_ctx.libmemcached_receiver = &libmemcached_receiver;
-        h2o_accept_setup_async_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 1, "h2o:ssl-resumption:"), 86400);
+        h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t::create("127.0.0.1", 11211, 1, "h2o:ssl-resumption:"), 86400);
         h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
     }
 
@@ -221,8 +221,7 @@ int main(int argc, char **argv)
 
     signal(SIGPIPE, SIG_IGN);
 
-    h2o_config_init(&config);
-    hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
+    hostconf = h2o_config_register_host(&config, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
     register_handler(hostconf, "/post-test", post_test);
     register_handler(hostconf, "/chunked-test", chunked_test);
     h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
@@ -231,7 +230,7 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
     uv_loop_t loop;
     uv_loop_init(&loop);
-    h2o_context_init(&ctx, &loop, &config);
+    ctx.init(&loop, &config);
 #else
     h2o_context_init(&ctx, h2o_evloop_create(), &config);
 #endif

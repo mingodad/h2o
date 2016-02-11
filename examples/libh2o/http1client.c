@@ -44,10 +44,10 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     h2o_iovec_t *req;
 
     /* clear memory pool */
-    h2o_mem_clear_pool(&pool);
+    pool.clear();
 
     /* parse URL */
-    if (h2o_url_parse(url, SIZE_MAX, &url_parsed) != 0) {
+    if (url_parsed.parse(url, SIZE_MAX) != 0) {
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
@@ -57,8 +57,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     }
 
     /* build request */
-    req = h2o_mem_alloc_pool(&pool, sizeof(*req));
-    req->base = h2o_mem_alloc_pool(&pool, 1024);
+    req = pool.alloc_for<h2o_iovec_t>();
+    req->base = pool.alloc_for<char>(1024);
     req->len = snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %.*s\r\n\r\n", (int)url_parsed.path.len, url_parsed.path.base,
                         (int)url_parsed.authority.len, url_parsed.authority.base);
     assert(req->len < 1024);
@@ -66,13 +66,13 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     /* initiate the request */
     if (1) {
         if (sockpool == NULL) {
-            sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), 10);
+            sockpool = h2o_mem_alloc_for<h2o_socketpool_t>();
+            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, url_parsed.get_port(), 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
-        h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect);
+        h2o_http1client_t::connect_with_pool(req, ctx, sockpool, on_connect);
     } else {
-        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), on_connect);
+        h2o_http1client_t::connect(req, ctx, url_parsed.host, url_parsed.get_port(), on_connect);
     }
 }
 
@@ -90,7 +90,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     if (errstr == h2o_http1client_error_is_eos) {
         if (--cnt_left != 0) {
             /* next attempt */
-            h2o_mem_clear_pool(&pool);
+            pool.clear();
             start_request(client->ctx);
         }
     }
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     }
     url = argv[1];
 
-    h2o_mem_init_pool(&pool);
+    pool.init();
 
 /* setup context */
 #if H2O_USE_LIBUV
@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 #endif
     queue = h2o_multithread_create_queue(ctx.loop);
     h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
-    h2o_timeout_init(ctx.loop, &io_timeout, 5000); /* 5 seconds */
+    io_timeout.init(ctx.loop, 5000); /* 5 seconds */
 
     /* setup the first request */
     start_request(&ctx);
