@@ -189,7 +189,7 @@ h2o_globalconf_t::~h2o_globalconf_t()
 
 h2o_handler_t *h2o_pathconf_t::create_handler(size_t sz)
 {
-    auto handler = h2o_mem_calloc_for<h2o_handler_t>();
+    auto handler = (h2o_handler_t*)h2o_mem_calloc(sz, 1);
     handler->_config_slot = this->global->_num_config_slots++;
     this->handlers.push_back(NULL, handler);
     return handler;
@@ -197,7 +197,7 @@ h2o_handler_t *h2o_pathconf_t::create_handler(size_t sz)
 
 h2o_filter_t *h2o_pathconf_t::create_filter(size_t sz)
 {
-    auto filter = h2o_mem_calloc_for<h2o_filter_t>();
+    auto filter = (h2o_filter_t*)h2o_mem_calloc(sz, 1);
     filter->_config_slot = this->global->_num_config_slots++;
     this->filters.push_front(NULL, filter);
     return filter;
@@ -205,7 +205,7 @@ h2o_filter_t *h2o_pathconf_t::create_filter(size_t sz)
 
 h2o_logger_t *h2o_pathconf_t::create_logger(size_t sz)
 {
-    auto logger = h2o_mem_calloc_for<h2o_logger_t>();
+    auto logger = (h2o_logger_t*)h2o_mem_calloc(sz, 1);
     logger->_config_slot = this->global->_num_config_slots++;
     this->loggers.push_back(NULL, logger);
     return logger;

@@ -677,7 +677,7 @@ h2o_configurator_t *h2o_globalconf_t::configurator_create(size_t sz)
 
     assert(sz >= sizeof(*c));
 
-    c = h2o_mem_calloc_for<h2o_configurator_t>();
+    c = (h2o_configurator_t *)h2o_mem_calloc(sz, 1);
     this->configurators.insert(&c->_link);
 
     return c;
