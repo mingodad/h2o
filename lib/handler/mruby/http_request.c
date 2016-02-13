@@ -407,7 +407,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     h2o_buffer_append(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* build request and connect */
-    ctx->client = h2o_http1client_t::connect(ctx,
+    h2o_http1client_t::connect(&ctx->client, ctx,
         &generator->req->conn->ctx->proxy.client_ctx, url.host,
         url.get_port(), on_connect);
 

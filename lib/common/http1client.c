@@ -433,15 +433,14 @@ static h2o_http1client_private_t *create_client(h2o_http1client_t **_client, voi
 
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
-h2o_http1client_t * h2o_http1client_t::connect(void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
+void h2o_http1client_t::connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
                              h2o_http1client_connect_cb cb)
 {
-    h2o_http1client_t *dummy;
     h2o_http1client_private_t *client;
     char serv[sizeof("65536")];
 
     /* setup */
-    client = create_client(&dummy, data, ctx, cb);
+    client = create_client(_client, data, ctx, cb);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(client);
 
@@ -451,7 +450,7 @@ h2o_http1client_t * h2o_http1client_t::connect(void *data, h2o_http1client_ctx_t
             sin.sin_family = AF_INET;
             sin.sin_port = htons(port);
             start_connect(client, (sockaddr*)&sin, sizeof(sin));
-            goto done;
+            return;
         }
     }
     { /* directly call connect(2) if `host` refers to an UNIX-domain socket */
@@ -460,10 +459,10 @@ h2o_http1client_t * h2o_http1client_t::connect(void *data, h2o_http1client_ctx_t
         if ((to_sa_err = h2o_url_host_to_sun(host, &sa)) != h2o_url_host_to_sun_err_is_not_unix_socket) {
             if (to_sa_err != NULL) {
                 on_connect_error(client, to_sa_err);
-                goto done;
+                return;
             }
             start_connect(client, (sockaddr*)&sa, sizeof(sa));
-            goto done;
+            return;
         }
     }
     /* resolve destination and then connect */
@@ -471,23 +470,18 @@ h2o_http1client_t * h2o_http1client_t::connect(void *data, h2o_http1client_ctx_t
         h2o_hostinfo_getaddr(ctx->getaddr_receiver, host,
                              h2o_iovec_t::create(serv, snprintf(serv, sizeof(serv), "%u", (unsigned)port)),
                              on_getaddr, client);
-done:
-    return (h2o_http1client_t*)client;
 }
 
-h2o_http1client_t *h2o_http1client_t::connect_with_pool(void *data, h2o_http1client_ctx_t *ctx,
+void h2o_http1client_t::connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
-    h2o_http1client_t *dummy;
     h2o_http1client_private_t *client;
-    client = create_client(&dummy, data, ctx, cb);
+    client = create_client(_client, data, ctx, cb);
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(client);
     h2o_socketpool_connect(&client->super.sockpool.connect_req, sockpool, ctx->loop, ctx->getaddr_receiver, on_pool_connect,
                            client);
-
-    return (h2o_http1client_t*)client;
 }
 
 void h2o_http1client_t::cancel()
