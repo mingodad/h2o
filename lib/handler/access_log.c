@@ -383,7 +383,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_addr(pos, req->conn->callbacks->get_sockname, req->conn);
             break;
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
-			sz_of = sizeof("18446744073709551615") - 1;
+            sz_of = sizeof("18446744073709551615");
             RESERVE(sz_of);
             pos += snprintf(pos, sz_of, "%llu", (unsigned long long)req->bytes_sent);
             break;
@@ -419,7 +419,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
-			sz_of = sizeof("2147483647") - 1;
+            sz_of = sizeof("2147483647");
             RESERVE(sz_of);
             pos += snprintf(pos, sz_of, "%d", req->res.status);
             break;
@@ -436,35 +436,35 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             for (bufsz = 128;; bufsz *= 2) {
                 RESERVE(bufsz);
                 if ((len = strftime(pos, bufsz, element->data.name.base, &localt)) != 0)
-    break;
+                   break;
             }
             pos += len;
         } break;
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
-			sz_of = sizeof("4294967295") - 1;
+            sz_of = sizeof("4294967295");
             RESERVE(sz_of);
             pos += snprintf(pos, sz_of, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
-			sz_of = sizeof("18446744073709551615") - 1;
+            sz_of = sizeof("18446744073709551615");
             RESERVE(sz_of);
             pos += snprintf(pos, sz_of, "%" PRIu64,
            (uint64_t)req->processed_at.at.tv_sec * 1000 + (uint64_t)req->processed_at.at.tv_usec / 1000);
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH: /* %{usec}t */
-			sz_of = sizeof("18446744073709551615") - 1;
+            sz_of = sizeof("18446744073709551615");
             RESERVE(sz_of);
             pos +=
                 snprintf(pos, sz_of, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec * 1000000 + (uint64_t)req->processed_at.at.tv_usec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC: /* %{msec_frac}t */
-			sz_of = 3;
+            sz_of = 4; //3+1 zero terminator
             RESERVE(sz_of);
             pos += snprintf(pos, sz_of, "%03u", (unsigned)(req->processed_at.at.tv_usec / 1000));
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_FRAC: /* %{usec_frac}t */
+            sz_of = 7; //6+1 zero terminator
             RESERVE(sz_of);
-            RESERVE(6);
             pos += snprintf(pos, sz_of, "%06u", (unsigned)req->processed_at.at.tv_usec);
             break;
         case ELEMENT_TYPE_URL_PATH: /* %U */ {
