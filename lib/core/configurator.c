@@ -101,10 +101,10 @@ static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_
 
 int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands)
 {
-    typedef struct {
+    struct st_cmd_value_t {
         h2o_configurator_command_t *cmd;
         yoml_t *value;
-    } st_cmd_value_t;
+    };
     H2O_VECTOR<st_cmd_value_t> deferred, semi_deferred;
     size_t i;
     int ret = -1;
@@ -170,9 +170,9 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         }
         /* handle the command (or keep it for later execution) */
         if ((cmd->flags & H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED) != 0) {
-            semi_deferred.push_back(NULL, ((st_cmd_value_t){cmd, value}));
+            semi_deferred.push_back(NULL, {cmd, value});
         } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
-            deferred.push_back(NULL, ((st_cmd_value_t){cmd, value}));
+            deferred.push_back(NULL, {cmd, value});
         } else {
             if (cmd->cb(cmd, ctx, value) != 0)
                 return -1;
@@ -181,13 +181,13 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         ;
     }
     for (i = 0; i != semi_deferred.size; ++i) {
-        st_cmd_value_t *pair = semi_deferred.entries + i;
-        if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+        auto pair = semi_deferred[i];
+        if (pair.cmd->cb(pair.cmd, ctx, pair.value) != 0)
             goto Exit;
     }
     for (i = 0; i != deferred.size; ++i) {
-        st_cmd_value_t *pair = deferred.entries + i;
-        if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+        auto pair = deferred[i];
+        if (pair.cmd->cb(pair.cmd, ctx, pair.value) != 0)
             goto Exit;
     }
 
@@ -197,8 +197,8 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
 
     ret = 0;
 Exit:
-    h2o_mem_free(deferred.entries);
-    h2o_mem_free(semi_deferred.entries);
+    deferred.clear_free();
+    semi_deferred.clear_free();
     return ret;
 }
 
@@ -229,9 +229,9 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
           (qs_compar_t)sort_from_longer_paths);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
-        yoml_t *key = node->data.mapping.elements[i].key;
-        yoml_t *value = node->data.mapping.elements[i].value;
-        h2o_configurator_context_t path_ctx = *ctx;
+        auto key = node->data.mapping.elements[i].key;
+        auto value = node->data.mapping.elements[i].value;
+        auto path_ctx = *ctx;
         path_ctx.pathconf = h2o_config_register_path(path_ctx.hostconf, key->data.scalar);
         path_ctx.mimemap = &path_ctx.pathconf->mimemap;
         path_ctx.parent = ctx;
@@ -419,8 +419,8 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
     assert(node->type == YOML_TYPE_MAPPING);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
-        yoml_t *key = node->data.mapping.elements[i].key;
-        yoml_t *value = node->data.mapping.elements[i].value;
+        auto key = node->data.mapping.elements[i].key;
+        auto value = node->data.mapping.elements[i].value;
         if (assert_is_mimetype(cmd, key) != 0)
             return -1;
         switch (value->type) {
@@ -431,7 +431,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             break;
         case YOML_TYPE_SEQUENCE:
             for (j = 0; j != value->data.sequence.size; ++j) {
-                yoml_t *ext_node = value->data.sequence.elements[j];
+                auto ext_node = value->data.sequence.elements[j];
                 if (assert_is_extension(cmd, ext_node) != 0)
                     return -1;
                 h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, NULL);
@@ -470,7 +470,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
                 return -1;
             }
             for (j = 0; j != t->data.sequence.size; ++j) {
-                yoml_t *ext_node = t->data.sequence.elements[j];
+                auto ext_node = t->data.sequence.elements[j];
                 if (assert_is_extension(cmd, ext_node) != 0)
                     return -1;
                 h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, &attr);
@@ -487,7 +487,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
 
 static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_mimemap_t *newmap = h2o_mimemap_create();
+    auto newmap = h2o_mimemap_create();
 
     h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(*ctx->mimemap)->data.mimetype.base, NULL);
     if (set_mimetypes(cmd, newmap, node) != 0) {
@@ -677,7 +677,7 @@ h2o_configurator_t *h2o_globalconf_t::configurator_create(size_t sz)
 
     assert(sz >= sizeof(*c));
 
-    c = (h2o_configurator_t *)h2o_mem_calloc(sz, 1);
+    c = h2o_mem_calloc_for<h2o_configurator_t>();
     this->configurators.insert(&c->_link);
 
     return c;
@@ -700,9 +700,9 @@ h2o_configurator_command_t *h2o_globalconf_t::configurator_get_command(const cha
     for (node = this->configurators.next; node != &this->configurators; node = node->next) {
         auto configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
         for (i = 0; i != configurator->commands.size; ++i) {
-            h2o_configurator_command_t *cmd = configurator->commands.entries + i;
-            if (strcmp(cmd->name, name) == 0) {
-                return cmd;
+            auto &cmd = configurator->commands[i];
+            if (strcmp(cmd.name, name) == 0) {
+                return &cmd;
             }
         }
     }

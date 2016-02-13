@@ -118,9 +118,9 @@ void h2o_context_t::init(h2o_loop_t *loop, h2o_globalconf_t *config)
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&mutex);
     for (i = 0; config->hosts[i] != NULL; ++i) {
-        h2o_hostconf_t *hostconf = config->hosts[i];
+        auto hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
-            h2o_pathconf_t *pathconf = hostconf->paths.entries + j;
+            auto pathconf = hostconf->paths.entries + j;
             this->init_pathconf_context(pathconf);
         }
         this->init_pathconf_context(&hostconf->fallback_path);
@@ -133,18 +133,18 @@ h2o_context_t::~h2o_context_t()
 {
     if(this->loop && this->globalconf)
     {
-        h2o_globalconf_t *config = this->globalconf;
+        auto config = this->globalconf;
         size_t i, j;
 
         for (i = 0; config->hosts[i] != NULL; ++i) {
-            h2o_hostconf_t *hostconf = config->hosts[i];
+            auto hostconf = config->hosts[i];
             for (j = 0; j != hostconf->paths.size; ++j) {
-                h2o_pathconf_t *pathconf = hostconf->paths.entries + j;
-                this->dispose_pathconf_context(pathconf);
+                auto pathconf = hostconf->paths[j];
+                this->dispose_pathconf_context(&pathconf);
             }
             this->dispose_pathconf_context(&hostconf->fallback_path);
         }
-        h2o_mem_free(this->_pathconfs_inited.entries);
+		this->_pathconfs_inited.clear_free();
         h2o_mem_free(this->_module_configs);
         h2o_timeout_t::dispose(this->loop, &this->zero_timeout);
         h2o_timeout_t::dispose(this->loop, &this->one_sec_timeout);
@@ -173,25 +173,26 @@ h2o_context_t::~h2o_context_t()
 void h2o_context_t::request_shutdown()
 {
     this->shutdown_requested = 1;
-    if (this->globalconf->http1.callbacks.request_shutdown != NULL)
-        this->globalconf->http1.callbacks.request_shutdown(this);
-    if (this->globalconf->http2.callbacks.request_shutdown != NULL)
-        this->globalconf->http2.callbacks.request_shutdown(this);
+	auto cb1 = this->globalconf->http1.callbacks.request_shutdown;
+    if (cb1 != NULL) cb1(this);
+	auto cb2 = this->globalconf->http2.callbacks.request_shutdown;
+    if (cb2 != NULL) cb2(this);
 }
 
 void h2o_context_t::update_timestamp_cache()
 {
-    time_t prev_sec = this->_timestamp_cache.tv_at.tv_sec;
-    this->_timestamp_cache.uv_now_at = h2o_now(this->loop);
-    gettimeofday(&this->_timestamp_cache.tv_at, NULL);
-    if (this->_timestamp_cache.tv_at.tv_sec != prev_sec) {
+	auto &tm_cache = this->_timestamp_cache;
+    time_t prev_sec = tm_cache.tv_at.tv_sec;
+    tm_cache.uv_now_at = h2o_now(this->loop);
+    gettimeofday(&tm_cache.tv_at, NULL);
+    if (tm_cache.tv_at.tv_sec != prev_sec) {
         struct tm gmt;
         /* update the string cache */
-        if (this->_timestamp_cache.value != NULL)
-            h2o_mem_release_shared(this->_timestamp_cache.value);
-        this->_timestamp_cache.value = h2o_mem_alloc_shared_for<h2o_timestamp_string_t>(1, NULL);
-        gmtime_r(&this->_timestamp_cache.tv_at.tv_sec, &gmt);
-        h2o_time2str_rfc1123(this->_timestamp_cache.value->rfc1123, &gmt);
-        h2o_time2str_log(this->_timestamp_cache.value->log, this->_timestamp_cache.tv_at.tv_sec);
+        if (tm_cache.value != NULL)
+            h2o_mem_release_shared(tm_cache.value);
+        tm_cache.value = h2o_mem_alloc_shared_for<h2o_timestamp_string_t>(1, NULL);
+        gmtime_r(&tm_cache.tv_at.tv_sec, &gmt);
+        h2o_time2str_rfc1123(tm_cache.value->rfc1123, &gmt);
+        h2o_time2str_log(tm_cache.value->log, tm_cache.tv_at.tv_sec);
     }
 }

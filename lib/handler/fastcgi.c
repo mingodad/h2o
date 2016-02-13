@@ -783,7 +783,7 @@ static void on_handler_dispose(h2o_handler_t *_handler) {
 }
 
 static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars) {
-    h2o_create_new_handler_for(handler, pathconf, h2o_fastcgi_handler_t);
+    auto handler = pathconf->create_handler<h2o_fastcgi_handler_t>();
 
     handler->super.on_context_init = on_context_init;
     handler->super.on_context_dispose = on_context_dispose;

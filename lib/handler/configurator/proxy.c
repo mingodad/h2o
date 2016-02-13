@@ -31,7 +31,7 @@ struct proxy_configurator_t : h2o_configurator_t {
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    proxy_configurator_t *self = (proxy_configurator_t *)cmd->configurator;
+    auto self = (proxy_configurator_t *)cmd->configurator;
     return cmd->scanf(node, "%" PRIu64,
             &self->vars->websocket.timeout);
 }
@@ -49,14 +49,14 @@ static int on_config_websocket(h2o_configurator_command_t *cmd,
 static int on_config_timeout_io(h2o_configurator_command_t *cmd,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    proxy_configurator_t *self = (proxy_configurator_t *)cmd->configurator;
+    auto self = (proxy_configurator_t *)cmd->configurator;
     return cmd->scanf(node, "%" PRIu64, &self->vars->io_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    proxy_configurator_t *self = (proxy_configurator_t *)cmd->configurator;
+    auto self = (proxy_configurator_t *)cmd->configurator;
     return cmd->scanf(node, "%" PRIu64,
             &self->vars->keepalive_timeout);
 }
@@ -74,7 +74,7 @@ static int on_config_preserve_host(h2o_configurator_command_t *cmd,
 static int on_config_reverse_url(h2o_configurator_command_t *cmd,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    proxy_configurator_t *self = (proxy_configurator_t *)cmd->configurator;
+    auto self = (proxy_configurator_t *)cmd->configurator;
     h2o_mem_pool_t pool;
     h2o_url_t parsed;
 
@@ -101,7 +101,7 @@ ErrExit:
 static int on_config_enter(h2o_configurator_t *_self,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    proxy_configurator_t *self = (proxy_configurator_t *)_self;
+    auto self = (proxy_configurator_t *)_self;
 
     memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
     ++self->vars;
@@ -111,7 +111,7 @@ static int on_config_enter(h2o_configurator_t *_self,
 static int on_config_exit(h2o_configurator_t *_self,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    proxy_configurator_t *self = (proxy_configurator_t *)_self;
+    auto self = (proxy_configurator_t *)_self;
 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
         /* is global conf */

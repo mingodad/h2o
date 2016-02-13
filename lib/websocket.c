@@ -195,9 +195,9 @@ void h2o_websocket_close(h2o_websocket_conn_t *conn)
 {
     if (conn->sock != NULL)
         h2o_socket_t::close(conn->sock);
-    free(conn->_write_buf);
+    h2o_mem_free(conn->_write_buf);
     wslay_event_context_free(conn->ws_ctx);
-    free(conn);
+    h2o_mem_free(conn);
 }
 
 void h2o_websocket_proceed(h2o_websocket_conn_t *conn)

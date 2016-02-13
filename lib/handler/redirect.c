@@ -111,7 +111,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf,
         int internal, int status, const char *prefix)
 {
-    h2o_create_new_handler_for(self, pathconf, h2o_redirect_handler_t);
+    auto self = pathconf->create_handler<h2o_redirect_handler_t>();
     self->super.dispose = on_dispose;
     self->super.on_req = on_req;
     self->internal = internal;

@@ -62,6 +62,6 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 
 void h2o_reproxy_register(h2o_pathconf_t *pathconf)
 {
-    h2o_create_new_filter_for(self, pathconf, h2o_filter_t);
+    auto self = pathconf->create_filter<h2o_filter_t>();
     self->on_setup_ostream = on_setup_ostream;
 }

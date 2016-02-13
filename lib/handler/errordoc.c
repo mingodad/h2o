@@ -87,7 +87,6 @@ static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req,
 {
     auto self = (errordoc_filter_t *)_self;
     h2o_errordoc_t *errordoc;
-    errordoc_prefilter_t *prefilter;
     h2o_iovec_t method;
     h2o_ostream_t *ostream;
     size_t i;
@@ -107,7 +106,7 @@ static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req,
 
 Found:
     /* register prefilter that rewrites the status code after the internal redirect is processed */
-    prefilter = (errordoc_prefilter_t*)req->add_prefilter(sizeof(errordoc_prefilter_t));
+    auto prefilter = (errordoc_prefilter_t*)req->add_prefilter(sizeof(errordoc_prefilter_t));
     prefilter->on_setup_ostream = on_prefilter_setup_stream;
     prefilter->req_headers = req->headers;
     prefilter->status = req->res.status;
@@ -133,7 +132,7 @@ Found:
 
 void h2o_errordoc_register(h2o_pathconf_t *pathconf, h2o_errordoc_t *errdocs, size_t cnt)
 {
-    h2o_create_new_filter_for(self, pathconf, struct errordoc_filter_t);
+    auto self = pathconf->create_filter<errordoc_filter_t>();
     size_t i;
 
     self->on_setup_ostream = on_filter_setup_ostream;

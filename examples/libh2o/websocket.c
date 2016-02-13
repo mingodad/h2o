@@ -122,7 +122,7 @@ int main(int argc, char **argv)
 
     hostconf = h2o_config_register_host(&config, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
     pathconf = h2o_config_register_path(hostconf, "/");
-    pathconf->create_handler(sizeof(h2o_handler_t))->on_req = on_req;
+    pathconf->create_handler<h2o_handler_t>()->on_req = on_req;
 
     ctx.init(loop, &config);
 

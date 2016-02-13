@@ -38,7 +38,7 @@
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
-    h2o_handler_t *handler = pathconf->create_handler(sizeof(*handler));
+    auto handler = pathconf->create_handler<h2o_handler_t>();
     handler->on_req = on_req;
     return pathconf;
 }
@@ -47,13 +47,14 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
     static h2o_generator_t generator = {NULL, NULL};
 
-    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    if (!req->method.isEq("GET"))
         return -1;
 
-    h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
+    h2o_iovec_t body;
+	body.strdup(&req->pool, "hello world\n", SIZE_MAX);
     req->res.status = 200;
     req->res.reason = "OK";
-    req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    req->addResponseHeader(H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
     req->start_response(&generator);
     req->send(&body, 1, 1);
 
@@ -62,12 +63,12 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    if (!req->method.isEq("GET"))
         return -1;
 
     req->res.status = 200;
     req->res.reason = "OK";
-    req->res.headers.add(&req->pool, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
+    req->addResponseHeader(H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
     req->send_inline(H2O_STRLIT("you should never see this!\n"));
 
     return 0;
@@ -75,12 +76,11 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int post_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) &&
-        h2o_memis(req->path_normalized.base, req->path_normalized.len, H2O_STRLIT("/post-test/"))) {
+    if (req->method.isEq("POST") && req->path_normalized.isEq("/post-test/")) {
         static h2o_generator_t generator = {NULL, NULL};
         req->res.status = 200;
         req->res.reason = "OK";
-        req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+        req->addResponseHeader(H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
         req->start_response(&generator);
         req->send(&req->entity, 1, 1);
         return 0;

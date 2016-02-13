@@ -68,7 +68,7 @@ void h2o_filecache_t::destroy(h2o_filecache_t *cache)
 void h2o_filecache_t::clear()
 {
     khiter_t iter;
-    auto hash = (khash_t(opencache_set)*)hash_table;
+    auto hash = (khash_t(opencache_set)*)this->hash_table;
     for (iter = kh_begin(hash); iter != kh_end(hash); ++iter) {
         if (!kh_exist(hash, iter))
             continue;
@@ -79,7 +79,7 @@ void h2o_filecache_t::clear()
 
 h2o_filecache_ref_t *h2o_filecache_t::open_file(const char *path, int oflag)
 {
-    auto hash = (khash_t(opencache_set)*)hash_table;
+    auto hash = (khash_t(opencache_set)*)this->hash_table;
     khiter_t iter = kh_get(opencache_set, hash, path);
     h2o_filecache_ref_t *ref;
     int fd, dummy;
@@ -107,9 +107,9 @@ h2o_filecache_ref_t *h2o_filecache_t::open_file(const char *path, int oflag)
     ref->_lru = {};
     strcpy(ref->_path, path);
     /* if cache is used, then... */
-    if (capacity != 0) {
+    if (this->capacity != 0) {
         /* purge one entry from LRU if cache is full */
-        if (kh_size(hash) == capacity) {
+        if (kh_size(hash) == this->capacity) {
             auto purge_ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _lru, lru.prev);
             khiter_t purge_iter = kh_get(opencache_set, hash, purge_ref->_path);
             assert(purge_iter != kh_end(hash));
@@ -118,7 +118,7 @@ h2o_filecache_ref_t *h2o_filecache_t::open_file(const char *path, int oflag)
         /* assign the new entry */
         ++ref->_refcnt;
         kh_put(opencache_set, hash, ref->_path, &dummy);
-        lru.next->insert(&ref->_lru);
+        this->lru.next->insert(&ref->_lru);
     }
 
     return ref;
@@ -136,19 +136,19 @@ void h2o_filecache_t::close_file(h2o_filecache_ref_t *ref)
 
 struct tm *h2o_filecache_ref_t::get_last_modified(char *outbuf)
 {
-    if (_last_modified.str[0] == '\0') {
-        gmtime_r(&st.st_mtime, &_last_modified.gm);
-        h2o_time2str_rfc1123(_last_modified.str, &_last_modified.gm);
+    if (this->_last_modified.str[0] == '\0') {
+        gmtime_r(&this->st.st_mtime, &this->_last_modified.gm);
+        h2o_time2str_rfc1123(this->_last_modified.str, &this->_last_modified.gm);
     }
     if (outbuf != NULL)
-        memcpy(outbuf, _last_modified.str, H2O_TIMESTR_RFC1123_LEN + 1);
-    return &_last_modified.gm;
+        memcpy(outbuf, this->_last_modified.str, H2O_TIMESTR_RFC1123_LEN + 1);
+    return &this->_last_modified.gm;
 }
 
 size_t h2o_filecache_ref_t::get_etag(char *outbuf)
 {
-    if (_etag.len == 0)
-        _etag.len = snprintf(_etag.buf, sizeof(_etag.buf), "\"%08x-%zx\"", (unsigned)st.st_mtime, (size_t)st.st_size);
-    memcpy(outbuf, _etag.buf, _etag.len + 1);
-    return _etag.len;
+    if (this->_etag.len == 0)
+        this->_etag.len = snprintf(this->_etag.buf, sizeof(this->_etag.buf), "\"%08x-%zx\"", (unsigned)this->st.st_mtime, (size_t)this->st.st_size);
+    memcpy(outbuf, this->_etag.buf, this->_etag.len + 1);
+    return this->_etag.len;
 }

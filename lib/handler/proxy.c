@@ -135,7 +135,7 @@ static void on_handler_dispose(h2o_handler_t *_self)
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf,
         h2o_url_t *upstream, h2o_proxy_config_vars_t *config)
 {
-    h2o_create_new_handler_for(self, pathconf, struct rp_handler_t);
+    auto self = pathconf->create_handler<rp_handler_t>();
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;

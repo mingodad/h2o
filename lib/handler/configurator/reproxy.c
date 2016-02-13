@@ -44,7 +44,7 @@ static int on_config_reproxy(h2o_configurator_command_t *cmd,
 static int on_config_enter(h2o_configurator_t *_self,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    reproxy_configurator_t *self = (reproxy_configurator_t *)_self;
+    auto self = (reproxy_configurator_t *)_self;
 
     self->vars[1] = self->vars[0];
     ++self->vars;
@@ -54,7 +54,7 @@ static int on_config_enter(h2o_configurator_t *_self,
 static int on_config_exit(h2o_configurator_t *_self,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    reproxy_configurator_t *self = (reproxy_configurator_t *)_self;
+    auto self = (reproxy_configurator_t *)_self;
 
     if (ctx->pathconf != NULL && self->vars->enabled != 0)
         h2o_reproxy_register(ctx->pathconf);

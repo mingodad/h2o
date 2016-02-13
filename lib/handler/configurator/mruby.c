@@ -49,7 +49,7 @@ static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
 static int on_config_mruby_handler(h2o_configurator_command_t *cmd,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    mruby_configurator_t *self = (mruby_configurator_t *)cmd->configurator;
+    auto self = (mruby_configurator_t *)cmd->configurator;
 
     /* set source */
     self->vars->source.strdup(NULL, node->data.scalar, SIZE_MAX);
@@ -84,7 +84,7 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd,
         goto Exit;
     }
     while (!feof(fp)) {
-        buf.base = (char*)h2o_mem_realloc(buf.base, buf.len + 65536);
+        buf.base = h2o_mem_realloc_for<char>(buf.base, buf.len + 65536);
         buf.len += fread(buf.base, 1, 65536, fp);
         if (ferror(fp)) {
             cmd->errprintf(node,

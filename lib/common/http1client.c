@@ -475,8 +475,7 @@ void h2o_http1client_t::connect(h2o_http1client_t **_client, void *data, h2o_htt
 void h2o_http1client_t::connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
-    h2o_http1client_private_t *client;
-    client = create_client(_client, data, ctx, cb);
+    h2o_http1client_private_t *client = create_client(_client, data, ctx, cb);
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(client);

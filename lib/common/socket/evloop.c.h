@@ -51,8 +51,8 @@ struct h2o_evloop_socket_t {
             h2o_iovec_t smallbufs[4];
         };
     } _wreq;
-    struct h2o_evloop_socket_t *_next_pending;
-    struct h2o_evloop_socket_t *_next_statechanged;
+    h2o_evloop_socket_t *_next_pending;
+    h2o_evloop_socket_t *_next_statechanged;
 };
 
 static void link_to_pending(h2o_evloop_socket_t *sock);

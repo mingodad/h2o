@@ -42,7 +42,6 @@ static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 static void destroy_hostconf(h2o_hostconf_t *hostconf)
 {
     size_t i;
-    /*TODO alloc is done through an alias h2o_mem_alloc but free is not*/
     if (hostconf->authority.hostport.base != hostconf->authority.host.base)
         h2o_mem_free(hostconf->authority.hostport.base);
     h2o_mem_free(hostconf->authority.host.base);
@@ -179,7 +178,7 @@ h2o_globalconf_t::~h2o_globalconf_t()
     size_t i;
 
     for (i = 0; this->hosts[i] != NULL; ++i) {
-        h2o_hostconf_t *hostconf = this->hosts[i];
+        auto hostconf = this->hosts[i];
         destroy_hostconf(hostconf);
     }
     h2o_mem_free(this->hosts);
@@ -190,7 +189,7 @@ h2o_globalconf_t::~h2o_globalconf_t()
 
 h2o_handler_t *h2o_pathconf_t::create_handler(size_t sz)
 {
-    auto handler = (h2o_handler_t*)h2o_mem_calloc(sz, 1);
+    auto handler = h2o_mem_calloc_for<h2o_handler_t>();
     handler->_config_slot = this->global->_num_config_slots++;
     this->handlers.push_back(NULL, handler);
     return handler;
@@ -198,7 +197,7 @@ h2o_handler_t *h2o_pathconf_t::create_handler(size_t sz)
 
 h2o_filter_t *h2o_pathconf_t::create_filter(size_t sz)
 {
-    auto filter = (h2o_filter_t*)h2o_mem_calloc(sz, 1);
+    auto filter = h2o_mem_calloc_for<h2o_filter_t>();
     filter->_config_slot = this->global->_num_config_slots++;
     this->filters.push_front(NULL, filter);
     return filter;
@@ -206,7 +205,7 @@ h2o_filter_t *h2o_pathconf_t::create_filter(size_t sz)
 
 h2o_logger_t *h2o_pathconf_t::create_logger(size_t sz)
 {
-    auto logger = (h2o_logger_t*)h2o_mem_calloc(sz, 1);
+    auto logger = h2o_mem_calloc_for<h2o_logger_t>();
     logger->_config_slot = this->global->_num_config_slots++;
     this->loggers.push_back(NULL, logger);
     return logger;
