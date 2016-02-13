@@ -167,7 +167,7 @@ static void on_entity_read_complete(h2o_http1_conn_t *conn)
 static void handle_chunked_entity_read(h2o_http1_conn_t *conn)
 {
     auto reader = (h2o_http1_chunked_entity_reader *)conn->_req_entity_reader;
-    h2o_buffer_t *inbuf = conn->sock->input;
+    auto inbuf = conn->sock->input;
     size_t bufsz;
     ssize_t ret;
 
@@ -666,7 +666,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
     auto self = (h2o_http1_finalostream_t *)_self;
-    h2o_http1_conn_t *conn = (h2o_http1_conn_t *)req->conn;
+    auto conn = (h2o_http1_conn_t *)req->conn;
     auto bufs = (h2o_iovec_t *)h2o_mem_alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1));
     int bufcnt = 0;
 

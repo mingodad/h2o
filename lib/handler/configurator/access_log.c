@@ -31,7 +31,7 @@ struct h2o_access_log_configurator_t : h2o_configurator_t {
 
 static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_access_log_configurator_t *self = (h2o_access_log_configurator_t *)cmd->configurator;
+    auto self = (h2o_access_log_configurator_t *)cmd->configurator;
     const char *path, *fmt = NULL;
     h2o_access_log_filehandle_t *fh;
 
@@ -76,7 +76,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_access_log_configurator_t *self = (h2o_access_log_configurator_t *)_self;
+    auto self = (h2o_access_log_configurator_t *)_self;
     size_t i;
 
     /* push the stack pointer */
@@ -96,18 +96,18 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_access_log_configurator_t *self = (h2o_access_log_configurator_t *)_self;
+    auto self = (h2o_access_log_configurator_t *)_self;
     size_t i;
 
     /* register all handles, and decref them */
     for (i = 0; i != self->handles->size; ++i) {
-        h2o_access_log_filehandle_t *fh = self->handles->entries[i];
+        auto fh = self->handles->entries[i];
         if (ctx->pathconf != NULL)
             h2o_access_log_register(ctx->pathconf, fh);
         h2o_mem_release_shared(fh);
     }
     /* free the vector */
-    h2o_mem_free(self->handles->entries);
+    self->handles->clear_free();
 
     /* pop the stack pointer */
     --self->handles;

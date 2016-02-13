@@ -124,7 +124,6 @@ static int read_bio(BIO *b, char *out, int len)
 static int write_bio(BIO *b, const char *in, int len)
 {
     auto sock = (h2o_socket_t *)b->ptr;
-    void *bytes_alloced;
 
     /* FIXME no support for SSL renegotiation (yet) */
     if (sock->ssl->did_write_in_read != NULL) {
@@ -135,10 +134,10 @@ static int write_bio(BIO *b, const char *in, int len)
     if (len == 0)
         return 0;
 
-    bytes_alloced = sock->ssl->output.pool.alloc(len);
-    memcpy(bytes_alloced, in, len);
-
-    sock->ssl->output.bufs.push_back(&sock->ssl->output.pool, h2o_iovec_t::create(bytes_alloced, len));
+    auto iov = sock->ssl->output.bufs.append_new(&sock->ssl->output.pool);
+	iov->len = len;
+    iov->base = sock->ssl->output.pool.alloc_for<char>(iov->len);
+    memcpy(iov->base, in, iov->len);
 
     return len;
 }
@@ -353,7 +352,7 @@ void h2o_socket_t::write(h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
         for (i = 0; i != bufcnt; ++i) {
             fprintf(stderr, "writing %zu bytes to fd:%d\n", bufs[i].len,
 #if H2O_USE_LIBUV
-                    ((struct st_h2o_uv_socket_t *)this)->uv.stream->io_watcher.fd
+                    ((st_h2o_uv_socket_t *)this)->uv.stream->io_watcher.fd
 #else
                     ((h2o_evloop_socket_t *)this)->fd
 #endif
@@ -605,9 +604,7 @@ Redo:
         create_ssl(sock, ssl_ctx);
         clear_output_buffer(sock->ssl);
         h2o_buffer_consume_all(&encrypted);
-        h2o_buffer_reserve(&encrypted, first_input.len);
-        memcpy(encrypted->bytes, first_input.base, first_input.len);
-        encrypted->size = first_input.len;
+        h2o_buffer_append(&encrypted, first_input.base, first_input.len);
         sock->read_stop();
         goto CleanAlloca;
     }

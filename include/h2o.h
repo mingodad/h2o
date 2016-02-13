@@ -210,23 +210,29 @@ struct h2o_pathconf_t {
      * creates a handler associated to a given pathconf
      */
     h2o_handler_t *create_handler(size_t sz);
-    #define h2o_create_handler_for(conf, handler_type) (handler_type*)conf->create_handler(sizeof(handler_type))
-    #define h2o_create_new_handler_for(new_var_name, conf, handler_type) \
-        handler_type* new_var_name = h2o_create_handler_for(conf, handler_type)
+    template<typename T>
+    T *create_handler()
+    {
+        return (T*)create_handler(sizeof(T));
+    }
     /**
      * creates a filter associated to a given pathconf
      */
     h2o_filter_t *create_filter(size_t sz);
-    #define h2o_create_filter_for(conf, filter_type) (filter_type*)conf->create_filter(sizeof(filter_type))
-    #define h2o_create_new_filter_for(new_var_name, conf, filter_type) \
-        filter_type* new_var_name = h2o_create_filter_for(conf, filter_type)
+    template<typename T>
+    T *create_filter()
+    {
+        return (T*)create_filter(sizeof(T));
+    }
     /**
      * creates a logger associated to a given pathconf
      */
     h2o_logger_t *create_logger(size_t sz);
-    #define h2o_create_logger_for(conf, logger_type) (logger_type*)conf->create_logger(sizeof(logger_type))
-    #define h2o_create_new_logger_for(new_var_name, conf, logger_type) \
-        logger_type* new_var_name = h2o_create_logger_for(conf, logger_type)
+    template<typename T>
+    T *create_logger()
+    {
+        return (T*)create_logger(sizeof(T));
+    }
 };
 
 struct h2o_hostconf_t {
@@ -707,10 +713,6 @@ struct  h2o_headers_t : H2O_VECTOR<h2o_header_t>
      */
     void set(h2o_mem_pool_t *pool, const char *name, size_t name_len, int maybe_token,
                                const char *value, size_t value_len, int overwrite_if_exists);
-    /**
-     * deletes a header from list
-     */
-    ssize_t remove(ssize_t cursor);
 };
 
 /**

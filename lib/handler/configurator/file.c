@@ -131,7 +131,7 @@ static const char **dup_strlist(const char **s)
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_file_configurator_t *self = (h2o_file_configurator_t *)_self;
+    auto self = (h2o_file_configurator_t *)_self;
     ++self->vars;
     self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
     self->vars[0].flags = self->vars[-1].flags;
@@ -140,7 +140,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_file_configurator_t *self = (h2o_file_configurator_t *)_self;
+    auto self = (h2o_file_configurator_t *)_self;
     h2o_mem_free(self->vars->index_files);
     --self->vars;
     return 0;

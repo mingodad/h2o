@@ -232,11 +232,13 @@ static struct session_ticket_t *find_ticket_for_encryption(session_ticket_vector
 static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
 {
     int ret;
+	session_ticket_t *ticket;
     pthread_rwlock_rdlock(&session_tickets.rwlock);
 
     if (enc) {
         RAND_bytes(iv, EVP_MAX_IV_LENGTH);
-        struct session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL)), *temp_ticket = NULL;
+		session_ticket_t*temp_ticket = NULL;
+        ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL));
         if (ticket != NULL) {
         } else {
             /* create a dummy ticket and use (this is the only way to continue the handshake; contrary to the man pages, OpenSSL
@@ -250,7 +252,6 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
             free_ticket(ticket);
         ret = 1;
     } else {
-        struct session_ticket_t *ticket;
         size_t i;
         for (i = 0; i != session_tickets.tickets.size; ++i) {
             ticket = session_tickets.tickets.entries[i];
@@ -333,7 +334,7 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct session_ticket
 static struct session_ticket_t *parse_ticket_entry(yoml_t *element, char *errstr)
 {
     yoml_t *t;
-    struct session_ticket_t *ticket = NULL;
+    session_ticket_t *ticket = NULL;
     unsigned char name[sizeof(ticket->name) + 1], *key = NULL;
     const EVP_CIPHER *cipher;
     const EVP_MD *hash;
@@ -468,7 +469,7 @@ static h2o_iovec_t serialize_tickets(session_ticket_vector_t *tickets)
     size_t i;
 
     for (i = 0; i != tickets->size; ++i) {
-        struct session_ticket_t *ticket = tickets->entries[i];
+        session_ticket_t *ticket = tickets->entries[i];
         size_t l = serialize_ticket_entry(data.base + data.len, 1024, ticket);
         if (l > 1024) {
             fprintf(stderr, "[src/ssl.c] %s:internal buffer overflow\n", __func__);

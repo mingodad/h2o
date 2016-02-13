@@ -1445,20 +1445,21 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         ssl_session_resumption_on_config);
     }
-
-    h2o_access_log_register_configurator(&conf.globalconf);
-    h2o_expires_register_configurator(&conf.globalconf);
-    h2o_errordoc_register_configurator(&conf.globalconf);
-    h2o_fastcgi_register_configurator(&conf.globalconf);
-    h2o_file_register_configurator(&conf.globalconf);
-    h2o_gzip_register_configurator(&conf.globalconf);
-    h2o_headers_register_configurator(&conf.globalconf);
-    h2o_proxy_register_configurator(&conf.globalconf);
-    h2o_reproxy_register_configurator(&conf.globalconf);
-    h2o_redirect_register_configurator(&conf.globalconf);
+#define register_configurator(cf) h2o_##cf##_register_configurator(&conf.globalconf);
+    register_configurator(access_log);
+    register_configurator(expires);
+    register_configurator(errordoc);
+    register_configurator(fastcgi);
+    register_configurator(file);
+    register_configurator(gzip);
+    register_configurator(headers);
+    register_configurator(proxy);
+    register_configurator(reproxy);
+    register_configurator(redirect);
 #if H2O_USE_MRUBY
-    h2o_mruby_register_configurator(&conf.globalconf);
+    register_configurator(mruby);
 #endif
+#undef register_configurator
 }
 
 typedef int (*on_req_handler_ptr)(h2o_handler_t *, h2o_req_t *);
@@ -1482,7 +1483,7 @@ int register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_
         }
     }
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
-    h2o_create_new_handler_for(handler, pathconf, h2o_handler_t);
+    auto handler = pathconf->create_handler<h2o_handler_t>();
     handler->on_req = on_req;
     return 1;
 }

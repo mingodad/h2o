@@ -39,7 +39,7 @@ struct h2o_accept_data_t {
 
 static void on_accept_timeout(h2o_timeout_entry_t *entry);
 
-static struct h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
+static h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     auto data = h2o_mem_alloc_for<h2o_accept_data_t>();
 
@@ -388,5 +388,4 @@ static const h2o_iovec_t alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {H2O_STRLIT("h
 const h2o_iovec_t *h2o_alpn_protocols = alpn_protocols;
 
 const char *h2o_http2_npn_protocols = NPN_PROTOCOLS_CORE;
-const char *h2o_npn_protocols = NPN_PROTOCOLS_CORE "\x08"
-                                                   "http/1.1";
+const char *h2o_npn_protocols = NPN_PROTOCOLS_CORE "\x08" "http/1.1";

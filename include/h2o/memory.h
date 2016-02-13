@@ -263,13 +263,13 @@ struct h2o_iovec_t {
 };
 
 struct h2o_mem_recycle_chunk_t {
-    struct h2o_mem_recycle_chunk_t *next;
+    h2o_mem_recycle_chunk_t *next;
 };
 
 struct h2o_mem_recycle_t {
     size_t max;
     size_t cnt;
-    struct h2o_mem_recycle_chunk_t *_link;
+    h2o_mem_recycle_chunk_t *_link;
 
     /**
      * allocates memory using the reusing allocator
@@ -494,6 +494,13 @@ struct H2O_VECTOR {
         memcpy(this->entries, elements, num_elements * sizeof(T));
         this->size = num_elements;
     }
+
+    void remove(size_t idx)
+    {
+        assert(idx < this->size);
+        --this->size;
+        memmove(this->entries + idx, this->entries + idx + 1, sizeof(T) * (this->size - idx));
+    }
 };
 
 extern void *(*h2o_mem__set_secure)(void *, int, size_t);
@@ -638,7 +645,7 @@ inline void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
  */
 inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
 {
-    h2o_buffer_t **slot = (h2o_buffer_t **)pool->alloc_shared(sizeof(*slot), h2o_buffer__dispose_linked);
+    auto slot = pool->alloc_shared_for<h2o_buffer_t *>(1, h2o_buffer__dispose_linked);
     *slot = buffer;
 }
 

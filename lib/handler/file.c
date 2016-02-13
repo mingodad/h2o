@@ -149,11 +149,11 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         if (H2O_LIKELY(self->ranged.current_range != 0))
             used_buf =
                 sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
+        			self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         else
             used_buf =
                 sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
+        			self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         self->ranged.current_range++;
         self->file.off = *range_cur;
         self->bytesleft = *++range_cur;
@@ -219,7 +219,6 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
 static h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir,
             int flags)
 {
-    h2o_sendfile_generator_t *self;
     h2o_filecache_ref_t *fileref;
     int is_gzip;
 
@@ -250,7 +249,7 @@ Opened:
         return NULL;
     }
 
-    self = req->pool.alloc_for<h2o_sendfile_generator_t>();
+    auto self = req->pool.alloc_for<h2o_sendfile_generator_t>();
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->file.ref = fileref;
@@ -414,7 +413,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
         while (1) {
             if (*buf != ',') {
                 if (needs_comma)
-    return NULL;
+    				return NULL;
                 break;
             }
             needs_comma = 0;
@@ -477,8 +476,8 @@ static void gen_rand_string(h2o_iovec_t *s)
 {
     int i;
     static const char alphanum[] = "0123456789"
-   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-   "abcdefghijklmnopqrstuvwxyz";
+								   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+								   "abcdefghijklmnopqrstuvwxyz";
 
     for (i = 0; i < s->len; ++i) {
         s->base[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
@@ -490,19 +489,16 @@ static void gen_rand_string(h2o_iovec_t *s)
 static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const char *local_path, size_t local_path_len,
     h2o_mimemap_type_t *mime_type)
 {
-    h2o_filereq_t *filereq;
-    h2o_handler_t *handler;
-
     assert(mime_type->data.dynamic.pathconf.handlers.size == 1);
 
-    filereq = req->pool.alloc_for<h2o_filereq_t>();
+    auto filereq = req->pool.alloc_for<h2o_filereq_t>();
     filereq->url_path_len = url_path_len;
     filereq->local_path.strdup(&req->pool, local_path, local_path_len);
 
     req->pathconf = &mime_type->data.dynamic.pathconf;
     req->filereq = filereq;
 
-    handler = mime_type->data.dynamic.pathconf.handlers[0];
+    auto handler = mime_type->data.dynamic.pathconf.handlers[0];
     return handler->on_req(handler, req);
 }
 

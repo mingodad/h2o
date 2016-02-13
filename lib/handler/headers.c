@@ -129,7 +129,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 
 void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
 {
-    h2o_create_new_filter_for(self, pathconf, struct headers_filter_t);
+    auto self = pathconf->create_filter<headers_filter_t>();
 
     self->super.on_setup_ostream = on_setup_ostream;
     self->cmds = cmds;

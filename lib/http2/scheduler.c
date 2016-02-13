@@ -315,7 +315,7 @@ Redo:
     if (node->_queue == NULL)
         return 0;
 
-    h2o_http2_scheduler_queue_node_t *drr_node = queue_pop(node->_queue);
+    auto drr_node = queue_pop(node->_queue);
     if (drr_node == NULL)
         return 0;
 

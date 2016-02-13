@@ -214,7 +214,7 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
 
 static void reader_main(h2o_memcached_context_t *ctx)
 {
-    struct h2o_memcached_conn_t conn = {ctx, {}, PTHREAD_MUTEX_INITIALIZER, {&conn.inflight, &conn.inflight}, 0};
+    h2o_memcached_conn_t conn = {ctx, {}, PTHREAD_MUTEX_INITIALIZER, {&conn.inflight, &conn.inflight}, 0};
     pthread_t writer_thread;
     yrmcds_response resp;
     yrmcds_error err;
@@ -322,7 +322,7 @@ void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t
 h2o_memcached_req_t *h2o_memcached_context_t::get(h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
                                        h2o_memcached_get_cb cb, void *cb_data, int flags)
 {
-    h2o_memcached_req_t *req = create_req(this, REQ_TYPE_GET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    auto req = create_req(this, REQ_TYPE_GET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     req->data.get.receiver = receiver;
     req->data.get.cb = cb;
     req->data.get.cb_data = cb_data;
@@ -349,7 +349,7 @@ void h2o_memcached_context_t::cancel_get(h2o_memcached_req_t *req)
 
 void h2o_memcached_context_t::set(h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags)
 {
-    h2o_memcached_req_t *req = create_req(this, REQ_TYPE_SET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    auto req = create_req(this, REQ_TYPE_SET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     if ((flags & H2O_MEMCACHED_ENCODE_VALUE) != 0) {
         req->data.set.value.base = h2o_mem_alloc_for<char>(calcBase64EncodedSize(value.len));
         req->data.set.value.len = h2o_base64_encode(req->data.set.value.base, value.base, value.len, 1);
@@ -363,7 +363,7 @@ void h2o_memcached_context_t::set(h2o_iovec_t key, h2o_iovec_t value, uint32_t e
 
 void h2o_memcached_context_t::remove(h2o_iovec_t key, int flags)
 {
-    h2o_memcached_req_t *req = create_req(this, REQ_TYPE_DELETE, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    auto req = create_req(this, REQ_TYPE_DELETE, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     dispatch(this, req);
 }
 

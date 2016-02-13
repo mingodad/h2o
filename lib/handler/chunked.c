@@ -97,6 +97,6 @@ Next:
 
 void h2o_chunked_register(h2o_pathconf_t *pathconf)
 {
-    h2o_create_new_filter_for(self, pathconf, h2o_filter_t);
+    auto self = pathconf->create_filter<h2o_filter_t>();
     self->on_setup_ostream = on_setup_ostream;
 }

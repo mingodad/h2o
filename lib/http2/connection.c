@@ -419,7 +419,7 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream,
 
     /* determine the parent */
     if (priority->dependency != 0) {
-        h2o_http2_stream_t *parent_stream = conn->get_stream(priority->dependency);
+        auto parent_stream = conn->get_stream(priority->dependency);
         if (parent_stream != NULL) {
             parent_sched = &parent_stream->_refs.scheduler.node;
         } else {

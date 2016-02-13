@@ -37,11 +37,10 @@ typedef struct {
 
 static int update_status(st_h2o_evloop_epoll_t *loop)
 {
-    auto &head = loop->super._statechanged.head;
-    while (head != NULL) {
+    while (loop->super._statechanged.head != NULL) {
         /* detach the top */
-        h2o_evloop_socket_t *sock = head;
-        head = sock->_next_statechanged;
+        h2o_evloop_socket_t *sock = loop->super._statechanged.head;
+        loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
@@ -97,15 +96,15 @@ static int update_status(st_h2o_evloop_epoll_t *loop)
             }
         }
     }
-    loop->super._statechanged.tail_ref = &head;
+    loop->super._statechanged.tail_ref = &loop->super._statechanged.head;
 
     return 0;
 }
 
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    st_h2o_evloop_epoll_t *loop = (st_h2o_evloop_epoll_t *)_loop;
-    struct epoll_event events[256];
+    auto loop = (st_h2o_evloop_epoll_t *)_loop;
+    epoll_event events[256];
     int nevents, i;
 
     /* collect (and update) status */

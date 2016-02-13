@@ -62,8 +62,8 @@ static h2o_hostconf_t *find_hostconf(h2o_req_t *req, bool onInput=false)
     h2o_iovec_t &authority = onInput ? req->input.authority : req->authority;
     uint16_t default_port = onInput ? req->input.scheme->default_port : req->scheme->default_port;
 
-    /* safe-guard for h2o_mem_alloca */
-    if (authority.len > 65535)
+    /* safe-guard for alloca */
+    if (authority.len >= 65536)
         return NULL;
 
     /* extract the specified hostname and port */
@@ -268,7 +268,7 @@ void h2o_req_t::dispose(h2o_req_t *req)
 
 void h2o_req_t::process()
 {
-    h2o_hostconf_t *hostconf = setup_before_processing(this);
+    auto hostconf = setup_before_processing(this);
     process_hosted_request(this, hostconf);
 }
 
@@ -457,7 +457,7 @@ void h2o_req_t::send_inline(const char *body, size_t len)
 void h2o_req_t::send_error(int status, const char *reason, const char *body, int flags)
 {
     if (this->pathconf == NULL) {
-        h2o_hostconf_t *hostconf = setup_before_processing(this);
+        auto hostconf = setup_before_processing(this);
         this->hostconf = hostconf;
         this->pathconf = &hostconf->fallback_path;
     }
@@ -470,7 +470,7 @@ void h2o_req_t::send_error(int status, const char *reason, const char *body, int
     this->res.content_length = strlen(body);
 
     if ((flags & H2O_SEND_ERROR_KEEP_HEADERS) == 0)
-        h2o_clearmem(&this->res.headers);
+        this->res.headers.clear_free();
 
     this->addResponseHeader(H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
 

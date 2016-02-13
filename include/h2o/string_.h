@@ -43,7 +43,12 @@ extern "C" {
  * @param len length of the source string (the result of strlen(s) used in case len is SIZE_MAX)
  * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
  */
-h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t len);
+inline h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
+{
+    h2o_iovec_t ret;
+    h2o_strdup_to(&ret, pool, s, slen);
+    return ret;
+}
 /**
  * duplicates given string appending '/' to the tail if not found
  */

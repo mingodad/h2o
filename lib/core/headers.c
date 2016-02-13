@@ -26,7 +26,7 @@
 h2o_header_t *h2o_headers_t::add(h2o_mem_pool_t *pool, h2o_iovec_t *name, const char *value,
                                 size_t value_len)
 {
-    auto slot = append_new(pool);
+    auto slot = this->append_new(pool);
 
     slot->name = name;
     slot->value.base = (char *)value;
@@ -37,8 +37,8 @@ h2o_header_t *h2o_headers_t::add(h2o_mem_pool_t *pool, h2o_iovec_t *name, const 
 
 ssize_t h2o_headers_t::find(const h2o_token_t *token, ssize_t cursor)
 {
-    for (++cursor; cursor < size; ++cursor) {
-        if (entries[cursor].name == &token->buf) {
+    for (++cursor; cursor < this->size; ++cursor) {
+        if (this->entries[cursor].name == &token->buf) {
             return cursor;
         }
     }
@@ -47,9 +47,9 @@ ssize_t h2o_headers_t::find(const h2o_token_t *token, ssize_t cursor)
 
 ssize_t h2o_headers_t::find(const char *name, size_t name_len, ssize_t cursor)
 {
-    for (++cursor; cursor < size; ++cursor) {
-        h2o_header_t *t = entries + cursor;
-        if (t->name->isEq(name, name_len)) {
+    for (++cursor; cursor < this->size; ++cursor) {
+        auto t = this->entries[cursor];
+        if (t.name->isEq(name, name_len)) {
             return cursor;
         }
     }
@@ -58,59 +58,55 @@ ssize_t h2o_headers_t::find(const char *name, size_t name_len, ssize_t cursor)
 
 void h2o_headers_t::add(h2o_mem_pool_t *pool, const h2o_token_t *token, const char *value, size_t value_len)
 {
-    add(pool, (h2o_iovec_t *)&token->buf, value, value_len);
+    this->add(pool, (h2o_iovec_t *)&token->buf, value, value_len);
 }
 
 void h2o_headers_t::add(h2o_mem_pool_t *pool, const char *name, size_t name_len, int maybe_token,
                            const char *value, size_t value_len)
 {
-    h2o_iovec_t *name_buf;
-
     if (maybe_token) {
-        const h2o_token_t *token = h2o_lookup_token(name, name_len);
+        auto token = h2o_lookup_token(name, name_len);
         if (token != NULL) {
-            add(pool, (h2o_iovec_t *)token, value, value_len);
+            this->add(pool, (h2o_iovec_t *)token, value, value_len);
             return;
         }
     }
-    name_buf = pool->alloc_for<h2o_iovec_t>();
+    auto name_buf = pool->alloc_for<h2o_iovec_t>();
     name_buf->base = (char *)name;
     name_buf->len = name_len;
-    add(pool, name_buf, value, value_len);
+    this->add(pool, name_buf, value, value_len);
 }
 
 void h2o_headers_t::set(h2o_mem_pool_t *pool, const h2o_token_t *token, const char *value, size_t value_len,
                     int overwrite_if_exists)
 {
-    ssize_t cursor = find(token, -1);
+    ssize_t cursor = this->find(token, -1);
     if (cursor != -1) {
         if (overwrite_if_exists) {
-            h2o_iovec_t *slot = &entries[cursor].value;
+            auto slot = &this->entries[cursor].value;
             slot->base = (char *)value;
             slot->len = value_len;
         }
     } else {
-        add(pool, token, value, value_len);
+        this->add(pool, token, value, value_len);
     }
 }
 
 void h2o_headers_t::set(h2o_mem_pool_t *pool, const char *name, size_t name_len, int maybe_token,
                            const char *value, size_t value_len, int overwrite_if_exists)
 {
-    ssize_t cursor;
-
     if (maybe_token) {
-        const h2o_token_t *token = h2o_lookup_token(name, name_len);
+        auto token = h2o_lookup_token(name, name_len);
         if (token != NULL) {
-            set(pool, token, value, value_len, overwrite_if_exists);
+            this->set(pool, token, value, value_len, overwrite_if_exists);
             return;
         }
     }
 
-    cursor = find(name, name_len, -1);
+    auto cursor = this->find(name, name_len, -1);
     if (cursor != -1) {
         if (overwrite_if_exists) {
-            h2o_iovec_t *slot = &entries[cursor].value;
+            auto slot = &this->entries[cursor].value;
             slot->base = (char *)value;
             slot->len = value_len;
         }
@@ -118,16 +114,16 @@ void h2o_headers_t::set(h2o_mem_pool_t *pool, const char *name, size_t name_len,
         auto name_buf = pool->alloc_for<h2o_iovec_t>();
         name_buf->base = (char *)name;
         name_buf->len = name_len;
-        add(pool, name_buf, value, value_len);
+        this->add(pool, name_buf, value, value_len);
     }
 }
 
 void h2o_headers_t::add_token(h2o_mem_pool_t *pool, const h2o_token_t *token, const char *value,
                           size_t value_len)
 {
-    ssize_t cursor = find(token, -1);
+    auto cursor = this->find(token, -1);
     if (cursor != -1) {
-        h2o_iovec_t src = entries[cursor].value, dst;
+        h2o_iovec_t src = this->entries[cursor].value, dst;
         dst.len = src.len + value_len + 2;
         dst.base = pool->alloc_for<char>(dst.len + 1);
         dst.base[dst.len] = '\0';
@@ -135,18 +131,8 @@ void h2o_headers_t::add_token(h2o_mem_pool_t *pool, const h2o_token_t *token, co
         dst.base[src.len] = ',';
         dst.base[src.len + 1] = ' ';
         memcpy(dst.base + src.len + 2, value, value_len);
-        entries[cursor].value = dst;
+        this->entries[cursor].value = dst;
     } else {
-        add(pool, token, value, value_len);
+        this->add(pool, token, value, value_len);
     }
-}
-
-ssize_t h2o_headers_t::remove(ssize_t cursor)
-{
-    assert(cursor != -1);
-
-    --size;
-    memmove(entries + cursor, entries + cursor + 1, sizeof(h2o_header_t) * (size - cursor));
-
-    return cursor;
 }

@@ -41,13 +41,6 @@ void h2o_strdup_to(h2o_iovec_t *dest, h2o_mem_pool_t *pool, const char *s, size_
     dest->len = slen;
 }
 
-h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
-{
-    h2o_iovec_t ret;
-    h2o_strdup_to(&ret, pool, s, slen);
-    return ret;
-}
-
 h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *src, size_t len)
 {
     h2o_iovec_t ret;
@@ -223,7 +216,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     return decoded;
 
 Error:
-    return h2o_iovec_t::create(NULL, 0);
+    return {};
 }
 
 size_t h2o_base64_encode(char *_dst, const void *_src, size_t len, int url_encoded)
@@ -350,7 +343,7 @@ h2o_iovec_t h2o_get_filext(const char *path, size_t len)
             break;
         }
     }
-    return h2o_iovec_t::create(NULL, 0);
+    return {};
 }
 
 static int is_ws(int ch)

@@ -68,7 +68,7 @@ static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *
 
 static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value)
 {
-    headers_configurator_t *self = (headers_configurator_t *)cmd->configurator;
+    auto self = (headers_configurator_t *)cmd->configurator;
 
     if (h2o_iovec_is_token(name)) {
         auto token = (const h2o_token_t *)name;
@@ -78,7 +78,7 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
         }
     }
 
-    self->cmds->push_back(NULL, ((h2o_headers_command_t){cmd_id, name, value}));
+    self->cmds->push_back(NULL, {cmd_id, name, value});
     return 0;
 }
 

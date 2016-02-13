@@ -104,8 +104,8 @@ void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id)
 
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type)
 {
-    struct RClass *klass = mrb_class_ptr(class_obj);
-    struct RData *data = mrb_data_object_alloc(mrb, klass, ptr, type);
+    auto klass = mrb_class_ptr(class_obj);
+    auto data = mrb_data_object_alloc(mrb, klass, ptr, type);
     return mrb_obj_value(data);
 }
 
@@ -791,7 +791,7 @@ Async:
 
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *vars)
 {
-    h2o_create_new_handler_for(handler, pathconf, h2o_mruby_handler_t);
+    auto handler = pathconf->create_handler<h2o_mruby_handler_t>();
 
     handler->super.on_context_init = on_context_init;
     handler->super.on_context_dispose = on_context_dispose;
