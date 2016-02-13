@@ -468,11 +468,11 @@ void h2o__proxy_process_request(h2o_req_t *req)
     if (overrides != NULL) {
         if (overrides->socketpool != NULL) {
             self = proxy_send_prepare(req, 1);
-            self->client = h2o_http1client_t::connect_with_pool(self, client_ctx, overrides->socketpool, on_connect);
+            h2o_http1client_t::connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_connect);
             return;
         } else if (overrides->hostport.host.base != NULL) {
             self = proxy_send_prepare(req, 0);
-            self->client = h2o_http1client_t::connect(self, client_ctx, req->overrides->hostport.host, req->overrides->hostport.port,
+            h2o_http1client_t::connect(&self->client, self, client_ctx, req->overrides->hostport.host, req->overrides->hostport.port,
                                     on_connect);
             return;
         }
@@ -491,7 +491,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (port == H2O_PORT_NOT_SET)
             port = 80;
         self = proxy_send_prepare(req, 0);
-        self->client = h2o_http1client_t::connect(self, client_ctx, host, port, on_connect);
+        h2o_http1client_t::connect(&self->client, self, client_ctx, host, port, on_connect);
         return;
     }
 }

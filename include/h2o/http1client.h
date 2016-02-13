@@ -62,9 +62,9 @@ struct h2o_http1client_t {
     void cancel();
     h2o_socket_t *steal_socket();
 
-    static h2o_http1client_t *connect(void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
+    static void connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
                                  h2o_http1client_connect_cb cb);
-    static h2o_http1client_t *connect_with_pool(void *data, h2o_http1client_ctx_t *ctx,
+    static void connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb);
 };
 
