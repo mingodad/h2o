@@ -154,12 +154,12 @@ static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
 {
     char *n;
 
-    if (extra <= buf->buf + buf->capacity - buf->end)
+    if (extra <= size_t(buf->buf + buf->capacity - buf->end))
         return;
 
     if (buf->capacity == 0)
         buf->capacity = 4096;
-    while (buf->buf + buf->capacity - buf->end < extra)
+    while (size_t(buf->buf + buf->capacity - buf->end) < extra)
         buf->capacity *= 2;
     if ((n = (char *)realloc(buf->buf, buf->capacity)) == NULL)
         dief("realloc failed");
@@ -240,7 +240,7 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
         if (r == -1)
             return -1;
         assert(r != 0);
-        while (r != 0 && r >= vecs[vecindex].iov_len) {
+        while (r != 0 && size_t(r) >= vecs[vecindex].iov_len) {
             r -= vecs[vecindex].iov_len;
             ++vecindex;
         }

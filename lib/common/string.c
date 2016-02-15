@@ -210,7 +210,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
         break;
     }
 
-    assert((char *)dst - decoded.base == decoded.len);
+    assert(size_t((char *)dst - decoded.base) == decoded.len);
     decoded.base[decoded.len] = '\0';
 
     return decoded;

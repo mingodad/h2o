@@ -1057,7 +1057,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
 
     /* casper-related code */
     if (src_stream->req.hostconf->http2.casper.capacity_bits != 0 && !conn->is_push(src_stream->stream_id)) {
-        size_t header_index;
+        ssize_t header_index;
         switch (src_stream->pull.casper_state) {
         case H2O_HTTP2_STREAM_CASPER_STATE_TBD:
             /* disable casper for this request if intermediary exists */

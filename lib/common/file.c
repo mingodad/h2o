@@ -40,7 +40,7 @@ h2o_iovec_t h2o_file_read(const char *fn)
         goto Error;
     fstat(fd, &st);
     /* allocate memory */
-    if (st.st_size > SIZE_MAX) {
+    if (size_t(st.st_size) > SIZE_MAX) {
         errno = ENOMEM;
         goto Error;
     }

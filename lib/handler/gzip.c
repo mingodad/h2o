@@ -148,18 +148,18 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     /* skip if no accept-encoding is set */
     if ((i = req->headers.find(H2O_TOKEN_ACCEPT_ENCODING, -1)) == -1)
         goto Next;
-    if (!h2o_contains_token(req->headers[i].value.base,
+    if ((i >= 0) && !h2o_contains_token(req->headers[i].value.base,
             req->headers[i].value.len, H2O_STRLIT("gzip"), ','))
         goto Next;
 
     /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges */
     content_encoding_header_index = -1;
     accept_ranges_header_index = -1;
-    for (i = 0; i != req->res.headers.size; ++i) {
-        if (req->res.headers[i].name == &H2O_TOKEN_CONTENT_ENCODING->buf)
-            content_encoding_header_index = i;
-        else if (req->res.headers[i].name == &H2O_TOKEN_ACCEPT_RANGES->buf)
-            accept_ranges_header_index = i;
+    for (size_t idx = 0; idx != req->res.headers.size; ++idx) {
+        if (req->res.headers[idx].name == &H2O_TOKEN_CONTENT_ENCODING->buf)
+            content_encoding_header_index = idx;
+        else if (req->res.headers[idx].name == &H2O_TOKEN_ACCEPT_RANGES->buf)
+            accept_ranges_header_index = idx;
         else
             continue;
     }

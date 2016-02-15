@@ -75,27 +75,21 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd,
         h2o_configurator_context_t *ctx, yoml_t *node)
 {
     auto self = (proxy_configurator_t *)cmd->configurator;
-    h2o_mem_pool_t pool;
     h2o_url_t parsed;
-
-    pool.init();
 
     if (parsed.parse(node->data.scalar, SIZE_MAX) != 0) {
         cmd->errprintf(node, "failed to parse URL: %s\n",
                 node->data.scalar);
-        goto ErrExit;
+        return -1;
     }
     if (parsed.scheme != &H2O_URL_SCHEME_HTTP) {
         cmd->errprintf(node, "only HTTP URLs are supported");
-        goto ErrExit;
+        return -1;
     }
     /* register */
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, self->vars);
 
     return 0;
-
-ErrExit:
-    return -1;
 }
 
 static int on_config_enter(h2o_configurator_t *_self,

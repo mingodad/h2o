@@ -217,7 +217,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
                 mrb_ary_set(mrb, ary, i, lit);
             }
         }
-        pool.clear();
+        //pool.clear(); called by the destructor
     }
 
 #define SET_STRING(idx, value) \

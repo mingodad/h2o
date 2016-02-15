@@ -474,7 +474,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
 
 static void gen_rand_string(h2o_iovec_t *s)
 {
-    int i;
+    size_t i;
     static const char alphanum[] = "0123456789"
 								   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 								   "abcdefghijklmnopqrstuvwxyz";
@@ -552,8 +552,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     char *rpath = NULL;
     size_t rpath_len, req_path_prefix;
     h2o_sendfile_generator_t *generator = NULL;
-    size_t if_modified_since_header_index, if_none_match_header_index;
-    size_t range_header_index;
+    ssize_t if_modified_since_header_index, if_none_match_header_index;
+    ssize_t range_header_index;
     int is_dir;
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
 

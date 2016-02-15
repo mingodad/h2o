@@ -170,7 +170,7 @@ static int write_core(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
                 break;
             }
             /* adjust the buffer */
-            while ((*bufs)->len < wret) {
+            while ((*bufs)->len < size_t(wret)) {
                 wret -= (*bufs)->len;
                 ++*bufs;
                 --*bufcnt;
@@ -259,14 +259,15 @@ void do_dispose_socket(h2o_socket_t *_sock)
 void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     auto sock = (h2o_evloop_socket_t *)_sock;
-    h2o_iovec_t *bufs, *bufs_allocated;
+    h2o_iovec_t *bufs;
+    WITH_MEM_ALLOCA_FREE(h2o_iovec_t *bufs_allocated);
 
     assert(sock->super._cb.write == NULL);
     assert(sock->_wreq.cnt == 0);
     sock->super._cb.write = cb;
 
     //write_core changes bufs so we store it twice
-    bufs_allocated = bufs = (h2o_iovec_t*)h2o_mem_alloca(sizeof(*bufs) * bufcnt);
+    WITH_MEM_ALLOCA_FREE(bufs_allocated =) bufs = (h2o_iovec_t*)h2o_mem_alloca(sizeof(*bufs) * bufcnt);
     memcpy(bufs, _bufs, sizeof(*bufs) * bufcnt);
 
     /* try to write now */

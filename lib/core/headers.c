@@ -35,7 +35,7 @@ h2o_header_t *h2o_headers_t::add(h2o_mem_pool_t *pool, h2o_iovec_t *name, const 
     return slot;
 }
 
-ssize_t h2o_headers_t::find(const h2o_token_t *token, ssize_t cursor)
+ssize_t h2o_headers_t::find(const h2o_token_t *token, size_t cursor)
 {
     for (++cursor; cursor < this->size; ++cursor) {
         if (this->entries[cursor].name == &token->buf) {
@@ -45,7 +45,7 @@ ssize_t h2o_headers_t::find(const h2o_token_t *token, ssize_t cursor)
     return -1;
 }
 
-ssize_t h2o_headers_t::find(const char *name, size_t name_len, ssize_t cursor)
+ssize_t h2o_headers_t::find(const char *name, size_t name_len, size_t cursor)
 {
     for (++cursor; cursor < this->size; ++cursor) {
         auto t = this->entries[cursor];
