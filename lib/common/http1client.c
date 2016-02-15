@@ -220,7 +220,7 @@ static void on_head(h2o_socket_t *sock, int status)
     auto client = (h2o_http1client_private_t*)sock->data;
     int minor_version, http_status, rlen, is_eos;
     const char *msg;
-    struct phr_header headers[100];
+    struct phr_header headers[H2O_MAX_HEADERS];
     size_t msg_len, num_headers, i;
     h2o_socket_cb reader;
 

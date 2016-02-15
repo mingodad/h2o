@@ -466,7 +466,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
 {
     h2o_req_overrides_t *overrides = req->overrides;
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
-    struct rp_generator_t *self;
+    rp_generator_t *self;
 
     if (overrides != NULL) {
         if (overrides->socketpool != NULL) {

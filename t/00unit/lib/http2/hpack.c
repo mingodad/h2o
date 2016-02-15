@@ -448,7 +448,7 @@ static void test_hpack_dynamic_table(void)
                    "v3"                   /* "v3" */
                    "\xc0"                 /* indexed header field */
                    ));
-    ok(p - encoded == expected.len);
+    ok(size_t(p - encoded) == expected.len);
     ok(memcmp(encoded, expected.base, expected.len) == 0);
 }
 

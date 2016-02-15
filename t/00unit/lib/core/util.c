@@ -36,7 +36,7 @@ static void test_parse_proxy_line(void)
 
     strcpy(in, "PROXY TCP4 192.168.0.1 192.168.0.11 56324 443\r\nabc");
     ret = parse_proxy_line(in, strlen(in), (sockaddr *)&sa, &salen);
-    ok(ret == strlen(in) - 3);
+    ok(ret == ssize_t(strlen(in)) - 3);
     ok(salen == sizeof(struct sockaddr_in));
     ok(sa.ss_family == AF_INET);
     ok(((struct sockaddr_in *)&sa)->sin_addr.s_addr == htonl(0xc0a80001));
@@ -56,12 +56,12 @@ static void test_parse_proxy_line(void)
 
     strcpy(in, "PROXY UNKNOWN\r\nabc");
     ret = parse_proxy_line(in, strlen(in), (sockaddr *)&sa, &salen);
-    ok(ret == strlen(in) - 3);
+    ok(ret == ssize_t(strlen(in)) - 3);
     ok(salen == 0);
 
     strcpy(in, "PROXY TCP6 ::1 ::1 56324 443\r\n");
     ret = parse_proxy_line(in, strlen(in), (sockaddr *)&sa, &salen);
-    ok(ret == strlen(in));
+    ok(ret == ssize_t(strlen(in)));
     ok(salen == sizeof(struct sockaddr_in6));
     ok(sa.ss_family == AF_INET6);
     ok(memcmp(&((struct sockaddr_in6 *)&sa)->sin6_addr, H2O_STRLIT("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1")) == 0);

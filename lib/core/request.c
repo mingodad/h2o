@@ -174,6 +174,7 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
             }
         }
     }
+
     call_handlers(req, 0);
 }
 
