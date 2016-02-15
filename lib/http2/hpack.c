@@ -273,14 +273,14 @@ Redo:
         }
     } else {
         /* size update */
-        int new_apacity;
-        if ((new_apacity = decode_int(src, src_end, 5)) < 0) {
+        int32_t new_capacity;
+        if ((new_capacity = decode_int(src, src_end, 5)) < 0) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
-        if (new_apacity > hpack_header_table->hpack_max_capacity) {
+        if (size_t(new_capacity) > hpack_header_table->hpack_max_capacity) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
-        hpack_header_table->hpack_capacity = new_apacity;
+        hpack_header_table->hpack_capacity = new_capacity;
         while (hpack_header_table->num_entries != 0 &&
                 hpack_header_table->hpack_size >
                 hpack_header_table->hpack_capacity) {
@@ -297,7 +297,7 @@ Redo:
             if (value_is_indexed) {
                 result->value = (h2o_iovec_t *)&h2o_hpack_static_table[index - 1].value;
             }
-        } else if (index - HEADER_TABLE_OFFSET < hpack_header_table->num_entries) {
+        } else if (size_t(index - HEADER_TABLE_OFFSET) < hpack_header_table->num_entries) {
             h2o_hpack_header_table_entry_t *entry =
                 header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
             result->name = entry->name;
@@ -490,14 +490,14 @@ int h2o_hpack_parse_headers(h2o_req_t *req,
 
 static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
 {
-    if (value < (1 << prefix_bits) - 1) {
+    if (value < (1u << prefix_bits) - 1) {
         *dst++ |= value;
     } else {
         /* see also: MAX_ENCODE_INT_LENGTH */
-        value -= (1 << prefix_bits) - 1;
+        value -= (1u << prefix_bits) - 1;
         if (value > 0x0fffffff)
             h2o_fatal("value out of range");
-        *dst++ |= (1 << prefix_bits) - 1;
+        *dst++ |= (1u << prefix_bits) - 1;
         for (; value >= 128; value >>= 7) {
             *dst++ = 0x80 | value;
         }
@@ -675,7 +675,7 @@ static uint8_t *encode_path(h2o_hpack_header_table_t *header_table, uint8_t *dst
     }
     return encode_header(header_table, dst, &H2O_TOKEN_PATH->buf, &value);
 }
-
+#if 0
 static uint8_t *encode_literal_header_without_indexing(uint8_t *dst, const h2o_iovec_t *name, const h2o_iovec_t *value)
 {
     /* literal header field without indexing / never indexed */
@@ -684,6 +684,7 @@ static uint8_t *encode_literal_header_without_indexing(uint8_t *dst, const h2o_i
     dst += h2o_hpack_encode_string(dst, value->base, value->len);
     return dst;
 }
+#endif
 
 static size_t calc_capacity(size_t name_len, size_t value_len)
 {

@@ -202,14 +202,14 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
     }
 
     /* append to send buffer, and send out immediately if necessary */
-    if (len != 0) {
+    if (len > 0) {
         h2o_mruby_chunked_t *chunked = generator->chunked;
         if (chunked->bytes_left != SIZE_MAX) {
-            if (len > chunked->bytes_left)
+            if (size_t(len) > chunked->bytes_left)
                 len = chunked->bytes_left;
             chunked->bytes_left -= len;
         }
-        if (len != 0) {
+        if (len > 0) {
             h2o_buffer_append(&chunked->callback.receiving, s, len);
             if (chunked->sending.bytes_inflight == 0)
                 do_send(generator, &chunked->callback.receiving, 0);

@@ -151,7 +151,7 @@ int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload,
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
         padding_length = frame->payload[0];
-        if (frame->length < 1 + padding_length) {
+        if (frame->length < (1u + padding_length)) {
             *err_desc = "invalid DATA frame";
             return H2O_HTTP2_ERROR_PROTOCOL;
         }

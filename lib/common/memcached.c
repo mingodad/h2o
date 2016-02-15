@@ -29,7 +29,7 @@
 
 struct h2o_memcached_conn_t {
     h2o_memcached_context_t *ctx;
-    yrmcds yrmcds;
+    yrmcds mc;
     pthread_mutex_t mutex;
     h2o_linklist_t inflight;
     int writer_exit_requested;
@@ -161,16 +161,16 @@ static void *writer_main(void *_conn)
                 pthread_mutex_lock(&conn->mutex);
                 conn->inflight.insert(&req->inflight);
                 pthread_mutex_unlock(&conn->mutex);
-                if ((err = yrmcds_get(&conn->yrmcds, req->key.base, req->key.len, 0, &req->data.get.serial)) != YRMCDS_OK)
+                if ((err = yrmcds_get(&conn->mc, req->key.base, req->key.len, 0, &req->data.get.serial)) != YRMCDS_OK)
                     goto Error;
                 break;
             case REQ_TYPE_SET:
-                if ((err = yrmcds_set(&conn->yrmcds, req->key.base, req->key.len, req->data.set.value.base, req->data.set.value.len,
+                if ((err = yrmcds_set(&conn->mc, req->key.base, req->key.len, req->data.set.value.base, req->data.set.value.len,
                                       0, req->data.set.expiration, 0, 1, NULL)) != YRMCDS_OK)
                     goto Error;
                 break;
             case REQ_TYPE_DELETE:
-                if ((err = yrmcds_remove(&conn->yrmcds, req->key.base, req->key.len, 1, NULL)) != YRMCDS_OK)
+                if ((err = yrmcds_remove(&conn->mc, req->key.base, req->key.len, 1, NULL)) != YRMCDS_OK)
                     goto Error;
                 break;
             default:
@@ -190,7 +190,7 @@ static void *writer_main(void *_conn)
 Error:
     fprintf(stderr, "[lib/common/memcached.c] failed to send request; %s\n", yrmcds_strerror(err));
     /* doc says the call can be used to interrupt yrmcds_recv */
-    yrmcds_shutdown(&conn->yrmcds);
+    yrmcds_shutdown(&conn->mc);
 
     return NULL;
 }
@@ -220,7 +220,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
     yrmcds_error err;
 
     /* connect to server and start the writer thread */
-    connect_to_server(conn.ctx, &conn.yrmcds);
+    connect_to_server(conn.ctx, &conn.mc);
     pthread_create(&writer_thread, NULL, writer_main, &conn);
 
     pthread_mutex_lock(&conn.ctx->mutex);
@@ -229,7 +229,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
 
     /* receive data until an error occurs */
     while (1) {
-        if ((err = yrmcds_recv(&conn.yrmcds, &resp)) != YRMCDS_OK) {
+        if ((err = yrmcds_recv(&conn.mc, &resp)) != YRMCDS_OK) {
             fprintf(stderr, "[lib/common/memcached.c] yrmcds_recv:%s\n", yrmcds_strerror(err));
             break;
         }
@@ -275,7 +275,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
     pthread_mutex_unlock(&conn.ctx->mutex);
 
     /* close the connection */
-    yrmcds_close(&conn.yrmcds);
+    yrmcds_close(&conn.mc);
 }
 
 static void *thread_main(void *_ctx)

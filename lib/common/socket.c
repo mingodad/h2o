@@ -104,7 +104,7 @@ static int read_bio(BIO *b, char *out, int len)
     auto sock = (h2o_socket_t *)b->ptr;
     auto &encrypted = sock->ssl->input.encrypted;
 
-    if (len == 0)
+    if (len <= 0)
         return 0;
 
     if (encrypted->size == 0) {
@@ -112,7 +112,7 @@ static int read_bio(BIO *b, char *out, int len)
         return -1;
     }
 
-    if (encrypted->size < len) {
+    if (encrypted->size < size_t(len)) {
         len = (int)encrypted->size;
     }
     memcpy(out, encrypted->bytes, len);
@@ -725,7 +725,7 @@ static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *ou
         const unsigned char *in = _in, *in_end = in + inlen;
         while (in != in_end) {
             size_t cand_len = *in++;
-            if (in_end - in < cand_len) {
+            if (size_t(in_end - in) < cand_len) {
                 /* broken request */
                 return SSL_TLSEXT_ERR_NOACK;
             }

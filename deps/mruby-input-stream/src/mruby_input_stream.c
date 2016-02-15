@@ -174,7 +174,7 @@ mrb_input_stream_gets(mrb_state *mrb, mrb_value self)
 static mrb_int
 seek_char(mrb_input_stream_t *stream, char chr){
   const char *base = stream->base;
-  size_t len = stream->len;
+  mrb_int len = stream->len;
   mrb_int pos = stream->pos;
   const char *end = base + len;
   const char *start = base + pos;
