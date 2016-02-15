@@ -263,7 +263,7 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header 
     return -1;
 }
 
-static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
+static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const phr_header *src, size_t len,
                             h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect)
 {
     ssize_t entity_header_index = -1;
@@ -333,7 +333,8 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
         conn->req.input.method.strdup(&conn->req.pool, conn->req.input.method);
         conn->req.input.path.strdup(&conn->req.pool, conn->req.input.path);
         for (i = 0; i != conn->req.headers.size; ++i) {
-            auto header = conn->req.headers[i];
+            //to update in place use reference &
+            auto &header = conn->req.headers[i];
             if (!h2o_iovec_is_token(header.name)) {
                 header.name->strdup(&conn->req.pool, *header.name);
             }
@@ -634,6 +635,7 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
         *dst++ = '\r';
         *dst++ = '\n';
     }
+
     return dst - buf;
 }
 
@@ -730,7 +732,6 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-//printf("%d:%s\n", __LINE__, __FILE__);
     static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
     auto conn = h2o_mem_alloc_for<h2o_http1_conn_t>();
 
