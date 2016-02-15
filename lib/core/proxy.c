@@ -144,8 +144,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         if (value.len != 0) { \
             APPEND(value.base, value.len); \
             if (add_size != 0) { \
-                buf.base[offset++] = ','; \
-                buf.base[offset++] = ' '; \
+                APPEND_CHAR(','); \
+                APPEND_CHAR(' '); \
             } \
         } \
     }

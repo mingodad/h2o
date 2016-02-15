@@ -81,6 +81,12 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT (H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS * 1000)
 
+#define DBG_PRINT_REQUEST(req) \
+    { \
+    extern bool h2o_http1_dbg_print_request(h2o_req_t*); \
+    printf("\n%d:%s:%p:%d\n", __LINE__, __FILE__, req, (int)h2o_http1_dbg_print_request(req)); \
+    }
+
 struct h2o_conn_t;
 struct h2o_context_t;
 struct h2o_req_t;
@@ -669,7 +675,7 @@ struct  h2o_headers_t : H2O_VECTOR<h2o_header_t>
      * @param cursor index of the last match (or set SIZE_MAX to start a new search)
      * @return index of the found header (or SIZE_MAX if not found)
      */
-    ssize_t find(const h2o_token_t *token, ssize_t cursor);
+    ssize_t find(const h2o_token_t *token, size_t cursor);
     /**
      * searches for a header of given name (slow, by comparing strings)
      * @param headers header list
@@ -678,7 +684,7 @@ struct  h2o_headers_t : H2O_VECTOR<h2o_header_t>
      * @param cursor index of the last match (or set SIZE_MAX to start a new search)
      * @return index of the found header (or SIZE_MAX if not found)
      */
-    ssize_t find(const char *name, size_t name_len, ssize_t cursor);
+    ssize_t find(const char *name, size_t name_len, size_t cursor);
     /**
      * adds a header token
      */

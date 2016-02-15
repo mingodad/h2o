@@ -11,7 +11,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gnu_gcc_compiler_as_g" />
-				<Option parameters="--conf=404.conf" />
+				<Option parameters="--conf=rev-proxy-bug.conf" />
 				<Compiler>
 					<Add option="-g" />
 					<Add option="-fpermissive" />
@@ -93,6 +93,22 @@
 					<Add option="-fpermissive" />
 					<Add option="-std=c++1y" />
 				</Compiler>
+			</Target>
+			<Target title="Debug sanitize address">
+				<Option output="h2o-cpp" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_as_g" />
+				<Option parameters="--conf=404.conf" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-fpermissive" />
+					<Add option="-std=c++1y" />
+					<Add option="-fsanitize=address" />
+				</Compiler>
+				<Linker>
+					<Add option="-lasan" />
+				</Linker>
 			</Target>
 		</Build>
 		<Compiler>

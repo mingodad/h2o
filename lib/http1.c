@@ -459,6 +459,30 @@ static void handle_incoming_request(h2o_http1_conn_t *conn)
     }
 }
 
+bool h2o_http1_dbg_print_request(h2o_req_t *req)
+{
+    if(req == nullptr)
+    {
+        printf("NULL as request\n");
+        return false;
+    }
+    char name[256], value[256];
+    for(size_t i=0; i != req->headers.size; ++i)
+    {
+        auto hdr = req->headers[i];
+        size_t sz = sizeof(name);
+        if(sz > hdr.name->len) sz = hdr.name->len;
+        memcpy(name, hdr.name->base, sz);
+        name[sz] = '\0';
+        sz = sizeof(value);
+        if(sz > hdr.value.len) sz = hdr.value.len;
+        memcpy(value, hdr.value.base, sz);
+        value[sz] = '\0';
+        printf("%p %s : %p %s\n", hdr.name->base, name, hdr.value.base, value);
+    }
+    return true;
+}
+
 void reqread_on_read(h2o_socket_t *sock, int status)
 {
     auto conn = (h2o_http1_conn_t*)sock->data;
@@ -610,7 +634,6 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
         *dst++ = '\r';
         *dst++ = '\n';
     }
-
     return dst - buf;
 }
 
@@ -707,6 +730,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
+//printf("%d:%s\n", __LINE__, __FILE__);
     static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
     auto conn = h2o_mem_alloc_for<h2o_http1_conn_t>();
 
