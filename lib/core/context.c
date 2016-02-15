@@ -88,7 +88,7 @@ void h2o_context_t::init(h2o_loop_t *loop, h2o_globalconf_t *config)
     assert( (this->loop == nullptr) && (this->globalconf == nullptr));
     assert(config->hosts[0] != NULL);
 
-    //h2o_clearmem(ctx);
+    //h2o_clearmem(this);
     this->shutdown_requested = 0;
     this->_timestamp_cache = {};
     this->_pathconfs_inited = {};

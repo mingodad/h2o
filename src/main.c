@@ -1415,7 +1415,7 @@ static int run_using_server_starter(const char *h2o_cmd, const char *config_file
 
 static void setup_configurators(void)
 {
-    //h2o_config_init(&conf.globalconf);
+    //conf.globalconf.init();
 
     /* let the default setuid user be "nobody", if run as root */
     if (getuid() == 0 && getpwnam("nobody") != NULL)

@@ -31,6 +31,8 @@
 #include <unistd.h>
 #include "h2o/memory.h"
 
+#define WITHOUTH_MEM_POLL 1
+
 void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 static __thread h2o_mem_recycle_t mempool_allocator = {16};
@@ -43,7 +45,10 @@ void h2o_fatal(const char *msg)
 
 void *h2o_mem_recycle_t::alloc(size_t sz)
 {
-    DBG_LOG_ALLOCATION(h2o_mem_recycle_t, sz);
+    DBG_LOG_ALLOCATION(h2o_mem_recycle_t::alloc, sz);
+#ifdef WITHOUTH_MEM_POLL
+    return h2o_mem_alloc(sz);
+#else
     if (this->cnt == 0)
         return h2o_mem_alloc(sz);
     /* detach and return the pooled pointer */
@@ -52,10 +57,14 @@ void *h2o_mem_recycle_t::alloc(size_t sz)
     this->_link = chunk->next;
     --this->cnt;
     return chunk;
+#endif // WITHOUTH_MEM_POLL
 }
 
 void h2o_mem_recycle_t::free(void *p)
 {
+#ifdef WITHOUTH_MEM_POLL
+    h2o_mem_free(p);
+#else
     if (this->cnt == this->max) {
         h2o_mem_free(p);
         return;
@@ -65,6 +74,7 @@ void h2o_mem_recycle_t::free(void *p)
     chunk->next = this->_link;
     this->_link = chunk;
     ++this->cnt;
+#endif // WITHOUTH_MEM_POLL
 }
 
 void h2o_mem_pool_t::init()
@@ -105,9 +115,8 @@ void h2o_mem_pool_t::clear()
 
 void *h2o_mem_pool_t::alloc(size_t sz)
 {
-    DBG_LOG_ALLOCATION(h2o_mem_pool_t, sz);
+    DBG_LOG_ALLOCATION(h2o_mem_pool_t::alloc, sz);
     void *ret;
-
     if (sz >= sizeof(this->chunks->bytes) / 4) {
         /* allocate large requests directly */
         auto newp = (h2o_mem_pool_direct_t *)h2o_mem_alloc(offsetof(struct h2o_mem_pool_direct_t, bytes) + sz);
@@ -141,7 +150,7 @@ static void internal_link_shared(h2o_mem_pool_t *pool, h2o_mem_pool_shared_entry
 
 void *h2o_mem_pool_t::alloc_shared(size_t sz, mem_pool_dispose_cb_t dispose)
 {
-    DBG_LOG_ALLOCATION(alloc_shared, sz);
+    DBG_LOG_ALLOCATION(h2o_mem_pool_t::alloc_shared, sz);
     void *p = h2o_mem_alloc_shared(sz, dispose);
     auto entry = H2O_STRUCT_FROM_MEMBER(h2o_mem_pool_shared_entry_t, bytes, p);
     internal_link_shared(this, entry);
