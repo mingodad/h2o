@@ -172,7 +172,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     }
     {
         for (size_t idx = 0; idx != req->headers.size; ++idx) {
-			auto h = req->headers[idx];
+			const auto h = req->headers[idx];
             if (h2o_iovec_is_token(h.name)) {
 			   auto token = (h2o_token_t *)h.name;
 			   if (token->proxy_should_drop) {
@@ -343,7 +343,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     req->res.status = status;
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
-        auto token = h2o_lookup_token(headers[i].name, headers[i].name_len);
+        const auto token = h2o_lookup_token(headers[i].name, headers[i].name_len);
         h2o_iovec_t name, value;
         if (token != NULL) {
             if (token->proxy_should_drop) {

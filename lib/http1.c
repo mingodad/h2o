@@ -470,7 +470,7 @@ bool h2o_http1_dbg_print_request(h2o_req_t *req)
     char name[256], value[256];
     for(size_t i=0; i != req->headers.size; ++i)
     {
-        auto hdr = req->headers[i];
+        const auto hdr = req->headers[i];
         size_t sz = sizeof(name);
         if(sz > hdr.name->len) sz = hdr.name->len;
         memcpy(name, hdr.name->base, sz);

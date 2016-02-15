@@ -643,15 +643,15 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
 Opened:
     if ((if_none_match_header_index = req->headers.find(H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
-        h2o_iovec_t *if_none_match = &req->headers[if_none_match_header_index].value;
+        const auto &if_none_match = req->headers[if_none_match_header_index].value;
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
         size_t etag_len = generator->file.ref->get_etag(etag);
-        if (if_none_match->isEq(etag, etag_len))
+        if (if_none_match.isEq(etag, etag_len))
             goto NotModified;
     } else if ((if_modified_since_header_index = req->headers.find(H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
-        h2o_iovec_t *ims_vec = &req->headers[if_modified_since_header_index].value;
+        const auto &ims_vec = req->headers[if_modified_since_header_index].value;
         struct tm ims_tm, *last_modified_tm;
-        if (h2o_time_parse_rfc1123(ims_vec->base, ims_vec->len, &ims_tm) == 0) {
+        if (h2o_time_parse_rfc1123(ims_vec.base, ims_vec.len, &ims_tm) == 0) {
             last_modified_tm = generator->file.ref->get_last_modified(NULL);
             if (!tm_is_lessthan(&ims_tm, last_modified_tm))
                 goto NotModified;
@@ -678,7 +678,7 @@ Opened:
 
     /* check if range request */
     if ((range_header_index = req->headers.find(H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
-        h2o_iovec_t *range = &req->headers[range_header_index].value;
+        auto range = &req->headers[range_header_index].value;
         size_t *range_infos, range_count;
         range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
         if (range_infos == NULL) {

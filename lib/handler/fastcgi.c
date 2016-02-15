@@ -540,7 +540,7 @@ static void append_content(fcgi_generator_t *generator, const void *src, size_t 
 
 static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t *header) {
     h2o_buffer_t *input = generator->sock->input;
-    struct phr_header headers[100];
+    struct phr_header headers[H2O_MAX_HEADERS];
     size_t num_headers;
     int parse_result;
 
