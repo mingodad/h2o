@@ -388,9 +388,11 @@ struct h2o_globalconf_t {
      * initializes the global configuration
      */
     h2o_globalconf_t();
+    //void init();
     /**
      * disposes of the resources allocated for the global configuration
      */
+    //void dispose();
     ~h2o_globalconf_t();
 
     /**
@@ -548,7 +550,6 @@ struct h2o_context_t {
     /**
      * initializes the context
      */
-    //static void init(h2o_context_t *context, h2o_loop_t *loop, h2o_globalconf_t *config);
     h2o_context_t():loop(nullptr),globalconf(nullptr){}
     void init(h2o_loop_t *loop, h2o_globalconf_t *config);
     /**

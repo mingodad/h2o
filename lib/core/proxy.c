@@ -166,7 +166,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     APPEND_CHAR('\n');
     assert(offset <= buf.len);
     if (req->entity.base != NULL) {
-        size_t extra_size = sizeof("content-length: 18446744073709551615") - 1;
+        size_t extra_size = sizeof("content-length: 18446744073709551615");
         RESERVE(extra_size);
         offset += snprintf(buf.base + offset, extra_size, "content-length: %zu\r\n", req->entity.len);
     }
@@ -192,7 +192,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             }
             if (h2o_lcstris(h.name->base, h.name->len, H2O_STRLIT("x-forwarded-proto")))
    				continue;
-            RESERVE(h.name->len + h.value.len + 2);
+            RESERVE(h.name->len + h.value.len + 4);
             APPEND_IOV(*h.name);
             APPEND_CHAR(':');
             APPEND_CHAR(' ');

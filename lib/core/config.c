@@ -90,8 +90,10 @@ void h2o_pathconf_t::dispose(h2o_pathconf_t *pathconf)
         h2o_mem_release_shared(pathconf->mimemap);
 }
 
+//void h2o_globalconf_t::init()
 h2o_globalconf_t::h2o_globalconf_t()
 {
+	//h2o_clearmem(this);
     this->hosts = h2o_mem_alloc_for<h2o_hostconf_t*>();
     this->hosts[0] = NULL;
     this->configurators = {};
@@ -173,6 +175,7 @@ Exit:
     return hostconf;
 }
 
+//void h2o_globalconf_t::dispose()
 h2o_globalconf_t::~h2o_globalconf_t()
 {
     size_t i;
