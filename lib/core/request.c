@@ -174,7 +174,6 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
             }
         }
     }
-
     call_handlers(req, 0);
 }
 
@@ -340,7 +339,6 @@ void h2o_req_t::reprocess_request(h2o_iovec_t method, const h2o_url_scheme_t *sc
         process_hosted_request(this, hostconf);
         return;
     }
-
     /* uses the current pathconf, in other words, proxy uses the previous pathconf for building filters */
     h2o__proxy_process_request(this);
 }

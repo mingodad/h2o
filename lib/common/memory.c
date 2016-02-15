@@ -43,6 +43,7 @@ void h2o_fatal(const char *msg)
 
 void *h2o_mem_recycle_t::alloc(size_t sz)
 {
+    DBG_LOG_ALLOCATION(h2o_mem_recycle_t, sz);
     if (this->cnt == 0)
         return h2o_mem_alloc(sz);
     /* detach and return the pooled pointer */
@@ -104,6 +105,7 @@ void h2o_mem_pool_t::clear()
 
 void *h2o_mem_pool_t::alloc(size_t sz)
 {
+    DBG_LOG_ALLOCATION(h2o_mem_pool_t, sz);
     void *ret;
 
     if (sz >= sizeof(this->chunks->bytes) / 4) {
@@ -129,7 +131,7 @@ void *h2o_mem_pool_t::alloc(size_t sz)
     return ret;
 }
 
-static void link_shared(h2o_mem_pool_t *pool, h2o_mem_pool_shared_entry_t *entry)
+static void internal_link_shared(h2o_mem_pool_t *pool, h2o_mem_pool_shared_entry_t *entry)
 {
     auto ref = pool->alloc_for<h2o_mem_pool_shared_ref_t>();
     ref->entry = entry;
@@ -139,16 +141,17 @@ static void link_shared(h2o_mem_pool_t *pool, h2o_mem_pool_shared_entry_t *entry
 
 void *h2o_mem_pool_t::alloc_shared(size_t sz, mem_pool_dispose_cb_t dispose)
 {
+    DBG_LOG_ALLOCATION(alloc_shared, sz);
     void *p = h2o_mem_alloc_shared(sz, dispose);
     auto entry = H2O_STRUCT_FROM_MEMBER(h2o_mem_pool_shared_entry_t, bytes, p);
-    ::link_shared(this, entry);
+    internal_link_shared(this, entry);
     return entry->bytes;
 }
 
 void h2o_mem_pool_t::link_shared(void *p)
 {
     h2o_mem_addref_shared(p);
-    ::link_shared(this, H2O_STRUCT_FROM_MEMBER(h2o_mem_pool_shared_entry_t, bytes, p));
+    internal_link_shared(this, H2O_STRUCT_FROM_MEMBER(h2o_mem_pool_shared_entry_t, bytes, p));
 }
 
 static size_t topagesize(size_t capacity)

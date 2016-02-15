@@ -67,6 +67,9 @@ extern "C" {
 #define H2O_RETURNS_NONNULL
 #endif
 
+#define DBG_LOG_ALLOCATION(fn, sz) printf("%d\t%s\n", (int)sz, #fn);
+
+
 /**
  * prints an error message and aborts
  */
@@ -83,6 +86,7 @@ void h2o_clearmem(T *p)
  */
 H2O_RETURNS_NONNULL inline void *h2o_mem_alloc(size_t sz)
 {
+    DBG_LOG_ALLOCATION(h2o_mem_alloc, sz);
     void *p = malloc(sz);
     if (p == NULL)
         h2o_fatal("no memory");
@@ -91,14 +95,30 @@ H2O_RETURNS_NONNULL inline void *h2o_mem_alloc(size_t sz)
 
 H2O_RETURNS_NONNULL inline void *h2o_mem_calloc(size_t num, size_t sz)
 {
+    DBG_LOG_ALLOCATION(h2o_mem_calloc, sz);
     void *p = calloc(num, sz);
     if (p == NULL)
         h2o_fatal("no memory");
     return p;
 }
 
+/**
+ * warpper of realloc; reallocs the given chunk or dies if impossible
+ */
+H2O_RETURNS_NONNULL inline void *h2o_mem_realloc(void *oldp, size_t sz)
+{
+    DBG_LOG_ALLOCATION(h2o_mem_realloc, sz);
+    void *newp = realloc(oldp, sz);
+    if (newp == NULL) {
+        h2o_fatal("no memory");
+        return oldp;
+    }
+    return newp;
+}
+
 #define h2o_mem_alloca(sz) alloca(sz)
 #define h2o_mem_alloca_free(p)
+#define WITH_MEM_ALLOCA_FREE(x)
 //#define h2o_mem_alloca(sz) h2o_mem_alloc(sz)
 //#define h2o_mem_alloca_free(p) h2o_mem_free(p)
 /*
@@ -124,19 +144,6 @@ template <typename T>
 T *h2o_mem_calloc_for(size_t num_elements=1)
 {
     return (T*)h2o_mem_calloc(num_elements, sizeof(T));
-}
-
-/**
- * warpper of realloc; reallocs the given chunk or dies if impossible
- */
-inline void *h2o_mem_realloc(void *oldp, size_t sz)
-{
-    void *newp = realloc(oldp, sz);
-    if (newp == NULL) {
-        h2o_fatal("no memory");
-        return oldp;
-    }
-    return newp;
 }
 
 template <typename T>
@@ -420,16 +427,23 @@ struct H2O_VECTOR {
         return this->entries[idx];
     }
 
-    void clear_free()
+    void reset()
     {
         if(this->entries)
         {
-            h2o_mem_free(this->entries);
             this->entries = nullptr;
             this->size = this->capacity = 0;
         }
     }
 
+    void clear_free()
+    {
+        if(this->entries)
+        {
+            h2o_mem_free(this->entries);
+            this->reset();
+        }
+    }
     /**
      * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
      * @param pool memory pool that the vector is using
@@ -571,6 +585,7 @@ void h2o_append_to_null_terminated_list(void ***list, void *element);
  */
 inline void *h2o_mem_alloc_shared(size_t sz, mem_pool_dispose_cb_t dispose)
 {
+    DBG_LOG_ALLOCATION(h2o_mem_alloc_shared, sz);
     auto entry = (h2o_mem_pool_shared_entry_t *)h2o_mem_alloc(offsetof(h2o_mem_pool_shared_entry_t, bytes) + sz);
     entry->refcnt = 1;
     entry->dispose = dispose;
