@@ -26,7 +26,7 @@ static void test_strstr(void)
 {
     ok(h2o_strstr("abcd", 4, "bc", 2) == 1);
     ok(h2o_strstr("abcd", 3, "bc", 2) == 1);
-    ok(h2o_strstr("abcd", 2, "bc", 2) == -1);
+    ok(h2o_strstr("abcd", 2, "bc", 2) == SIZE_MAX);
 }
 
 static void test_stripws(void)

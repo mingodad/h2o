@@ -67,7 +67,8 @@ extern "C" {
 #define H2O_RETURNS_NONNULL
 #endif
 
-#define DBG_LOG_ALLOCATION(fn, sz) printf("%d\t%s\n", (int)sz, #fn);
+//#define DBG_LOG_ALLOCATION(fn, sz) printf("%d\t%s\n", (int)sz, #fn);
+#define DBG_LOG_ALLOCATION(fn, sz)
 
 
 /**

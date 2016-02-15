@@ -31,7 +31,7 @@
 #include <unistd.h>
 #include "h2o/memory.h"
 
-#define WITHOUTH_MEM_POLL 1
+//#define WITHOUTH_MEM_POLL 1
 
 void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 

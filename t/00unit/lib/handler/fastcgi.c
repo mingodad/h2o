@@ -50,7 +50,7 @@ static int check_params(h2o_iovec_t *vecs, size_t *index, uint16_t request_id, c
         ++*index;
         if (DECODE_UINT16(header->contentLength) == 0)
             break;
-        if (vecs[*index].len != DECODE_UINT16(header->contentLength)) {
+        if (vecs[*index].len != size_t(DECODE_UINT16(header->contentLength))) {
             fprintf(stderr, "unexpected body size (index: %zu)\n", *index);
             return 0;
         }
@@ -168,11 +168,11 @@ void test_lib__handler__fastcgi_c()
     h2o_globalconf_t globalconf; //should be declared before h2o_context_t
     h2o_context_t test_ctx;
     h2o_hostconf_t *hostconf;
-    h2o_pathconf_t *pathconf;
+    //h2o_pathconf_t *pathconf;
 
     globalconf.server_name = h2o_iovec_t::create(H2O_STRLIT("h2o/1.2.1-alpha1"));
     hostconf = h2o_config_register_host(&globalconf, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
-    pathconf = h2o_config_register_path(hostconf, "/");
+    /*pathconf =*/ h2o_config_register_path(hostconf, "/");
 
     test_ctx.init(test_loop, &globalconf);
     ctx = &test_ctx;

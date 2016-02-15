@@ -31,6 +31,10 @@ extern "C" {
 #include "h2o/socketpool.h"
 #include "h2o/timeout.h"
 
+#ifndef H2O_MAX_HEADERS
+#define H2O_MAX_HEADERS 100
+#endif
+
 struct phr_header;
 struct h2o_http1client_t;
 
