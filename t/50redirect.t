@@ -25,7 +25,7 @@ EOT
 sub doit {
     my ($url, $expected_status, $expected_location) = @_;
     subtest $url => sub {
-        my ($stderr, $stdout) = run_prog("curl --silent --show-error --insecure --max-redirs 0 --dump-header /dev/stderr $url");
+        my ($stderr, $stdout) = run_prog("$curl --silent --show-error --max-redirs 0 --dump-header /dev/stderr $url");
         like $stderr, qr{^HTTP/[^ ]+ $expected_status\s}s, "status";
         like $stderr, qr{^location: ?$expected_location\r$}im, "location";
     };

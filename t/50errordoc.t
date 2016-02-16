@@ -25,7 +25,7 @@ EOT
         my ($proto, $port, $curl) = @_;
         my $resp = `$curl --silent $proto://127.0.0.1:$port/nonexist`;
         is $resp, $expected, "content";
-        $resp = `curl $opts --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
+        $resp = `$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]+ 404\s}s, "status";
         like $resp, qr{\r\ncontent-type:\s*text/html.*\r\n}is, "content-type";
         like $resp, qr{\r\ncontent-length:\s*@{[length $expected]}\r\n}is, "content-length";
@@ -50,7 +50,7 @@ EOT
         my ($proto, $port, $curl) = @_;
         my $resp = `$curl --silent $proto://127.0.0.1:$port/nonexist`;
         is $resp, "not found", "content";
-        $resp = `curl $opts --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
+        $resp = `$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]+ 404\s}s, "status";
         like $resp, qr{\r\ncontent-type:\s*text/plain.*\r\n}is, "content-type";
         like $resp, qr{\r\ncontent-length:\s*@{[length "not found"]}\r\n}is, "content-length";
@@ -81,7 +81,7 @@ EOT
         my ($proto, $port, $curl) = @_;
         my $resp = `$curl --silent $proto://127.0.0.1:$port/nonexist`;
         is $resp, $expected, "content";
-        $resp = `curl $opts --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
+        $resp = `$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]+ 404\s}s, "status";
         like $resp, qr{\r\ncontent-type:\s*text/plain.*\r\n}is, "content-type";
         like $resp, qr{\r\ncontent-length:\s*@{[length $expected]}\r\n}is, "content-length";
@@ -104,9 +104,9 @@ error-doc:
     url: /500.html
 EOT
 
-    run_tests($server, sub {
-        my ($proto, $opts, $port) = @_;
-        my $resp = `curl $opts --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]+ 404\s}s, "status";
     });
 };
