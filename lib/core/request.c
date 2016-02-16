@@ -469,7 +469,7 @@ void h2o_req_t::send_error(int status, const char *reason, const char *body, int
     this->res.content_length = strlen(body);
 
     if ((flags & H2O_SEND_ERROR_KEEP_HEADERS) == 0)
-        this->res.headers.clear_free();
+        this->res.headers.reset();
 
     this->addResponseHeader(H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
 

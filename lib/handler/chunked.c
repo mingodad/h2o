@@ -58,7 +58,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req,
         ob++;
     }
 
-    req->send_next(self, outbufs, /*bufcount*/(ob-outbufs)/sizeof(*ob), is_final);
+    req->send_next(self, outbufs, /*bufcount*/(ob-outbufs), is_final);
     h2o_mem_alloca_free(outbufs);
 }
 

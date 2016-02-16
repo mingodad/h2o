@@ -173,9 +173,8 @@ h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 
 h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb)
 {
-    auto sock = h2o_mem_alloc_for<h2o_uv_socket_t>();
+    auto sock = h2o_mem_calloc_for<h2o_uv_socket_t>();
 
-    memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
     sock->uv.stream = stream;
     sock->uv.close_cb = close_cb;

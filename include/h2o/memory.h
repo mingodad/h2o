@@ -77,6 +77,7 @@ extern "C" {
 H2O_NORETURN void h2o_fatal(const char *msg);
 
 template <typename T>
+/**it doesn't work for static arrays like char ary[40]*/
 void h2o_clearmem(T *p)
 {
     memset(p, 0, sizeof(*p));

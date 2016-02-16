@@ -362,8 +362,7 @@ h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, int flags)
 
     fcntl(fd, F_SETFL, O_NONBLOCK);
 
-    sock = h2o_mem_alloc_for<h2o_evloop_socket_t>();
-    h2o_clearmem(sock);
+    sock = h2o_mem_calloc_for<h2o_evloop_socket_t>();
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
     sock->loop = loop;
     sock->fd = fd;

@@ -108,7 +108,8 @@ static void encode_begin_request(void *p, uint16_t reqId, uint16_t role, uint8_t
     auto body = (fcgi_begin_request_body_t *) ((char *) p + FCGI_RECORD_HEADER_SIZE);
     encode_uint16(&body->role, role);
     body->flags = flags;
-    h2o_clearmem(body->reserved);
+    //h2o_clearmem do not work here because it's a char array
+	memset(body->reserved, 0, sizeof(body->reserved));
 }
 
 static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId,
@@ -679,9 +680,6 @@ static void on_send_complete(h2o_socket_t *sock, int status) {
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
-#include <unistd.h>
-#include <fcntl.h>
-
 static void on_connect(h2o_socket_t *sock, const char *errstr, void *data) {
     auto generator = (fcgi_generator_t*)data;
     iovec_vector_t vecs;
@@ -698,20 +696,7 @@ static void on_connect(h2o_socket_t *sock, const char *errstr, void *data) {
     sock->data = generator;
 
     build_request(generator->req, &vecs, 1, 65535, &generator->ctx->handler->config);
-#if 0
-    int fd = open("fastcgi.dump", O_CREAT | O_WRONLY | O_TRUNC, S_IWUSR | S_IRUSR);
-    for(size_t i=0; i != vecs.size; ++i)
-    {
-        char cbuf[256];
-        size_t cl = sizeof(cbuf)-1;
-        write(fd, vecs[i].base, vecs[i].len);
-        if(cl > vecs[i].len) cl = vecs[i].len;
-        memcpy(cbuf, vecs[i].base, cl);
-        cbuf[cl] = '\0';
-        printf("vecs %d : %d : %p : %s\n", (int)i, (int) cl, vecs[i].base, cbuf);
-    }
-    close(fd);
-#endif
+
     /* start sending the response */
     generator->sock->write(vecs.entries, vecs.size, on_send_complete);
 
