@@ -1,2 +1,2 @@
 ulimit -n 4096
-./h2o --conf=examples/h2o/h2o-dad.conf
+H2O_ROOT=$PWD ./h2o --conf=examples/h2o/h2o-dad.conf

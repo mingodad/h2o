@@ -1,1 +1,1 @@
-MEMCACHED_PORT=11211 make check > check.log 2>&1
+MEMCACHED_PORT=11211 H2O_ROOT=$PWD  make check > check.log 2>&1

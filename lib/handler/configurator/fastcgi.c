@@ -230,7 +230,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     h2o_fastcgi_config_vars_t config_vars;
     int ret = -1;
     struct passwd spawn_pwbuf, *spawn_pw;
-    char spawn_buf[1024*16];
+    char spawn_buf[1024*4];
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:

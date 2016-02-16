@@ -1542,6 +1542,11 @@ int main(int argc, char **argv)
     init_openssl();
     setup_configurators();
 
+    if (getenv("H2O_ROOT") == NULL) {
+        setenv("H2O_ROOT", "./", 1);
+    }
+
+
     { /* parse options */
         int ch;
         static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},

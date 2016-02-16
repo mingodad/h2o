@@ -1,0 +1,69 @@
+MyPerlHome=$HOME/perl5/perlbrew/perls/perl-5.22.1
+#mycurl-env 
+H2O_ROOT=$PWD $MyPerlHome/bin/perl \
+	$MyPerlHome/bin/prove -v \
+	t/50fastcgi-cgi.t \
+	> check-wrk.log 2>&1
+
+exit 0
+	t/00unit.evloop.t \
+	t/00unit.libuv.t \
+	t/01cxx-compile.t \
+	t/10http1client.t \
+	t/40max-connections.t \
+	t/40memcached-session-resumption.t \
+	t/40pathconf-redirect.t \
+	t/40protocol.t \
+	t/40proxy-protocol.t \
+	t/40running-user.t \
+	t/40server-push.t \
+	t/40session-ticket.t \
+	t/40ssl-cipher-suite.t \
+	t/40unix-socket.t \
+	t/40virtual-host.t \
+	t/40websocket.t \
+	t/50access-log.t \
+	t/50errordoc.t \
+	t/50expires.t \
+	t/50fastcgi-cgi.t \
+	t/50fastcgi-php.t \
+	t/50fastcgi.t \
+	t/50file-config.t \
+	t/50file-range.t \
+	t/50file.t \
+	t/50gzip.t \
+	t/50headers.t \
+	t/50mimemap.t \
+	t/50mruby-htpasswd.t \
+	t/50mruby-http-request.t \
+	t/50mruby.t \
+	t/50post-size-limit.t \
+	t/50redirect.t \
+	t/50reverse-proxy-0.t \
+	t/50reverse-proxy-1.t \
+	t/50reverse-proxy-10.t \
+	t/50reverse-proxy-11.t \
+	t/50reverse-proxy-12.t \
+	t/50reverse-proxy-13.t \
+	t/50reverse-proxy-14.t \
+	t/50reverse-proxy-15.t \
+	t/50reverse-proxy-2.t \
+	t/50reverse-proxy-3.t \
+	t/50reverse-proxy-4.t \
+	t/50reverse-proxy-5.t \
+	t/50reverse-proxy-6.t \
+	t/50reverse-proxy-7.t \
+	t/50reverse-proxy-8.t \
+	t/50reverse-proxy-9.t \
+	t/50reverse-proxy-config.t \
+	t/50reverse-proxy-disconnected-keepalive.t \
+	t/50reverse-proxy-upstream-down.t \
+	t/50server-starter.t \
+	t/50sni.t \
+	t/80issues-from-proxy-reproxy-to-different-host.t \
+	t/80issues579.t \
+	t/80issues595.t \
+	t/80issues61.t \
+	t/90live-fetch-ocsp-response.t \
+	t/90root-fastcgi-php.t
+

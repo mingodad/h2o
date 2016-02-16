@@ -179,7 +179,7 @@ static inline int yoml__merge(yoml_t **dest, size_t offset, yoml_t *src)
                     goto Skip;
             }
         }
-        *dest = realloc(*dest, offsetof(yoml_t, data.mapping.elements) +
+        *dest = (yoml_t*)realloc(*dest, offsetof(yoml_t, data.mapping.elements) +
                                    ((*dest)->data.mapping.size + 1) * sizeof((*dest)->data.mapping.elements[0]));
         memmove((*dest)->data.mapping.elements + offset + 1, (*dest)->data.mapping.elements + offset,
                 ((*dest)->data.mapping.size - offset) * sizeof((*dest)->data.mapping.elements[0]));

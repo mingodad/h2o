@@ -113,9 +113,8 @@ static void encode_begin_request(void *p, uint16_t reqId, uint16_t role, uint8_t
 
 static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId,
         uint16_t role, uint8_t flags) {
-    h2o_iovec_t rec = h2o_iovec_t::create(pool->alloc(
-            FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE),
-            FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE);
+    const size_t sz = FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE;
+    h2o_iovec_t rec = h2o_iovec_t::create(pool->alloc(sz), sz);
     encode_begin_request(rec.base, reqId, role, flags);
     return rec;
 }
@@ -272,7 +271,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs,
     /* SERVER_NAME */
     append_pair_pvlv("SERVER_NAME", req->hostconf->authority.host);
     { /* SERVER_PROTOCOL */
-        char buf[sizeof ("HTTP/1.1") - 1];
+        char buf[sizeof ("HTTP/1.1")];
         size_t l = h2o_stringify_protocol_version(buf, req->version);
         append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_PROTOCOL"), buf, l);
     }
@@ -365,7 +364,7 @@ static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs,
 static void build_request(h2o_req_t *req, iovec_vector_t *vecs,
         unsigned request_id, size_t max_record_size,
         h2o_fastcgi_config_vars_t *config) {
-    *vecs = {};
+    vecs->reset();
 
     /* first entry is FCGI_BEGIN_REQUEST */
     vecs->reserve(&req->pool, 5 /* we send at least 5 iovecs */);
@@ -600,7 +599,7 @@ static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t
 }
 
 static void on_rw_timeout(h2o_timeout_entry_t *entry) {
-    fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
+    auto generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
 
     generator->req->log_error(MODULE_NAME, "I/O timeout");
     errorclose(generator);
@@ -680,6 +679,9 @@ static void on_send_complete(h2o_socket_t *sock, int status) {
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
+#include <unistd.h>
+#include <fcntl.h>
+
 static void on_connect(h2o_socket_t *sock, const char *errstr, void *data) {
     auto generator = (fcgi_generator_t*)data;
     iovec_vector_t vecs;
@@ -696,7 +698,20 @@ static void on_connect(h2o_socket_t *sock, const char *errstr, void *data) {
     sock->data = generator;
 
     build_request(generator->req, &vecs, 1, 65535, &generator->ctx->handler->config);
-
+#if 0
+    int fd = open("fastcgi.dump", O_CREAT | O_WRONLY | O_TRUNC, S_IWUSR | S_IRUSR);
+    for(size_t i=0; i != vecs.size; ++i)
+    {
+        char cbuf[256];
+        size_t cl = sizeof(cbuf)-1;
+        write(fd, vecs[i].base, vecs[i].len);
+        if(cl > vecs[i].len) cl = vecs[i].len;
+        memcpy(cbuf, vecs[i].base, cl);
+        cbuf[cl] = '\0';
+        printf("vecs %d : %d : %p : %s\n", (int)i, (int) cl, vecs[i].base, cbuf);
+    }
+    close(fd);
+#endif
     /* start sending the response */
     generator->sock->write(vecs.entries, vecs.size, on_send_complete);
 
@@ -719,7 +734,7 @@ static void do_stop(h2o_generator_t *_generator, h2o_req_t *req) {
 }
 
 static void on_connect_timeout(h2o_timeout_entry_t *entry) {
-    fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
+    auto generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
 
     generator->req->log_error(MODULE_NAME, "connect timeout");
     errorclose(generator);
