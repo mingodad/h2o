@@ -463,7 +463,7 @@ struct H2O_VECTOR {
                 this->capacity *= 2;
             if (pool != NULL) {
                 new_entries = pool->alloc_for<T>(this->capacity);
-                memcpy(new_entries, this->entries, sizeof(T) * this->size);
+                if(this->entries) memcpy(new_entries, this->entries, sizeof(T) * this->size);
             } else {
                 //memory leak ?
                 new_entries = h2o_mem_realloc_for<T>(this->entries, sizeof(T) * this->capacity);

@@ -138,6 +138,7 @@ static void test_loopback(void)
     h2o_loopback_run_loop(conn);
 
     ok(conn->req.res.status == 404);
+    h2o_mem_free(conn);
 }
 
 int main(int argc, char **argv)

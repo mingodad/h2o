@@ -43,7 +43,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
                 continue;
             files.push_back(pool, h2o_strdup(pool, dent.d_name, SIZE_MAX).base);
         }
-        qsort(files.entries, files.size, sizeof(files[0]), cmpstrptr);
+        if(files.size > 1) qsort(files.entries, files.size, sizeof(files[0]), cmpstrptr);
     }
 
     h2o_buffer_t *_;

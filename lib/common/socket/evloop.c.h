@@ -267,8 +267,9 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
     sock->super._cb.write = cb;
 
     //write_core changes bufs so we store it twice
-    WITH_MEM_ALLOCA_FREE(bufs_allocated =) bufs = (h2o_iovec_t*)h2o_mem_alloca(sizeof(*bufs) * bufcnt);
-    memcpy(bufs, _bufs, sizeof(*bufs) * bufcnt);
+    size_t sz = sizeof(*bufs) * bufcnt;
+    WITH_MEM_ALLOCA_FREE(bufs_allocated =) bufs = (h2o_iovec_t*)h2o_mem_alloca(sz);
+    memcpy(bufs, _bufs, sz);
 
     /* try to write now */
     if (write_core(sock->fd, &bufs, &bufcnt) != 0) {

@@ -391,11 +391,11 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
 {
 #define CHECK_EOF()                \
     if (buf == buf_end)            \
-        return NULL;
+        goto Error;
 
 #define CHECK_OVERFLOW(range)      \
     if (range == SIZE_MAX)         \
-        return NULL;
+        goto Error;
 
     size_t range_start = SIZE_MAX, range_count = 0;
     char *buf = range_value->base, *buf_end = buf + range_value->len;
@@ -451,7 +451,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
                 range_start = SIZE_MAX;
             }
         } else {
-            return NULL;
+            goto Error;
         }
 
         if (H2O_LIKELY(range_start != SIZE_MAX)) {
@@ -470,6 +470,9 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
     return ranges.entries;
 #undef CHECK_EOF
 #undef CHECK_OVERFLOW
+Error:
+    ranges.clear_free();
+    return NULL;
 }
 
 static void gen_rand_string(h2o_iovec_t *s)
