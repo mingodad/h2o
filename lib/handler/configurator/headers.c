@@ -92,7 +92,7 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
     }
     if (add_cmd(cmd, node, cmd_id, name, value) != 0)
     {
-        h2o_mem_free(name->base);
+        if(!h2o_iovec_is_token(name)) h2o_mem_free(name->base);
         h2o_mem_free(value.base);
         return -1;
     }
@@ -123,7 +123,7 @@ static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configura
     }
     if (add_cmd(cmd, node, H2O_HEADERS_CMD_UNSET, name, {}) != 0)
     {
-        h2o_mem_free(name->base);
+        if(!h2o_iovec_is_token(name)) h2o_mem_free(name->base);
         return -1;
     }
     return 0;
