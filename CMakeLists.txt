@@ -23,6 +23,8 @@ CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(h2o C)
 
+#SET( CMAKE_C_COMPILER "/home/mingo/local/clang-3.7/libexec/c++-analyzer" )
+#SET( CMAKE_C_COMPILER "/home/mingo/local/clang-3.7/bin/clang++" )
 SET( CMAKE_C_COMPILER "/usr/bin/g++" )
 #SET( CMAKE_CFLAGS "-fpermissive -std=c++1y -D__c_as_cpp=1" )
 
@@ -156,7 +158,14 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     ENDIF ()
 ENDIF ()
 
-SET(CMAKE_C_FLAGS "-fpermissive -std=c++1y -D__c_as_cpp=1 -O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
+
+SET(CMAKE_C_FLAGS "-g -fpermissive -std=c++1y -D__c_as_cpp=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
+
+IF (COMPILER_OPTIMIZATION)
+	SET(CMAKE_C_FLAGS "${COMPILER_OPTIMIZATION} ${CMAKE_C_FLAGS}")
+ELSE (COMPILER_OPTIMIZATION)
+	SET(CMAKE_C_FLAGS "-O2 ${CMAKE_C_FLAGS}")
+ENDIF (COMPILER_OPTIMIZATION)
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -450,3 +459,12 @@ IF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     TARGET_LINK_LIBRARIES(t-00unit-evloop.t "socket" "nsl")
     TARGET_LINK_LIBRARIES(t-00unit-libuv.t "socket" "nsl")
 ENDIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
+
+IF (WITH_OTHER_LIBS)
+	TARGET_LINK_LIBRARIES(h2o ${WITH_OTHER_LIBS})
+	TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${WITH_OTHER_LIBS})
+	TARGET_LINK_LIBRARIES(examples-http1client ${WITH_OTHER_LIBS})
+	TARGET_LINK_LIBRARIES(examples-simple ${WITH_OTHER_LIBS})
+	TARGET_LINK_LIBRARIES(examples-socket-client ${WITH_OTHER_LIBS})
+	TARGET_LINK_LIBRARIES(examples-websocket ${WITH_OTHER_LIBS})
+ENDIF (WITH_OTHER_LIBS)

@@ -154,7 +154,22 @@ void h2o_multithread_unregister_receiver(h2o_multithread_queue_t *queue, h2o_mul
     pthread_mutex_unlock(&queue->mutex);
 }
 
-void h2o_multithread_receiver_t::send_message(h2o_multithread_message_t *message)
+bool h2o_multithread_receiver_t::send_wakeup()
+{
+    if(this->queue)
+    {
+#if H2O_USE_LIBUV
+        uv_async_send(&this->queue->async);
+#else
+        while (write(this->queue->async.write, "", 1) == -1 && errno == EINTR)
+            ;
+#endif
+        return true;
+    }
+    return false;
+}
+
+bool h2o_multithread_receiver_t::send_message(h2o_multithread_message_t *message)
 {
     int do_send = 0;
 
@@ -170,13 +185,9 @@ void h2o_multithread_receiver_t::send_message(h2o_multithread_message_t *message
     pthread_mutex_unlock(&this->queue->mutex);
 
     if (do_send) {
-#if H2O_USE_LIBUV
-        uv_async_send(&this->queue->async);
-#else
-        while (write(this->queue->async.write, "", 1) == -1 && errno == EINTR)
-            ;
-#endif
+        return this->send_wakeup();
     }
+    return true;
 }
 
 void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg)

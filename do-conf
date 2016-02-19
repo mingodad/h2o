@@ -1,7 +1,9 @@
 #PKG_CONFIG_PATH=$HOME/local/lib/pkgconfig 
 cmake \
     -DWITH_BUNDLED_SSL=ON \
-    -DCMAKE_C_FLAGS="-march=native -O2" \
+    -DCMAKE_C_FLAGS="-march=native" \
     -DWITH_MRUBY=ON
+#    -DCMAKE_C_FLAGS="-fsanitize=address -march=native -O2" \
+#    -DWITH_OTHER_LIBS="asan -lpthread" \
 #    -DCMAKE_C_FLAGS="-march=native -O2 -DH2O_USE_POLL=1" \
 

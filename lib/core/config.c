@@ -72,17 +72,17 @@ void h2o_pathconf_t::dispose(h2o_pathconf_t *pathconf)
 #define DESTROY_LIST(list) \
     do { \
         size_t i; \
-        for (i = 0; i != list.size; ++i) {  \
-            auto e = list[i]; \
+        for (i = 0; i != pathconf->list.size; ++i) {  \
+            auto e = pathconf->list[i]; \
             if (e->dispose != NULL) \
                 e->dispose(e); \
             h2o_mem_free(e); \
         } \
-        h2o_mem_free(list.entries); \
+        pathconf->list.clear_free(); \
     } while (0)
-    DESTROY_LIST(pathconf->handlers);
-    DESTROY_LIST(pathconf->filters);
-    DESTROY_LIST(pathconf->loggers);
+    DESTROY_LIST(handlers);
+    DESTROY_LIST(filters);
+    DESTROY_LIST(loggers);
 #undef DESTROY_LIST
 
     h2o_mem_free(pathconf->path.base);

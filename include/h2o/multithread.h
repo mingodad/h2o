@@ -46,7 +46,11 @@ struct h2o_multithread_receiver_t {
     /**
      * sends a message
      */
-    void send_message(h2o_multithread_message_t *message);
+    bool send_message(h2o_multithread_message_t *message);
+    /**
+    * Sends an wakeup message
+    */
+    bool send_wakeup();
 };
 
 struct h2o_multithread_request_t {

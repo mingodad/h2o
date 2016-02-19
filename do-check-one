@@ -1,9 +1,12 @@
+log_file=check-one.log
 MyPerlHome=$HOME/perl5/perlbrew/perls/perl-5.22.1
 #mycurl-env 
+#LIVE_TESTS=1 
 H2O_ROOT=$PWD $MyPerlHome/bin/perl \
 	$MyPerlHome/bin/prove -v \
-	t/50fastcgi-cgi.t \
-	> check-wrk.log 2>&1
+	t/50server-starter.t \
+	> $log_file 2>&1
+	tail -n 1 $log_file
 
 exit 0
 	t/00unit.evloop.t \
@@ -40,13 +43,13 @@ exit 0
 	t/50post-size-limit.t \
 	t/50redirect.t \
 	t/50reverse-proxy-0.t \
-	t/50reverse-proxy-1.t \
 	t/50reverse-proxy-10.t \
 	t/50reverse-proxy-11.t \
 	t/50reverse-proxy-12.t \
 	t/50reverse-proxy-13.t \
 	t/50reverse-proxy-14.t \
 	t/50reverse-proxy-15.t \
+	t/50reverse-proxy-1.t \
 	t/50reverse-proxy-2.t \
 	t/50reverse-proxy-3.t \
 	t/50reverse-proxy-4.t \
@@ -60,10 +63,10 @@ exit 0
 	t/50reverse-proxy-upstream-down.t \
 	t/50server-starter.t \
 	t/50sni.t \
-	t/80issues-from-proxy-reproxy-to-different-host.t \
 	t/80issues579.t \
 	t/80issues595.t \
 	t/80issues61.t \
+	t/80issues-from-proxy-reproxy-to-different-host.t \
+	t/80yaml-merge.t \
 	t/90live-fetch-ocsp-response.t \
-	t/90root-fastcgi-php.t
-
+	t/90root-fastcgi-php.t \

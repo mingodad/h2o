@@ -72,18 +72,20 @@ static struct {
         char *host;
         uint16_t port;
     } memcached;
+    volatile sig_atomic_t shutdown_requested;
 } conf;
 
-H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
+static void *cache_cleanup_thread(void *_contexts)
 {
     auto contexts = (SSL_CTX **)_contexts;
 
-    while (1) {
+    while (!conf.shutdown_requested) {
         size_t i;
         for (i = 0; contexts[i] != NULL; ++i)
             SSL_CTX_flush_sessions(contexts[i], time(NULL));
         sleep(CONF_LIFETIME_QUARTER);
     }
+    return NULL;
 }
 
 static void spawn_cache_cleanup_thread(SSL_CTX **_contexts, size_t num_contexts)
@@ -882,8 +884,14 @@ static unsigned long thread_id_callback(void)
     return (unsigned long)pthread_self();
 }
 
+void shutdown_ssl()
+{
+    conf.shutdown_requested = 1;
+}
+
 void init_openssl(void)
 {
+    conf.shutdown_requested = 0;
     int nlocks = CRYPTO_num_locks(), i;
     mutexes = h2o_mem_alloc_for<pthread_mutex_t>(nlocks);
     for (i = 0; i != nlocks; ++i)

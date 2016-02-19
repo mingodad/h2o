@@ -1,0 +1,13 @@
+#!/bin/bash
+
+MyPerlHome=$HOME/perl5/perlbrew/perls/perl-5.22.1
+
+for t in `ls t/*.t`
+do
+	echo $t
+	#mycurl-env 
+	H2O_ROOT=$PWD $MyPerlHome/bin/perl \
+		$MyPerlHome/bin/prove -v \
+		$t > $t.log 2>&1
+	tail -n 1 $t.log
+done

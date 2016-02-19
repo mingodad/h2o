@@ -282,7 +282,7 @@ static void *thread_main(void *_ctx)
 {
     auto ctx = (h2o_memcached_context_t*)_ctx;
 
-    while (1)
+    while (!ctx->shutdown_requested)
         reader_main(ctx);
     return NULL;
 }
@@ -373,6 +373,7 @@ h2o_memcached_context_t *h2o_memcached_context_t::create(const char *host, uint1
 
     pthread_mutex_init(&ctx->mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);
+    ctx->shutdown_requested = 0;
     ctx->pending.init_anchor();
     ctx->num_threads_connected = 0;
     ctx->host = h2o_strdup(NULL, host, SIZE_MAX).base;

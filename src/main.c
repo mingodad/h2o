@@ -81,6 +81,7 @@ struct listener_ssl_config_t {
         unsigned max_failures;
         char *cmd;
         pthread_t updater_tid; /* should be valid when and only when interval != 0 */
+        volatile sig_atomic_t shutdown_requested;
         struct {
             pthread_mutex_t mutex;
             h2o_buffer_t *data;
@@ -113,10 +114,11 @@ typedef enum en_run_mode_t {
 struct conf_threads_t {
         pthread_t tid;
         h2o_context_t ctx;
+        volatile sig_atomic_t shutdown_requested;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
         //conf_threads_t():tid(0),ctx({}),server_notifications({}), memcached({}){}
-        conf_threads_t():tid(0){}
+        conf_threads_t():tid(0),shutdown_requested(0){}
     };
 
 static struct {
@@ -137,6 +139,7 @@ static struct {
     int tfo_queues;
     conf_threads_t *threads;
     volatile sig_atomic_t shutdown_requested;
+    pthread_mutex_t mutex;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1[32];
@@ -156,6 +159,7 @@ static struct {
     0,               /* initialized in main() */
     NULL,            /* thread_ids */
     0,               /* shutdown_requested */
+    {},            /* global mutex */
     {},              /* state */
 };
 
@@ -284,7 +288,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
 
     assert(ssl_conf->ocsp_stapling.interval != 0);
 
-    while (1) {
+    while (!ssl_conf->ocsp_stapling.shutdown_requested) {
         /* sleep until next_at */
         if ((now = time(NULL)) < next_at) {
             time_t sleep_secs = next_at - now;
@@ -1112,9 +1116,11 @@ static void notify_all_threads(void)
 {
     unsigned i;
     for (i = 0; i != conf.num_threads; ++i) {
-        auto message = h2o_mem_alloc_for<h2o_multithread_message_t>();
-        *message = {};
-        conf.threads[i].server_notifications.send_message(message);
+        if(!conf.threads[i].shutdown_requested)
+        {
+            //fprintf(stderr, "notify_all_threads %d\n", i);
+            conf.threads[i].server_notifications.send_wakeup();
+        }
     }
 }
 
@@ -1306,6 +1312,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     update_listener_state(listeners);
 
     /* the main loop */
+    thread_at_idx->shutdown_requested = 0;
     while (1) {
         if (conf.shutdown_requested)
             break;
@@ -1314,6 +1321,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         h2o_evloop_run(thread_at_idx->ctx.loop);
         thread_at_idx->ctx.filecache->clear();
     }
+    thread_at_idx->shutdown_requested = 1;
+
+    //fprintf(stderr, "shutdown_requested %td\n", (ptrdiff_t)_thread_index);
+    //notify_all_threads();
 
     if (thread_index == 0)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
@@ -1330,9 +1341,20 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     while (num_connections(0) != 0)
         h2o_evloop_run(thread_at_idx->ctx.loop);
 
+    pthread_mutex_lock(&conf.mutex);
     /* the process that detects num_connections becoming zero performs the last cleanup */
     if (conf.pid_file != NULL)
+    {
         unlink(conf.pid_file);
+        conf.pid_file = NULL;
+    }
+    pthread_mutex_unlock(&conf.mutex);
+
+    //fprintf(stderr, "exiting thread %td\n", (ptrdiff_t)_thread_index);
+
+    /*give other threads a chance to finish their work*/
+    sleep(1);
+
     _exit(0);
 }
 
@@ -1536,6 +1558,7 @@ int main(int argc, char **argv)
 
     conf.num_threads = h2o_numproc();
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
+    pthread_mutex_init(&conf.mutex, NULL);
 
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
 

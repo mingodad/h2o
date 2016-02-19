@@ -23,6 +23,7 @@
 #define h2o__memcached_h
 
 #include <pthread.h>
+#include <signal.h>
 #include "h2o/memory.h"
 #include "h2o/multithread.h"
 
@@ -40,6 +41,7 @@ struct h2o_memcached_context_t {
     char *host;
     uint16_t port;
     h2o_iovec_t prefix;
+    volatile sig_atomic_t shutdown_requested;
 
     static h2o_memcached_context_t *create(const char *host, uint16_t port, size_t num_threads, const char *prefix);
     h2o_memcached_req_t *get(h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
@@ -50,6 +52,11 @@ struct h2o_memcached_context_t {
     void set(h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags);
 
     void remove(h2o_iovec_t key, int flags);
+
+    void shutdown()
+    {
+        this->shutdown_requested = 1;
+    }
 };
 
 
