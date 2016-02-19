@@ -99,7 +99,7 @@ static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_
     return 0;
 }
 
-int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands)
+int h2o_configurator_context_t::apply_commands(yoml_t *node, int flags_mask, const char **ignore_commands)
 {
     struct st_cmd_value_t {
         h2o_configurator_command_t *cmd;
@@ -115,7 +115,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
     }
 
     /* call on_enter of every configurator */
-    if (setup_configurators(ctx, 1, node) != 0)
+    if (setup_configurators(this, 1, node) != 0)
         goto Exit;
 
     /* handle the configuration commands */
@@ -133,7 +133,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
                 if (strcmp(ignore_commands[i], key->data.scalar) == 0)
                     goto SkipCommand;
         }
-        if ((cmd = ctx->globalconf->configurator_get_command(key->data.scalar)) == NULL) {
+        if ((cmd = this->globalconf->configurator_get_command(key->data.scalar)) == NULL) {
             h2o_configurator_errprintf(key, "unknown command: %s", key->data.scalar);
             goto Exit;
         }
@@ -174,7 +174,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
             deferred.push_back(NULL, {cmd, value});
         } else {
-            if (cmd->cb(cmd, ctx, value) != 0)
+            if (cmd->cb(cmd, this, value) != 0)
                 goto Exit;
         }
     SkipCommand:
@@ -182,17 +182,17 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
     }
     for (i = 0; i != semi_deferred.size; ++i) {
         auto pair = semi_deferred[i];
-        if (pair.cmd->cb(pair.cmd, ctx, pair.value) != 0)
+        if (pair.cmd->cb(pair.cmd, this, pair.value) != 0)
             goto Exit;
     }
     for (i = 0; i != deferred.size; ++i) {
         auto pair = deferred[i];
-        if (pair.cmd->cb(pair.cmd, ctx, pair.value) != 0)
+        if (pair.cmd->cb(pair.cmd, this, pair.value) != 0)
             goto Exit;
     }
 
     /* call on_enter of every configurator */
-    if (setup_configurators(ctx, 0, node) != 0)
+    if (setup_configurators(this, 0, node) != 0)
         goto Exit;
 
     ret = 0;
@@ -235,7 +235,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         path_ctx.pathconf = h2o_config_register_path(path_ctx.hostconf, key->data.scalar);
         path_ctx.mimemap = &path_ctx.pathconf->mimemap;
         path_ctx.parent = ctx;
-        if (h2o_configurator_apply_commands(&path_ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL) != 0)
+        if (path_ctx.apply_commands(value, H2O_CONFIGURATOR_FLAG_PATH, NULL) != 0)
             return -1;
     }
 
@@ -277,7 +277,7 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
         }
         host_ctx.mimemap = &host_ctx.hostconf->mimemap;
         host_ctx.parent = ctx;
-        if (h2o_configurator_apply_commands(&host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL) != 0)
+        if (host_ctx.apply_commands(value, H2O_CONFIGURATOR_FLAG_HOST, NULL) != 0)
             return -1;
         if (yoml_get(value, "paths") == NULL) {
             h2o_configurator_errprintf(value, "mandatory configuration directive `paths` is missing");
@@ -592,7 +592,7 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     ext_ctx.pathconf = &type->data.dynamic.pathconf;
     ext_ctx.mimemap = NULL;
     ext_ctx.parent = ctx;
-    if (h2o_configurator_apply_commands(&ext_ctx, node, H2O_CONFIGURATOR_FLAG_EXTENSION, ignore_commands) != 0)
+    if (ext_ctx.apply_commands(node, H2O_CONFIGURATOR_FLAG_EXTENSION, ignore_commands) != 0)
         return -1;
     switch (type->data.dynamic.pathconf.handlers.size) {
     case 1:
@@ -717,7 +717,7 @@ int h2o_globalconf_t::configurator_apply(yoml_t *node, int dry_run)
     ctx.mimemap = &ctx.globalconf->mimemap;
     ctx.dry_run = dry_run;
 
-    if (h2o_configurator_apply_commands(&ctx, node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL) != 0)
+    if (ctx.apply_commands(node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL) != 0)
         return -1;
     if (this->hosts[0] == NULL) {
         h2o_configurator_errprintf(node, "mandatory configuration directive `hosts` is missing");

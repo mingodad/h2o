@@ -47,6 +47,10 @@ struct h2o_configurator_context_t {
     h2o_mimemap_t **mimemap;
     int dry_run;
     h2o_configurator_context_t *parent;
+    /**
+     *
+     */
+    int apply_commands(yoml_t *node, int flags_mask, const char **ignore_commands);
 };
 
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
@@ -127,10 +131,6 @@ inline bool isScalar(yoml_t *node, const char *value)
     return node->type == YOML_TYPE_SCALAR && strcasecmp(node->data.scalar, value) == 0;
 }
 
-/**
- *
- */
-int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands);
 /**
  * emits configuration error
  */
