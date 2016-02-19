@@ -1353,7 +1353,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     //fprintf(stderr, "exiting thread %td\n", (ptrdiff_t)_thread_index);
 
     /*give other threads a chance to finish their work*/
-    sleep(1);
+    //sleep(1);
 
     _exit(0);
 }
