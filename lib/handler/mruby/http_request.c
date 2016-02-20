@@ -106,7 +106,7 @@ static void on_dispose(void *_ctx)
     if (!mrb_nil_p(ctx->receiver)) {
         mrb_state *mrb = ctx->generator->ctx->mrb;
         int gc_arena = mrb_gc_arena_save(mrb);
-        h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx),
+        ctx->generator->run_fiber(detach_receiver(ctx),
                 create_downstream_closed_exception(mrb), NULL);
         mrb_gc_arena_restore(mrb, gc_arena);
     }
@@ -161,7 +161,7 @@ static void post_response(h2o_mruby_http_request_context_t *ctx,
         }
     } else {
         /* send response to the waiting receiver */
-        h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), resp, NULL);
+        ctx->generator->run_fiber(detach_receiver(ctx), resp, NULL);
     }
 
     mrb_gc_arena_restore(mrb, gc_arena);
@@ -227,7 +227,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
         } else if (!mrb_nil_p(ctx->receiver)) {
             int gc_arena = mrb_gc_arena_save(ctx->generator->ctx->mrb);
             mrb_value chunk = build_chunk(ctx);
-            h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), chunk, NULL);
+            ctx->generator->run_fiber(detach_receiver(ctx), chunk, NULL);
             mrb_gc_arena_restore(ctx->generator->ctx->mrb, gc_arena);
         }
     }
@@ -366,7 +366,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     if (mrb_hash_p(arg_hash)) {
         mrb_value headers = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->symbols.sym_headers));
         if (!mrb_nil_p(headers)) {
-            if (h2o_mruby_iterate_headers(generator->ctx, headers, flatten_request_header, ctx) != 0) {
+            if (generator->ctx->iterate_headers(headers, flatten_request_header, ctx) != 0) {
                 mrb_value exc = mrb_obj_value(mrb->exc);
                 mrb->exc = NULL;
                 mrb_exc_raise(mrb, exc);
@@ -415,13 +415,12 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     return ctx->refs.request;
 }
 
-mrb_value h2o_mruby_http_join_response_callback(
-    h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
-                                                int *next_action)
+mrb_value h2o_mruby_generator_t::http_join_response_callback(
+    mrb_value receiver, mrb_value args, int *next_action)
 {
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = this->ctx->mrb;
 
-    if (generator->req == NULL)
+    if (this->req == NULL)
         return create_downstream_closed_exception(mrb);
 
     auto ctx = (h2o_mruby_http_request_context_t*)
@@ -434,14 +433,13 @@ mrb_value h2o_mruby_http_join_response_callback(
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_generator_t *generator,
-        mrb_value receiver, mrb_value args,
-                                              int *next_action)
+mrb_value h2o_mruby_generator_t::http_fetch_chunk_callback(
+        mrb_value receiver, mrb_value args, int *next_action)
 {
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = this->ctx->mrb;
     mrb_value ret;
 
-    if (generator->req == NULL)
+    if (this->req == NULL)
         return create_downstream_closed_exception(mrb);
 
     auto ctx = (h2o_mruby_http_request_context_t*)

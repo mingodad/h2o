@@ -331,7 +331,7 @@ void h2o_mruby_handler_t::on_context_init(h2o_context_t *ctx)
     create_symbol(async);
     #undef create_symbol
 
-    h2o_mruby_send_chunked_init_context(handler_ctx);
+    handler_ctx->send_chunked_init_context();
     h2o_mruby_http_request_init_context(handler_ctx);
 
     /* compile code (must be done for each thread) */
@@ -570,7 +570,7 @@ static void on_generator_dispose(void *_generator)
     generator->req = NULL;
 
     if (generator->chunked != NULL)
-        h2o_mruby_send_chunked_dispose(generator);
+        generator->send_chunked_dispose();
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -590,7 +590,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     mrb_value env = build_env(generator);
 
     int is_delegate = 0;
-    h2o_mruby_run_fiber(generator, generator->ctx->proc, env, &is_delegate);
+    generator->run_fiber(generator->ctx->proc, env, &is_delegate);
 
     mrb_gc_arena_restore(handler_ctx->mrb, gc_arena);
     if (is_delegate)
@@ -608,7 +608,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     generator->req->res.status = (int)status;
 
     /* set headers */
-    if (h2o_mruby_iterate_headers(generator->ctx, mrb_ary_entry(resp, 1), handle_response_header, generator->req) != 0) {
+    if (generator->ctx->iterate_headers(mrb_ary_entry(resp, 1), handle_response_header, generator->req) != 0) {
         assert(mrb->exc != NULL);
         goto GotException;
     }
@@ -655,9 +655,9 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
         generator->req->start_response(generator);
-        mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
+        mrb_value receiver = generator->send_chunked_init(body);
         if (!mrb_nil_p(receiver))
-            h2o_mruby_run_fiber(generator, receiver, body, 0);
+            generator->run_fiber(receiver, body, 0);
         return;
     }
 
@@ -681,22 +681,22 @@ GotException:
     generator->req->send_error(500, "Internal Server Error", "Internal Server Error", 0);
 }
 
-void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *is_delegate)
+void h2o_mruby_generator_t::run_fiber(mrb_value receiver, mrb_value input, int *is_delegate)
 {
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = this->ctx->mrb;
     mrb_value output;
     mrb_int status;
 
-    if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver)) {
+    if (!mrb_obj_eq(mrb, this->ctx->proc, receiver)) {
         mrb_gc_unregister(mrb, receiver);
         mrb_gc_protect(mrb, receiver);
     }
 
-    h2o_mruby_current_generator = generator;
+    h2o_mruby_current_generator = this;
 
     while (1) {
         /* send input to fiber */
-        output = mrb_funcall_argv(mrb, receiver, generator->ctx->symbols.sym_call, 1, &input);
+        output = mrb_funcall_argv(mrb, receiver, this->ctx->symbols.sym_call, 1, &input);
         if (mrb->exc != NULL)
             goto GotException;
         if (!mrb_array_p(output)) {
@@ -720,13 +720,13 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
             if (mrb_array_p(args)) {
                 switch (status) {
                 case H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS:
-                    input = h2o_mruby_send_chunked_eos_callback(generator, receiver, args, &next_action);
+                    input = this->send_chunked_eos_callback(receiver, args, &next_action);
                     break;
                 case H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE:
-                    input = h2o_mruby_http_join_response_callback(generator, receiver, args, &next_action);
+                    input = this->http_join_response_callback(receiver, args, &next_action);
                     break;
                 case H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK:
-                    input = h2o_mruby_http_fetch_chunk_callback(generator, receiver, args, &next_action);
+                    input = this->http_fetch_chunk_callback(receiver, args, &next_action);
                     break;
                 default:
                     input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
@@ -761,30 +761,30 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
     }
 
     /* send the response (unless req is already closed) */
-    if (generator->req == NULL)
+    if (this->req == NULL)
         return;
-    if (generator->req->_generator != NULL) {
+    if (this->req->_generator != NULL) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpectedly received a rack response"));
         goto GotException;
     }
-    send_response(generator, status, output, is_delegate);
+    send_response(this, status, output, is_delegate);
     return;
 
 GotException:
     h2o_mruby_current_generator = NULL;
-    if (generator->req != NULL) {
-        report_exception(generator->req, mrb);
-        if (generator->req->_generator == NULL) {
-            generator->req->send_error(500, "Internal Server Error", "Internal Server Error", 0);
+    if (this->req != NULL) {
+        report_exception(this->req, mrb);
+        if (this->req->_generator == NULL) {
+            this->req->send_error(500, "Internal Server Error", "Internal Server Error", 0);
         } else {
-            h2o_mruby_send_chunked_close(generator);
+            this->send_chunked_close();
         }
     }
     return;
 
 Async:
     h2o_mruby_current_generator = NULL;
-    if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver))
+    if (!mrb_obj_eq(mrb, this->ctx->proc, receiver))
         mrb_gc_register(mrb, receiver);
     return;
 }
@@ -835,13 +835,13 @@ static int iterate_headers_handle_pair(h2o_mruby_context_t *handler_ctx, mrb_val
     return 0;
 }
 
-int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value headers,
+int h2o_mruby_context_t::iterate_headers(mrb_value headers,
                               int (*cb)(h2o_mruby_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data)
 {
-    mrb_state *mrb = handler_ctx->mrb;
+    mrb_state *mrb = this->mrb;
 
     if (!(mrb_hash_p(headers) || mrb_array_p(headers))) {
-        headers = h2o_mruby_each_to_array(handler_ctx, headers);
+        headers = h2o_mruby_each_to_array(this, headers);
         if (mrb->exc != NULL)
             return -1;
         assert(mrb_array_p(headers));
@@ -853,7 +853,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value header
         for (i = 0; i != len; ++i) {
             mrb_value k = mrb_ary_entry(keys, i);
             mrb_value v = mrb_hash_get(mrb, headers, k);
-            if (iterate_headers_handle_pair(handler_ctx, k, v, cb, cb_data) != 0)
+            if (iterate_headers_handle_pair(this, k, v, cb, cb_data) != 0)
                 return -1;
         }
     } else {
@@ -865,7 +865,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value header
                 mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "array element of headers MUST by an array"));
                 return -1;
             }
-            if (iterate_headers_handle_pair(handler_ctx, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1), cb, cb_data) != 0)
+            if (iterate_headers_handle_pair(this, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1), cb, cb_data) != 0)
                 return -1;
         }
     }
