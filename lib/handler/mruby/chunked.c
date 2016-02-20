@@ -141,7 +141,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     chunked->bytes_left = generator->req->method.isEq("HEAD")
                               ? 0
                               : generator->req->res.content_length;
-    generator->super.proceed = do_proceed;
+    generator->proceed = do_proceed;
     generator->chunked = chunked;
 
     if ((chunked->shortcut.client = h2o_mruby_http_set_shortcut(generator->ctx->mrb, body, on_shortcut_notify)) != NULL) {

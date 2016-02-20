@@ -37,7 +37,6 @@ extern "C" {
 #include <mruby/variable.h>
 #include <mruby_input_stream.h>
 }
-#include "h2o.h"
 #include "h2o/mruby_.h"
 
 #define STATUS_FALLTHRU 399
@@ -581,8 +580,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     int gc_arena = mrb_gc_arena_save(handler_ctx->mrb);
 
     auto generator = req->pool.alloc_shared_for<h2o_mruby_generator_t>(1, on_generator_dispose);
-    generator->super.proceed = NULL;
-    generator->super.stop = NULL;
+    generator->proceed = NULL;
+    generator->stop = NULL;
     generator->req = req;
     generator->ctx = (h2o_mruby_context_t*)req->conn->ctx->get_handler_context(handler);
     generator->rack_input = mrb_nil_value();
@@ -655,7 +654,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
-        generator->req->start_response(&generator->super);
+        generator->req->start_response(generator);
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
         if (!mrb_nil_p(receiver))
             h2o_mruby_run_fiber(generator, receiver, body, 0);
@@ -664,7 +663,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* send the entire response immediately */
     if (generator->req->input.method.isEq("HEAD")) {
-        generator->req->start_response(&generator->super);
+        generator->req->start_response(generator);
         generator->req->send(NULL, 0, 1);
     } else {
         if (content.len < generator->req->res.content_length) {
@@ -672,7 +671,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         } else {
             content.len = generator->req->res.content_length;
         }
-        generator->req->start_response(&generator->super);
+        generator->req->start_response(generator);
         generator->req->send(&content, 1, 1);
     }
     return;

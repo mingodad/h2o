@@ -94,8 +94,7 @@ struct h2o_mruby_context_t {
 struct h2o_mruby_chunked_t;
 struct h2o_mruby_http_request_context_t;
 
-struct h2o_mruby_generator_t {
-    h2o_generator_t super;
+struct h2o_mruby_generator_t : h2o_generator_t {
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
