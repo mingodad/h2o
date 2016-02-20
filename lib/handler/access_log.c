@@ -90,6 +90,8 @@ struct h2o_access_log_filehandle_t {
 struct h2o_access_logger_t : h2o_logger_t {
     h2o_access_log_filehandle_t *fh;
 
+    h2o_access_logger_t(): fh(nullptr) {}
+
     void dispose(h2o_base_handler_t *self) override;
 };
 

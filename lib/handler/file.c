@@ -72,6 +72,8 @@ struct h2o_file_handler_t : h2o_handler_t {
     size_t max_index_file_len;
     H2O_VECTOR<h2o_iovec_t> index_files;
 
+    h2o_file_handler_t(): real_path({}), mimemap(nullptr), flags(0), max_index_file_len(0) {}
+
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
     void dispose(h2o_base_handler_t *self) override;

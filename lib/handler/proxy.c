@@ -28,6 +28,8 @@ struct rp_handler_t : h2o_handler_t {
     h2o_socketpool_t *sockpool; /* non-NULL if config.use_keepalive == 1 */
     h2o_proxy_config_vars_t config;
 
+    rp_handler_t():upstream({}), sockpool(nullptr), config({}) {}
+
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
     void dispose(h2o_base_handler_t *self) override;

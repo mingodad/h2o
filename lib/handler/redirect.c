@@ -29,6 +29,8 @@ struct h2o_redirect_handler_t : h2o_handler_t {
     int status;
     h2o_iovec_t prefix;
 
+    h2o_redirect_handler_t(): internal(0), status(0), prefix({}) {}
+
     void dispose(h2o_base_handler_t *self) override;
 };
 

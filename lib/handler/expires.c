@@ -28,6 +28,8 @@
 struct expires_t : h2o_filter_t {
     int mode;
     h2o_iovec_t value;
+
+    expires_t(): mode(0), value({}) {}
 };
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)

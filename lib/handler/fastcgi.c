@@ -85,6 +85,8 @@ struct h2o_fastcgi_handler_t : h2o_handler_t {
     h2o_socketpool_t sockpool;
     h2o_fastcgi_config_vars_t config;
 
+    h2o_fastcgi_handler_t(): sockpool({}), config({}) {}
+
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
     void dispose(h2o_base_handler_t *self) override;

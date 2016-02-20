@@ -23,6 +23,8 @@
 
 struct headers_filter_t : h2o_filter_t {
     h2o_headers_command_t *cmds;
+
+    headers_filter_t(): cmds(nullptr) {}
 };
 
 static h2o_header_t *find_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)

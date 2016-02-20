@@ -75,6 +75,8 @@ struct h2o_mruby_config_vars_t {
 struct h2o_mruby_handler_t : h2o_handler_t {
     h2o_mruby_config_vars_t config;
 
+    h2o_mruby_handler_t():config({}) {}
+
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
     void dispose(h2o_base_handler_t *self) override;
