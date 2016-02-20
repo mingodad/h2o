@@ -22,7 +22,7 @@
 #ifndef H20_MRUBY_H
 #define H20_MRUBY_H
 
-#include "h2o.h"
+#include "h2o/scripting.h"
 #include <mruby.h>
 #include <mruby/data.h>
 #include <mruby/proc.h>
@@ -66,14 +66,8 @@ enum {
     H2O_MRUBY_NUM_CONSTANTS
 };
 
-struct h2o_mruby_config_vars_t {
-    h2o_iovec_t source;
-    char *path;
-    int lineno;
-};
-
 struct h2o_mruby_handler_t : h2o_handler_t {
-    h2o_mruby_config_vars_t config;
+    h2o_scripting_config_vars_t config;
 
     h2o_mruby_handler_t():config({}) {}
 
@@ -146,8 +140,8 @@ mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id);
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
-mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf);
-h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *config);
+mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_scripting_config_vars_t *config, char *errbuf);
+h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *config);
 void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *is_delegate);
 mrb_value h2o_mruby_each_to_array(h2o_mruby_context_t *handler_ctx, mrb_value src);
 int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value headers,
@@ -172,13 +166,5 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
-/*
-inline void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
-{
-    auto c = conf->configurator_create<mruby_configurator_t>();
-    c->scripting_language_name = "mruby";
-    mruby_configurator_t::register_configurator(c, conf);
-}
-*/
 
 #endif

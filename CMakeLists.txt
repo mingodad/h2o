@@ -233,6 +233,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
+    lib/handler/configurator/scripting.c
 
     lib/http1.c
 

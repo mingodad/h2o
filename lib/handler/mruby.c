@@ -109,7 +109,7 @@ mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, vo
     return mrb_obj_value(data);
 }
 
-mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
+mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_scripting_config_vars_t *config, char *errbuf)
 {
     mrbc_context *cxt;
     struct mrb_parser_state *parser;
@@ -790,7 +790,7 @@ Async:
     return;
 }
 
-h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *vars)
+h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars)
 {
     auto handler = pathconf->create_handler<h2o_mruby_handler_t>();
 
