@@ -21,8 +21,7 @@
  */
 #include "h2o.h"
 
-struct headers_filter_t {
-    h2o_filter_t super;
+struct headers_filter_t : h2o_filter_t {
     h2o_headers_command_t *cmds;
 };
 
@@ -131,7 +130,7 @@ void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
 {
     auto self = pathconf->create_filter<headers_filter_t>();
 
-    self->super.on_setup_ostream = on_setup_ostream;
+    self->on_setup_ostream = on_setup_ostream;
     self->cmds = cmds;
 }
 

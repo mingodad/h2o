@@ -39,8 +39,7 @@ void h2o_context_t::init_pathconf_context(h2o_pathconf_t *pathconf)
         size_t i; \
         for (i = 0; i != pathconf->list.size; ++i) { \
             auto o = pathconf->list[i];  \
-            if (o->on_context_init != NULL)  \
-                o->on_context_init(o, this); \
+            o->on_context_init(this); \
         } \
     } while (0)
 
@@ -67,9 +66,8 @@ void h2o_context_t::dispose_pathconf_context(h2o_pathconf_t *pathconf)
         size_t i;        \
         for (i = 0; i != pathconf->list.size; ++i) { \
             auto o = pathconf->list[i];     \
-            if (o->on_context_dispose != NULL)       \
-                o->on_context_dispose(o, this);       \
-        }                \
+            o->on_context_dispose(this); \
+        } \
     } while (0)
 
     DOIT(handlers);

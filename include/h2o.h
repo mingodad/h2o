@@ -111,15 +111,20 @@ struct h2o_token_t {
 
 #include "h2o/token.h"
 
+struct h2o_base_handler_t {
+    size_t _config_slot;
+
+    virtual ~h2o_base_handler_t(){};
+    virtual void on_context_init(h2o_context_t *ctx) {};
+    virtual void on_context_dispose(h2o_context_t *ctx) {};
+    virtual void dispose(h2o_base_handler_t *self) {};
+};
+
 /**
  * basic structure of a handler (an object that MAY generate a response)
  * The handlers should register themselves to h2o_context_t::handlers.
  */
-struct h2o_handler_t {
-    size_t _config_slot;
-    void (*on_context_init)(h2o_handler_t *self, h2o_context_t *ctx);
-    void (*on_context_dispose)(h2o_handler_t *self, h2o_context_t *ctx);
-    void (*dispose)(h2o_handler_t *self);
+struct h2o_handler_t : h2o_base_handler_t {
     int (*on_req)(h2o_handler_t *self, h2o_req_t *req);
 };
 
@@ -127,11 +132,7 @@ struct h2o_handler_t {
  * basic structure of a filter (an object that MAY modify a response)
  * The filters should register themselves to h2o_context_t::filters.
  */
-struct h2o_filter_t {
-    size_t _config_slot;
-    void (*on_context_init)(h2o_filter_t *self, h2o_context_t *ctx);
-    void (*on_context_dispose)(h2o_filter_t *self, h2o_context_t *ctx);
-    void (*dispose)(h2o_filter_t *self);
+struct h2o_filter_t : h2o_base_handler_t {
     void (*on_setup_ostream)(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
 };
 
@@ -139,11 +140,7 @@ struct h2o_filter_t {
  * basic structure of a logger (an object that MAY log a request)
  * The loggers should register themselves to h2o_context_t::loggers.
  */
-struct h2o_logger_t {
-    size_t _config_slot;
-    void (*on_context_init)(h2o_logger_t *self, h2o_context_t *ctx);
-    void (*on_context_dispose)(h2o_logger_t *self, h2o_context_t *ctx);
-    void (*dispose)(h2o_logger_t *self);
+struct h2o_logger_t : h2o_base_handler_t {
     void (*log_access)(h2o_logger_t *self, h2o_req_t *req);
 };
 
@@ -215,30 +212,18 @@ struct h2o_pathconf_t {
     /**
      * creates a handler associated to a given pathconf
      */
-    h2o_handler_t *create_handler(size_t sz);
     template<typename T>
-    T *create_handler()
-    {
-        return (T*)create_handler(sizeof(T));
-    }
+    T *create_handler();
     /**
      * creates a filter associated to a given pathconf
      */
-    h2o_filter_t *create_filter(size_t sz);
     template<typename T>
-    T *create_filter()
-    {
-        return (T*)create_filter(sizeof(T));
-    }
+    T *create_filter();
     /**
      * creates a logger associated to a given pathconf
      */
-    h2o_logger_t *create_logger(size_t sz);
     template<typename T>
-    T *create_logger()
-    {
-        return (T*)create_logger(sizeof(T));
-    }
+    T *create_logger();
 };
 
 struct h2o_hostconf_t {
@@ -419,6 +404,40 @@ struct h2o_globalconf_t {
      */
     int configurator_apply(yoml_t *node, int dry_run);
 };
+
+/**
+ * creates a handler associated to a given pathconf
+ */
+template<typename T>
+T *h2o_pathconf_t::create_handler()
+{
+    auto handler = new T();
+    handler->_config_slot = this->global->_num_config_slots++;
+    this->handlers.push_back(NULL, handler);
+    return handler;
+}
+/**
+ * creates a filter associated to a given pathconf
+ */
+template<typename T>
+T *h2o_pathconf_t::create_filter()
+{
+    auto filter = new T();
+    filter->_config_slot = this->global->_num_config_slots++;
+    this->filters.push_front(NULL, filter);
+    return filter;
+}
+/**
+ * creates a logger associated to a given pathconf
+ */
+template<typename T>
+T *h2o_pathconf_t::create_logger()
+{
+    auto logger = new T();
+    logger->_config_slot = this->global->_num_config_slots++;
+    this->loggers.push_back(NULL, logger);
+    return logger;
+}
 
 /**
  * holds various attributes related to the mime-type

@@ -74,9 +74,8 @@ void h2o_pathconf_t::dispose(h2o_pathconf_t *pathconf)
         size_t i; \
         for (i = 0; i != pathconf->list.size; ++i) {  \
             auto e = pathconf->list[i]; \
-            if (e->dispose != NULL) \
-                e->dispose(e); \
-            h2o_mem_free(e); \
+            e->dispose(e); \
+            delete e; \
         } \
         pathconf->list.clear_free(); \
     } while (0)
@@ -188,28 +187,4 @@ h2o_globalconf_t::~h2o_globalconf_t()
 
     h2o_mem_release_shared(this->mimemap);
     this->dispose_configurators();
-}
-
-h2o_handler_t *h2o_pathconf_t::create_handler(size_t sz)
-{
-    auto handler = (h2o_handler_t*)h2o_mem_calloc(sz, 1);
-    handler->_config_slot = this->global->_num_config_slots++;
-    this->handlers.push_back(NULL, handler);
-    return handler;
-}
-
-h2o_filter_t *h2o_pathconf_t::create_filter(size_t sz)
-{
-    auto filter = (h2o_filter_t*)h2o_mem_calloc(sz, 1);
-    filter->_config_slot = this->global->_num_config_slots++;
-    this->filters.push_front(NULL, filter);
-    return filter;
-}
-
-h2o_logger_t *h2o_pathconf_t::create_logger(size_t sz)
-{
-    auto logger = (h2o_logger_t*)h2o_mem_calloc(sz, 1);
-    logger->_config_slot = this->global->_num_config_slots++;
-    this->loggers.push_back(NULL, logger);
-    return logger;
 }

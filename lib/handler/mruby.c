@@ -310,12 +310,11 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     return ary;
 }
 
-static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
+void h2o_mruby_handler_t::on_context_init(h2o_context_t *ctx)
 {
-    auto handler = (h2o_mruby_handler_t *)_handler;
     auto handler_ctx = h2o_mem_alloc_for<h2o_mruby_context_t>();
 
-    handler_ctx->handler = handler;
+    handler_ctx->handler = this;
 
     /* init mruby in every thread */
     if ((handler_ctx->mrb = mrb_open()) == NULL) {
@@ -338,7 +337,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->mrb);
-    mrb_value proc = h2o_mruby_compile_code(handler_ctx->mrb, &handler->config, NULL);
+    mrb_value proc = h2o_mruby_compile_code(handler_ctx->mrb, &this->config, NULL);
     handler_ctx->proc = mrb_funcall_argv(handler_ctx->mrb,
             mrb_ary_entry(handler_ctx->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
             handler_ctx->symbols.sym_call, 1, &proc);
@@ -346,13 +345,12 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     mrb_gc_arena_restore(handler_ctx->mrb, arena);
     mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
 
-    ctx->set_handler_context(&handler->super, handler_ctx);
+    ctx->set_handler_context(this, handler_ctx);
 }
 
-static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
+void h2o_mruby_handler_t::on_context_dispose(h2o_context_t *ctx)
 {
-    auto handler = (h2o_mruby_handler_t *)_handler;
-    auto handler_ctx = (h2o_mruby_context_t*)ctx->get_handler_context(&handler->super);
+    auto handler_ctx = (h2o_mruby_context_t*)ctx->get_handler_context(this);
 
     if (handler_ctx == NULL)
         return;
@@ -361,7 +359,7 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
     h2o_mem_free(handler_ctx);
 }
 
-static void on_handler_dispose(h2o_handler_t *_handler)
+void h2o_mruby_handler_t::dispose(h2o_base_handler_t *_handler)
 {
     auto handler = (h2o_mruby_handler_t *)_handler;
 
@@ -579,14 +577,14 @@ static void on_generator_dispose(void *_generator)
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     auto handler = (h2o_mruby_handler_t *)_handler;
-    auto handler_ctx = (h2o_mruby_context_t*)req->conn->ctx->get_handler_context(&handler->super);
+    auto handler_ctx = (h2o_mruby_context_t*)req->conn->ctx->get_handler_context(handler);
     int gc_arena = mrb_gc_arena_save(handler_ctx->mrb);
 
     auto generator = req->pool.alloc_shared_for<h2o_mruby_generator_t>(1, on_generator_dispose);
     generator->super.proceed = NULL;
     generator->super.stop = NULL;
     generator->req = req;
-    generator->ctx = (h2o_mruby_context_t*)req->conn->ctx->get_handler_context(&handler->super);
+    generator->ctx = (h2o_mruby_context_t*)req->conn->ctx->get_handler_context(handler);
     generator->rack_input = mrb_nil_value();
     generator->chunked = NULL;
 
@@ -621,7 +619,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         if (is_delegate != NULL)
             *is_delegate = 1;
         else
-            generator->req->delegate_request_deferred(&generator->ctx->handler->super);
+            generator->req->delegate_request_deferred(generator->ctx->handler);
         return;
     }
 
@@ -796,10 +794,7 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
 {
     auto handler = pathconf->create_handler<h2o_mruby_handler_t>();
 
-    handler->super.on_context_init = on_context_init;
-    handler->super.on_context_dispose = on_context_dispose;
-    handler->super.dispose = on_handler_dispose;
-    handler->super.on_req = on_req;
+    handler->on_req = on_req;
     handler->config.source.strdup(vars->source);
     if (vars->path != NULL)
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;

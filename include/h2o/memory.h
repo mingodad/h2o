@@ -477,6 +477,12 @@ struct H2O_VECTOR {
         reserve(pool, this->size + more_size);
     }
 
+    void resize(h2o_mem_pool_t *pool, size_t new_size)
+    {
+        reserve(pool, new_size);
+        this->size = new_size;
+    }
+
     T *append_new(h2o_mem_pool_t *pool)
     {
         reserve_more(pool, 1);

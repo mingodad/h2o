@@ -81,10 +81,13 @@ struct fcgi_generator_t {
     h2o_timeout_entry_t timeout;
 };
 
-struct h2o_fastcgi_handler_t {
-	h2o_handler_t super;
+struct h2o_fastcgi_handler_t : h2o_handler_t {
     h2o_socketpool_t sockpool;
     h2o_fastcgi_config_vars_t config;
+
+    void on_context_init(h2o_context_t *ctx) override;
+    void on_context_dispose(h2o_context_t *ctx) override;
+    void dispose(h2o_base_handler_t *self) override;
 };
 
 static void encode_uint16(void *_p, unsigned v) {
@@ -731,7 +734,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req) {
     auto generator = req->pool.alloc_shared_for<fcgi_generator_t>(1, (mem_pool_dispose_cb_t)close_generator);
     generator->super.proceed = do_proceed;
     generator->super.stop = do_stop;
-    generator->ctx = (fcgi_context_t*)req->conn->ctx->get_handler_context(&handler->super);
+    generator->ctx = (fcgi_context_t*)req->conn->ctx->get_handler_context(handler);
     generator->req = req;
     generator->sock = NULL;
     generator->sent_headers = 0;
@@ -746,24 +749,22 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req) {
     return 0;
 }
 
-static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx) {
-    auto handler = (h2o_fastcgi_handler_t *) _handler;
+void h2o_fastcgi_handler_t::on_context_init(h2o_context_t *ctx) {
     auto handler_ctx = h2o_mem_alloc_for<fcgi_context_t>();
 
     /* use the first event loop for handling timeouts of the socket pool */
-    if (handler->sockpool.timeout == UINT64_MAX)
-        h2o_socketpool_set_timeout(&handler->sockpool, ctx->loop,
-            handler->config.keepalive_timeout != 0 ? handler->config.keepalive_timeout : 60000);
+    if (this->sockpool.timeout == UINT64_MAX)
+        h2o_socketpool_set_timeout(&this->sockpool, ctx->loop,
+            this->config.keepalive_timeout != 0 ? this->config.keepalive_timeout : 60000);
 
-    handler_ctx->handler = handler;
-    handler_ctx->io_timeout.init(ctx->loop, handler->config.io_timeout);
+    handler_ctx->handler = this;
+    handler_ctx->io_timeout.init(ctx->loop, this->config.io_timeout);
 
-    ctx->set_handler_context(&handler->super, handler_ctx);
+    ctx->set_handler_context(this, handler_ctx);
 }
 
-static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx) {
-    auto handler = (h2o_fastcgi_handler_t *)_handler;
-    auto handler_ctx = (fcgi_context_t *)ctx->get_handler_context(&handler->super);
+void h2o_fastcgi_handler_t::on_context_dispose(h2o_context_t *ctx) {
+    auto handler_ctx = (fcgi_context_t *)ctx->get_handler_context(this);
 
     if (handler_ctx == NULL)
         return;
@@ -772,8 +773,8 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx) {
     h2o_mem_free(handler_ctx);
 }
 
-static void on_handler_dispose(h2o_handler_t *_handler) {
-	auto handler = (h2o_fastcgi_handler_t *)_handler;
+void h2o_fastcgi_handler_t::dispose(h2o_base_handler_t *self) {
+	auto handler = (h2o_fastcgi_handler_t *)self;
     if (handler->config.callbacks.dispose != NULL)
         handler->config.callbacks.dispose(handler, handler->config.callbacks.data);
 
@@ -785,10 +786,7 @@ static void on_handler_dispose(h2o_handler_t *_handler) {
 static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars) {
     auto handler = pathconf->create_handler<h2o_fastcgi_handler_t>();
 
-    handler->super.on_context_init = on_context_init;
-    handler->super.on_context_dispose = on_context_dispose;
-    handler->super.dispose = on_handler_dispose;
-    handler->super.on_req = on_req;
+    handler->on_req = on_req;
     handler->config = *vars;
     if (vars->document_root.base != NULL)
         handler->config.document_root.strdup(vars->document_root);

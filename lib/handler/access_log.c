@@ -89,6 +89,8 @@ struct h2o_access_log_filehandle_t {
 
 struct h2o_access_logger_t : h2o_logger_t {
     h2o_access_log_filehandle_t *fh;
+
+    void dispose(h2o_base_handler_t *self) override;
 };
 
 static h2o_iovec_t strdup_lowercased(const char *s, size_t len)
@@ -650,9 +652,9 @@ h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const 
     return fh;
 }
 
-static void dispose(h2o_logger_t *_self)
+void h2o_access_logger_t::dispose(h2o_base_handler_t *_self)
 {
-    auto self = (h2o_access_logger_t *)_self;
+    auto self = (h2o_access_logger_t *)this;
 
     h2o_mem_release_shared(self->fh);
 }
@@ -661,7 +663,6 @@ h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_f
 {
     auto self = pathconf->create_logger<h2o_access_logger_t>();
 
-    self->dispose = dispose;
     self->log_access = log_access;
     self->fh = fh;
     h2o_mem_addref_shared(fh);

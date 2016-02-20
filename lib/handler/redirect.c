@@ -24,14 +24,15 @@
 
 #define MODULE_NAME "lib/handler/redirect.c"
 
-struct h2o_redirect_handler_t {
-    h2o_handler_t super;
+struct h2o_redirect_handler_t : h2o_handler_t {
     int internal;
     int status;
     h2o_iovec_t prefix;
+
+    void dispose(h2o_base_handler_t *self) override;
 };
 
-static void on_dispose(h2o_handler_t *_self)
+void h2o_redirect_handler_t::dispose(h2o_base_handler_t *_self)
 {
     auto self = (h2o_redirect_handler_t *)_self;
     h2o_mem_free(self->prefix.base);
@@ -112,8 +113,7 @@ h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf,
         int internal, int status, const char *prefix)
 {
     auto self = pathconf->create_handler<h2o_redirect_handler_t>();
-    self->super.dispose = on_dispose;
-    self->super.on_req = on_req;
+    self->on_req = on_req;
     self->internal = internal;
     self->status = status;
     self->prefix.strdup(NULL, prefix, SIZE_MAX);

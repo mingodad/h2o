@@ -65,13 +65,16 @@ struct h2o_sendfile_generator_t {
     } header_bufs;
 };
 
-struct h2o_file_handler_t {
-    h2o_handler_t super;
+struct h2o_file_handler_t : h2o_handler_t {
     h2o_iovec_t real_path; /* has "/" appended at last */
     h2o_mimemap_t *mimemap;
     int flags;
     size_t max_index_file_len;
-    h2o_iovec_t index_files[1];
+    H2O_VECTOR<h2o_iovec_t> index_files;
+
+    void on_context_init(h2o_context_t *ctx) override;
+    void on_context_dispose(h2o_context_t *ctx) override;
+    void dispose(h2o_base_handler_t *self) override;
 };
 
 static const char *default_index_files[] = {"index.html", "index.htm", "index.txt", NULL};
@@ -580,8 +583,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
-        h2o_iovec_t *index_file;
-        for (index_file = self->index_files; index_file->base != NULL; ++index_file) {
+        h2o_iovec_t *index_file = self->index_files.size ? &self->index_files[0] : nullptr;
+        for (size_t i = 0; i != self->index_files.size; ++i) {
+            index_file = &self->index_files[i];
             memcpy(rpath + rpath_len, index_file->base, index_file->len);
             rpath[rpath_len + index_file->len] = '\0';
             if ((generator = create_generator(req, rpath, rpath_len + index_file->len, &is_dir, self->flags)) != NULL) {
@@ -758,21 +762,17 @@ CleanAlloca:
     return result;
 }
 
-static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
+void h2o_file_handler_t::on_context_init(h2o_context_t *ctx)
 {
-    auto self = (h2o_file_handler_t *)_self;
-
-    h2o_mimemap_on_context_init(self->mimemap, ctx);
+    h2o_mimemap_on_context_init(this->mimemap, ctx);
 }
 
-static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
+void h2o_file_handler_t::on_context_dispose(h2o_context_t *ctx)
 {
-    auto self = (h2o_file_handler_t *)_self;
-
-    h2o_mimemap_on_context_dispose(self->mimemap, ctx);
+    h2o_mimemap_on_context_dispose(this->mimemap, ctx);
 }
 
-static void on_dispose(h2o_handler_t *_self)
+void h2o_file_handler_t::dispose(h2o_base_handler_t *_self)
 {
     auto self = (h2o_file_handler_t *)_self;
     size_t i;
@@ -781,6 +781,7 @@ static void on_dispose(h2o_handler_t *_self)
     h2o_mem_release_shared(self->mimemap);
     for (i = 0; self->index_files[i].base != NULL; ++i)
         h2o_mem_free(self->index_files[i].base);
+    self->index_files.clear_free();
 }
 
 h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf,
@@ -795,15 +796,11 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf,
     /* allocate memory */
     for (i = 0; index_files[i] != NULL; ++i)
         ;
-    auto self = (h2o_file_handler_t*)
-        pathconf->create_handler(offsetof(h2o_file_handler_t,
-            index_files[0]) + sizeof(h2o_file_handler_t) * (i + 1));
+    auto self = pathconf->create_handler<h2o_file_handler_t>();
+    self->index_files.resize(nullptr, i);
 
     /* setup callbacks */
-    self->super.on_context_init = on_context_init;
-    self->super.on_context_dispose = on_context_dispose;
-    self->super.dispose = on_dispose;
-    self->super.on_req = on_req;
+    self->on_req = on_req;
 
     /* setup attributes */
     self->real_path = h2o_strdup_slashed(NULL, real_path, SIZE_MAX);
@@ -815,9 +812,10 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf,
     }
     self->flags = flags;
     for (i = 0; index_files[i] != NULL; ++i) {
-        self->index_files[i].strdup(NULL, index_files[i], SIZE_MAX);
-        if (self->max_index_file_len < self->index_files[i].len)
-            self->max_index_file_len = self->index_files[i].len;
+        auto &index_file = self->index_files[i];
+        index_file.strdup(NULL, index_files[i], SIZE_MAX);
+        if (self->max_index_file_len < index_file.len)
+            self->max_index_file_len = index_file.len;
     }
 
     return self;

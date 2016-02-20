@@ -72,9 +72,12 @@ struct h2o_mruby_config_vars_t {
     int lineno;
 };
 
-struct h2o_mruby_handler_t {
-    h2o_handler_t super;
+struct h2o_mruby_handler_t : h2o_handler_t {
     h2o_mruby_config_vars_t config;
+
+    void on_context_init(h2o_context_t *ctx) override;
+    void on_context_dispose(h2o_context_t *ctx) override;
+    void dispose(h2o_base_handler_t *self) override;
 };
 
 struct h2o_mruby_context_t {
@@ -167,5 +170,13 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
+/*
+inline void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
+{
+    auto c = conf->configurator_create<mruby_configurator_t>();
+    c->scripting_language_name = "mruby";
+    mruby_configurator_t::register_configurator(c, conf);
+}
+*/
 
 #endif
