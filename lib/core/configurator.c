@@ -34,40 +34,41 @@ struct core_config_vars_t {
     } http2;
 };
 
-struct core_configurator_t {
-    h2o_configurator_t super;
+struct core_configurator_t : h2o_configurator_t{
     core_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
-static int on_core_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int core_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (core_configurator_t *)_self;
-
-    ++self->vars;
-    self->vars[0] = self->vars[-1];
+    ++this->vars;
+    this->vars[0] = this->vars[-1];
     return 0;
 }
 
-static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int core_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (core_configurator_t *)_self;
-
     if (ctx->hostconf != NULL && ctx->pathconf == NULL) {
         /* exitting from host-level configuration */
-        ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
-        ctx->hostconf->http2.casper = self->vars->http2.casper;
+        ctx->hostconf->http2.reprioritize_blocking_assets = this->vars->http2.reprioritize_blocking_assets;
+        ctx->hostconf->http2.casper = this->vars->http2.casper;
     }
 
-    --self->vars;
+    --this->vars;
     return 0;
 }
 
 static void destroy_configurator(h2o_configurator_t *configurator)
 {
-    if (configurator->dispose != NULL)
-        configurator->dispose(configurator);
+    configurator->dispose();
+    for(size_t i=0; i != configurator->commands.size; ++i)
+    {
+        h2o_mem_free(configurator->commands.entries[i].name);
+    }
     h2o_mem_free(configurator->commands.entries);
-    h2o_mem_free(configurator);
+    delete configurator;
 }
 
 static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yoml_t *node)
@@ -75,12 +76,12 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
     h2o_linklist_t *n;
 
     for (n = ctx->globalconf->configurators.next; n != &ctx->globalconf->configurators; n = n->next) {
-        auto c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, n);
+        auto c = (h2o_configurator_t*)n;
         if (is_enter) {
-            if (c->enter != NULL && c->enter(c, ctx, node) != 0)
+            if (c->enter(ctx, node) != 0)
                 return -1;
         } else {
-            if (c->exit != NULL && c->exit(c, ctx, node) != 0)
+            if (c->exit(ctx, node) != 0)
                 return -1;
         }
     }
@@ -626,36 +627,35 @@ void h2o_globalconf_t::configurator_init_core()
 
     { /* setup global configurators */
         auto c = this->configurator_create<core_configurator_t>();
-        c->super.enter = on_core_enter;
-        c->super.exit = on_core_exit;
         c->vars = c->_vars_stack;
         c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
 
+        /* setup handlers */
         auto cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR);
-        c->super.define_command("limit-request-body", cf, on_config_limit_request_body);
-        c->super.define_command("max-delegations", cf, on_config_max_delegations);
-        c->super.define_command("handshake-timeout", cf, on_config_handshake_timeout);
-        c->super.define_command("http1-request-timeout", cf, on_config_http1_request_timeout);
-        c->super.define_command("http1-upgrade-to-http2", cf, on_config_http1_upgrade_to_http2);
-        c->super.define_command("http2-idle-timeout", cf, on_config_http2_idle_timeout);
-        c->super.define_command("http2-max-concurrent-requests-per-connection", cf,
+        c->define_command("limit-request-body", cf, on_config_limit_request_body);
+        c->define_command("max-delegations", cf, on_config_max_delegations);
+        c->define_command("handshake-timeout", cf, on_config_handshake_timeout);
+        c->define_command("http1-request-timeout", cf, on_config_http1_request_timeout);
+        c->define_command("http1-upgrade-to-http2", cf, on_config_http1_upgrade_to_http2);
+        c->define_command("http2-idle-timeout", cf, on_config_http2_idle_timeout);
+        c->define_command("http2-max-concurrent-requests-per-connection", cf,
                                         on_config_http2_max_concurrent_requests_per_connection);
 
-        c->super.define_command("http2-reprioritize-blocking-assets", cf |H2O_CONFIGURATOR_FLAG_HOST,
+        c->define_command("http2-reprioritize-blocking-assets", cf |H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_reprioritize_blocking_assets);
-        c->super.define_command("http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
+        c->define_command("http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
 
         cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION);
-        c->super.define_command("file.mime.settypes",
+        c->define_command("file.mime.settypes",
                                         cf | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, on_config_mime_settypes);
-        c->super.define_command("file.mime.addtypes",
+        c->define_command("file.mime.addtypes",
                                         cf | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, on_config_mime_addtypes);
-        c->super.define_command("file.mime.removetypes",
+        c->define_command("file.mime.removetypes",
                                         cf | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE, on_config_mime_removetypes);
-        c->super.define_command("file.mime.setdefaulttype",
+        c->define_command("file.mime.setdefaulttype",
                                         cf | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_mime_setdefaulttype);
-        c->super.define_command("file.custom-handler",
+        c->define_command("file.custom-handler",
                                         cf | H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED, on_config_custom_handler);
     }
 }
@@ -663,24 +663,11 @@ void h2o_globalconf_t::configurator_init_core()
 void h2o_globalconf_t::dispose_configurators()
 {
     while (!this->configurators.is_empty()) {
-        auto c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, this->configurators.next);
-        c->_link.unlink();
-        if (c->dispose != NULL)
-            c->dispose(c);
+        auto c = (h2o_configurator_t*)this->configurators.next;
+        c->unlink();
+        c->dispose();
         destroy_configurator(c);
     }
-}
-
-h2o_configurator_t *h2o_globalconf_t::configurator_create(size_t sz)
-{
-    h2o_configurator_t *c;
-
-    assert(sz >= sizeof(*c));
-
-    c = (h2o_configurator_t *)h2o_mem_calloc(sz, 1);
-    this->configurators.insert(&c->_link);
-
-    return c;
 }
 
 void h2o_configurator_t::define_command(const char *name, int flags, h2o_configurator_command_cb cb)
@@ -688,7 +675,7 @@ void h2o_configurator_t::define_command(const char *name, int flags, h2o_configu
     auto cmd = this->commands.append_new(NULL);
     cmd->configurator = this;
     cmd->flags = flags;
-    cmd->name = name;
+    cmd->name = h2o_strdup(NULL, name, strlen(name)).base; //can be a temproary string
     cmd->cb = cb;
 }
 
@@ -698,7 +685,7 @@ h2o_configurator_command_t *h2o_globalconf_t::configurator_get_command(const cha
     size_t i;
 
     for (node = this->configurators.next; node != &this->configurators; node = node->next) {
-        auto configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
+        auto configurator = (h2o_configurator_t*)node;
         for (i = 0; i != configurator->commands.size; ++i) {
             auto &cmd = configurator->commands[i];
             if (strcmp(cmd.name, name) == 0) {

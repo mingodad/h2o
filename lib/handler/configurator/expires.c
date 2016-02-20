@@ -28,6 +28,9 @@
 struct expires_configurator_t : h2o_configurator_t {
     h2o_expires_args_t **args;
     h2o_expires_args_t *_args_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -72,38 +75,34 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int expires_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (expires_configurator_t *)_self;
-
-    if (self->args[0] != NULL) {
+    if (this->args[0] != NULL) {
         /* duplicate */
-        assert(self->args[0]->mode == H2O_EXPIRES_MODE_MAX_AGE);
-        self->args[1] = h2o_mem_alloc_for<h2o_expires_args_t>();
-        *self->args[1] = *self->args[0];
+        assert(this->args[0]->mode == H2O_EXPIRES_MODE_MAX_AGE);
+        this->args[1] = h2o_mem_alloc_for<h2o_expires_args_t>();
+        *this->args[1] = *this->args[0];
     } else {
-        self->args[1] = NULL;
+        this->args[1] = NULL;
     }
-    ++self->args;
+    ++this->args;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int expires_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (expires_configurator_t *)_self;
-
-    if (*self->args != NULL) {
+    if (*this->args != NULL) {
         /* setup */
         if (ctx->pathconf != NULL) {
-            h2o_expires_register(ctx->pathconf, *self->args);
+            h2o_expires_register(ctx->pathconf, *this->args);
         }
         /* destruct */
-        assert((*self->args)->mode == H2O_EXPIRES_MODE_MAX_AGE);
-        h2o_mem_free(*self->args);
-        *self->args = NULL;
+        assert((*this->args)->mode == H2O_EXPIRES_MODE_MAX_AGE);
+        h2o_mem_free(*this->args);
+        *this->args = NULL;
     }
 
-    --self->args;
+    --this->args;
     return 0;
 }
 
@@ -115,8 +114,6 @@ void h2o_expires_register_configurator(h2o_globalconf_t *conf)
     c->args = c->_args_stack;
 
     /* setup handlers */
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
     c->define_command("expires",
             H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_expires);

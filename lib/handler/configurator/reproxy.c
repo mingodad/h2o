@@ -29,6 +29,9 @@ struct config_t {
 
 struct reproxy_configurator_t : h2o_configurator_t {
     struct config_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int on_config_reproxy(h2o_configurator_command_t *cmd,
@@ -41,25 +44,19 @@ static int on_config_reproxy(h2o_configurator_command_t *cmd,
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+int reproxy_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (reproxy_configurator_t *)_self;
-
-    self->vars[1] = self->vars[0];
-    ++self->vars;
+    this->vars[1] = this->vars[0];
+    ++this->vars;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+int reproxy_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (reproxy_configurator_t *)_self;
-
-    if (ctx->pathconf != NULL && self->vars->enabled != 0)
+    if (ctx->pathconf != NULL && this->vars->enabled != 0)
         h2o_reproxy_register(ctx->pathconf);
 
-    --self->vars;
+    --this->vars;
     return 0;
 }
 
@@ -69,10 +66,6 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-
-    /* setup handlers */
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
 
     /* reproxy: ON | OFF */
     c->define_command("reproxy",

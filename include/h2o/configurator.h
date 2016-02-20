@@ -45,17 +45,15 @@ struct h2o_configurator_context_t {
     h2o_hostconf_t *hostconf;
     h2o_pathconf_t *pathconf;
     h2o_mimemap_t **mimemap;
-    int dry_run;
     h2o_configurator_context_t *parent;
+    int dry_run;
+
     /**
      *
      */
     int apply_commands(yoml_t *node, int flags_mask, const char **ignore_commands);
 };
 
-typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
-typedef int (*h2o_configurator_enter_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node);
-typedef int (*h2o_configurator_exit_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node);
 typedef int (*h2o_configurator_command_cb)(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
 
 struct h2o_configurator_command_t {
@@ -66,15 +64,15 @@ struct h2o_configurator_command_t {
     /**
      * name of the command handled by the configurator
      */
-    const char *name;
-    /**
-     * flags
-     */
-    int flags;
+    char *name;
     /**
      * mandatory callback called to handle the command
      */
     h2o_configurator_command_cb cb;
+    /**
+     * flags
+     */
+    int flags;
 
     /**
      * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error
@@ -102,24 +100,30 @@ struct h2o_configurator_command_t {
 /**
  * basic structure of a configurator (handles a configuration command)
  */
-struct h2o_configurator_t {
-    h2o_linklist_t _link;
+struct h2o_configurator_t : h2o_linklist_t {
+
+    virtual ~h2o_configurator_t(){};
     /**
      * optional callback called when the global config is being disposed
      */
-    h2o_configurator_dispose_cb dispose;
+    virtual int dispose() {return 0;};
     /**
      * optional callback called before the configuration commands are handled
      */
-    h2o_configurator_enter_cb enter;
+    virtual int enter(h2o_configurator_context_t *ctx, yoml_t *node) {return 0;};
     /**
      * optional callback called after all the configuration commands are handled
      */
-    h2o_configurator_exit_cb exit;
+    virtual int exit(h2o_configurator_context_t *ctx, yoml_t *node) {return 0;};
     /**
      * list of commands
      */
     H2O_VECTOR<h2o_configurator_command_t> commands;
+
+    h2o_configurator_t()
+    {
+        next = prev = nullptr;
+    }
     /**
      *
      */

@@ -398,11 +398,12 @@ struct h2o_globalconf_t {
     /**
      * registers a configurator
      */
-    h2o_configurator_t *configurator_create(size_t sz);
     template <typename T>
     T *configurator_create()
     {
-        return (T*)configurator_create(sizeof(T));
+        auto c = new T();
+        this->configurators.insert(c);
+        return c;
     }
 
     void configurator_init_core();

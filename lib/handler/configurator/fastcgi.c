@@ -36,6 +36,9 @@
 struct fastcgi_configurator_t : h2o_configurator_t {
     h2o_fastcgi_config_vars_t *vars;
     h2o_fastcgi_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -333,20 +336,16 @@ Exit:
     return ret;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int fastcgi_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (fastcgi_configurator_t *)_self;
-
-    memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
-    ++self->vars;
+    memcpy(this->vars + 1, this->vars, sizeof(*this->vars));
+    ++this->vars;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int fastcgi_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (fastcgi_configurator_t *)_self;
-
-    --self->vars;
+    --this->vars;
     return 0;
 }
 
@@ -360,8 +359,6 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
     c->vars->keepalive_timeout = 0;
 
     /* setup handlers */
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
 
     auto cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION
                                     | H2O_CONFIGURATOR_FLAG_DEFERRED);

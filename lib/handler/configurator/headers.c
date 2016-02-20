@@ -25,6 +25,9 @@
 
 struct headers_configurator_t : h2o_configurator_t {
     H2O_VECTOR<h2o_headers_command_t> * cmds, _cmd_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int extract_name(const char *src, size_t len, h2o_iovec_t **_name)
@@ -129,28 +132,24 @@ static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configura
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int headers_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (headers_configurator_t *)_self;
-
-    self->cmds[1].assign(NULL, &self->cmds[0]);
-    ++self->cmds;
+    this->cmds[1].assign(NULL, &this->cmds[0]);
+    ++this->cmds;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int headers_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (headers_configurator_t *)_self;
-
-    if (ctx->pathconf != NULL && self->cmds->size != 0) {
-        self->cmds->push_back(NULL, ((h2o_headers_command_t){H2O_HEADERS_CMD_NULL}));
-        h2o_headers_register(ctx->pathconf, self->cmds->entries);
+    if (ctx->pathconf != NULL && this->cmds->size != 0) {
+        this->cmds->push_back(NULL, ((h2o_headers_command_t){H2O_HEADERS_CMD_NULL}));
+        h2o_headers_register(ctx->pathconf, this->cmds->entries);
     } else {
-        h2o_mem_free(self->cmds->entries);
+        h2o_mem_free(this->cmds->entries);
     }
-    h2o_clearmem(self->cmds);
+    h2o_clearmem(this->cmds);
 
-    --self->cmds;
+    --this->cmds;
     return 0;
 }
 
@@ -158,8 +157,6 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf)
 {
     auto c = conf->configurator_create<headers_configurator_t>();
 
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
 #define DEFINE_CMD(name, cb) \
     c->define_command(name, \
         H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, cb)

@@ -30,6 +30,9 @@
 struct mruby_configurator_t : h2o_configurator_t {
     h2o_mruby_config_vars_t *vars;
     h2o_mruby_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
@@ -128,26 +131,20 @@ static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd,
     return -1;
 }
 
-static int on_config_enter(h2o_configurator_t *_self,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+int mruby_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (mruby_configurator_t *)_self;
-
-    memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
-    ++self->vars;
+    memcpy(this->vars + 1, this->vars, sizeof(*this->vars));
+    ++this->vars;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+int mruby_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (mruby_configurator_t *)_self;
-
     /* free if the to-be-exitted frame level contains a different source */
-    if (self->vars[-1].source.base != self->vars[-1].source.base)
-        h2o_mem_free(self->vars->source.base);
+    if (this->vars[-1].source.base != this->vars[-1].source.base)
+        h2o_mem_free(this->vars->source.base);
 
-    --self->vars;
+    --this->vars;
     return 0;
 }
 
@@ -156,8 +153,6 @@ void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
     auto c = conf->configurator_create<mruby_configurator_t>();
 
     c->vars = c->_vars_stack;
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
 
     auto cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED);
     c->define_command("mruby.handler_path", cf, on_config_mruby_handler_path);

@@ -27,6 +27,10 @@ typedef H2O_VECTOR<h2o_access_log_filehandle_t *> st_h2o_access_log_filehandle_v
 struct h2o_access_log_configurator_t : h2o_configurator_t {
     st_h2o_access_log_filehandle_vector_t *handles;
     st_h2o_access_log_filehandle_vector_t _handles_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
+
 };
 
 static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -74,43 +78,41 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int h2o_access_log_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (h2o_access_log_configurator_t *)_self;
     size_t i;
 
     /* push the stack pointer */
-    ++self->handles;
+    ++this->handles;
 
     /* link the handles */
-    h2o_clearmem(self->handles);
-    self->handles->reserve_more(NULL, 1);
-    for (i = 0; i != self->handles[-1].size; ++i) {
-        h2o_access_log_filehandle_t *fh = self->handles[-1][i];
-        self->handles[0][self->handles[0].size++] = fh;
+    h2o_clearmem(this->handles);
+    this->handles->reserve_more(NULL, 1);
+    for (i = 0; i != this->handles[-1].size; ++i) {
+        h2o_access_log_filehandle_t *fh = this->handles[-1][i];
+        this->handles[0][this->handles[0].size++] = fh;
         h2o_mem_addref_shared(fh);
     }
 
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int h2o_access_log_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (h2o_access_log_configurator_t *)_self;
     size_t i;
 
     /* register all handles, and decref them */
-    for (i = 0; i != self->handles->size; ++i) {
-        auto fh = self->handles->entries[i];
+    for (i = 0; i != this->handles->size; ++i) {
+        auto fh = this->handles->entries[i];
         if (ctx->pathconf != NULL)
             h2o_access_log_register(ctx->pathconf, fh);
         h2o_mem_release_shared(fh);
     }
     /* free the vector */
-    self->handles->clear_free();
+    this->handles->clear_free();
 
     /* pop the stack pointer */
-    --self->handles;
+    --this->handles;
 
     return 0;
 }
@@ -119,8 +121,6 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
 {
     auto self = conf->configurator_create<h2o_access_log_configurator_t>();
 
-    self->enter = on_config_enter;
-    self->exit = on_config_exit;
     self->handles = self->_handles_stack;
 
     self->define_command("access-log", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config);

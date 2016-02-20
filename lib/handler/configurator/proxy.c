@@ -26,6 +26,9 @@
 struct proxy_configurator_t : h2o_configurator_t {
     h2o_proxy_config_vars_t *vars;
     h2o_proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd,
@@ -92,27 +95,21 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd,
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+int proxy_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (proxy_configurator_t *)_self;
-
-    memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
-    ++self->vars;
+    memcpy(this->vars + 1, this->vars, sizeof(*this->vars));
+    ++this->vars;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+int proxy_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (proxy_configurator_t *)_self;
-
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
         /* is global conf */
-        ctx->globalconf->proxy.io_timeout = self->vars->io_timeout;
+        ctx->globalconf->proxy.io_timeout = this->vars->io_timeout;
     }
 
-    --self->vars;
+    --this->vars;
     return 0;
 }
 
@@ -129,8 +126,6 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
 
     /* setup handlers */
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
     c->define_command("proxy.reverse.url",
         H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR
             | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_url);

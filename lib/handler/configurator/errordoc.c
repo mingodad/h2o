@@ -25,6 +25,9 @@
 struct errordoc_configurator_t : h2o_configurator_t {
     h2o_mem_pool_t pool;
     H2O_VECTOR<h2o_errordoc_t> * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
@@ -113,36 +116,32 @@ static int on_config_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_
     return -1;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int errordoc_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (errordoc_configurator_t *)_self;
-
-    if (self->vars == self->_vars_stack) {
+    if (this->vars == this->_vars_stack) {
         /* entering global level */
-        self->pool.init();
+        this->pool.init();
     }
 
     /* copy vars */
-    h2o_clearmem(&self->vars[1]);
+    h2o_clearmem(&this->vars[1]);
     //h2o_vector_push_front(&self->pool, &self->vars[1], self->vars[0].size);
 
-    self->vars[1].assign(&self->pool, &self->vars[0]);
+    this->vars[1].assign(&this->pool, &this->vars[0]);
 
-    ++self->vars;
+    ++this->vars;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int errordoc_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (errordoc_configurator_t *)_self;
+    if (ctx->pathconf != NULL && this->vars->size != 0)
+        h2o_errordoc_register(ctx->pathconf, this->vars->entries, this->vars->size);
 
-    if (ctx->pathconf != NULL && self->vars->size != 0)
-        h2o_errordoc_register(ctx->pathconf, self->vars->entries, self->vars->size);
-
-    --self->vars;
-    if (self->vars == self->_vars_stack) {
+    --this->vars;
+    if (this->vars == this->_vars_stack) {
         /* exitting global level */
-        self->pool.clear();
+        this->pool.clear();
     }
 
     return 0;
@@ -154,10 +153,6 @@ void h2o_errordoc_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-
-    /* setup handlers */
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
 
     /* reproxy: ON | OFF */
     c->define_command("error-doc", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_errordoc);

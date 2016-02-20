@@ -990,12 +990,17 @@ ProxyConflict:
     return -1;
 }
 
-static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
+struct main_configurator_t : h2o_configurator_t {
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
+};
+
+int main_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return 0;
 }
 
-static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
+int main_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (ctx->pathconf != NULL) {
         /* skip */
@@ -1444,9 +1449,7 @@ static void setup_configurators(void)
         conf.globalconf.user = "nobody";
 
     {
-        auto c = conf.globalconf.configurator_create<h2o_configurator_t>();
-        c->enter = on_config_listen_enter;
-        c->exit = on_config_listen_exit;
+        auto c = conf.globalconf.configurator_create<main_configurator_t>();
         c->define_command("listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen);
     }
 

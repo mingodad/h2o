@@ -28,7 +28,10 @@ struct gzip_config_vars_t {
 
 struct gzip_configurator_t : h2o_configurator_t {
     struct gzip_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
-} ;
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
+};
 
 static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -39,23 +42,19 @@ static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
+int gzip_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (gzip_configurator_t *)configurator;
-
-    ++self->vars;
-    self->vars[0] = self->vars[-1];
+    ++this->vars;
+    this->vars[0] = this->vars[-1];
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
+int gzip_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (gzip_configurator_t *)configurator;
-
-    if (ctx->pathconf != NULL && self->vars->on)
+    if (ctx->pathconf != NULL && this->vars->on)
         h2o_gzip_register(ctx->pathconf);
 
-    --self->vars;
+    --this->vars;
     return 0;
 }
 
@@ -63,8 +62,6 @@ void h2o_gzip_register_configurator(h2o_globalconf_t *conf)
 {
     auto c = conf->configurator_create<gzip_configurator_t>();
 
-    c->enter = on_config_enter;
-    c->exit = on_config_exit;
     c->define_command("gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_gzip);
     c->vars = c->_vars_stack;

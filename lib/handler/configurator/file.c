@@ -30,6 +30,9 @@ struct h2o_file_config_vars_t {
 struct h2o_file_configurator_t : h2o_configurator_t {
     h2o_file_config_vars_t *vars;
     h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+
+    int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
+    int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
 static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -129,20 +132,18 @@ static const char **dup_strlist(const char **s)
     return ret;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int h2o_file_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (h2o_file_configurator_t *)_self;
-    ++self->vars;
-    self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
-    self->vars[0].flags = self->vars[-1].flags;
+    ++this->vars;
+    this->vars[0].index_files = dup_strlist(this->vars[-1].index_files);
+    this->vars[0].flags = this->vars[-1].flags;
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+int h2o_file_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    auto self = (h2o_file_configurator_t *)_self;
-    h2o_mem_free(self->vars->index_files);
-    --self->vars;
+    h2o_mem_free(this->vars->index_files);
+    --this->vars;
     return 0;
 }
 
@@ -150,8 +151,6 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 {
     auto self = globalconf->configurator_create<h2o_file_configurator_t>();
 
-    self->enter = on_config_enter;
-    self->exit = on_config_exit;
     self->vars = self->_vars_stack;
     self->vars->index_files = h2o_file_default_index_files;
 
