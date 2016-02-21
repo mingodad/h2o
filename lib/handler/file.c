@@ -781,7 +781,7 @@ void h2o_file_handler_t::dispose(h2o_base_handler_t *_self)
 
     h2o_mem_free(self->real_path.base);
     h2o_mem_release_shared(self->mimemap);
-    for (i = 0; self->index_files[i].base != NULL; ++i)
+    for (i = 0; i != self->index_files.size; ++i)
         h2o_mem_free(self->index_files[i].base);
     self->index_files.clear_free();
 }
