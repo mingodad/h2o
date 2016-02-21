@@ -136,6 +136,7 @@
 			<Add option="-D_GNU_SOURCE=1" />
 			<Add option="-DH2O_USE_EPOLL=1" />
 			<Add option="-DH2O_USE_MRUBY=1" />
+			<Add option="-DH2O_USE_LUA=1" />
 			<Add option="-D__c_as_cpp=1" />
 			<Add directory="include" />
 			<Add directory="deps/picohttpparser" />
@@ -235,6 +236,7 @@
 		<Unit filename="deps/yoml/yoml.h" />
 		<Unit filename="include/h2o.h" />
 		<Unit filename="include/h2o/configurator.h" />
+		<Unit filename="include/h2o/ctest_.h" />
 		<Unit filename="include/h2o/file.h" />
 		<Unit filename="include/h2o/filecache.h" />
 		<Unit filename="include/h2o/hostinfo.h" />
@@ -379,6 +381,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/configurator/scripting.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/ctest.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/errordoc.c">

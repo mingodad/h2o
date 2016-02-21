@@ -234,6 +234,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/scripting.c
+    lib/handler/ctest.c
 
     lib/http1.c
 
@@ -389,6 +390,7 @@ IF (WITH_MRUBY)
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
+
 TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBRARIES})
 
 INSTALL(TARGETS h2o

@@ -58,6 +58,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/serverutil.h"
+#include "h2o/ctest_.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
@@ -1484,6 +1485,7 @@ static void setup_configurators(void)
     register_configurator(proxy);
     register_configurator(reproxy);
     register_configurator(redirect);
+    register_configurator(ctest);
 #if H2O_USE_MRUBY
     register_configurator(mruby);
 #endif
@@ -1491,73 +1493,6 @@ static void setup_configurators(void)
     register_configurator(lua);
 #endif
 #undef register_configurator
-}
-
-typedef int (*on_req_handler_ptr)(h2o_handler_t *, h2o_req_t *);
-
-int register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_handler_ptr on_req)
-{
-    size_t j, i;
-    //printf("register_handler_on_host : %s : %s\n", hostconf->authority.host.base, path);
-    //first check if it already exists
-    for (j = 0; j != hostconf->paths.size; ++j) {
-        auto pc = hostconf->paths[j];
-        if(strcmp(path, pc.path.base) == 0)
-        {
-            for (i = 0; i != pc.handlers.size; ++i) {
-                if(pc.handlers[i]->on_req == on_req)
-                {
-                    return 0; //already exists
-                }
-            }
-
-        }
-    }
-    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
-    auto handler = pathconf->create_handler<h2o_handler_t>();
-    handler->on_req = on_req;
-    return 1;
-}
-
-int register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_req_handler_ptr on_req)
-{
-    size_t i;
-    int result = 0;
-    for (i = 0; globalconf->hosts[i] != NULL; ++i) {
-        result += register_handler_on_host(globalconf->hosts[i], path, on_req);
-    }
-    //printf("register_handler : %s : %d\n", path, (uint)i);
-    return result;
-}
-
-static int my_h2o_c_handler(h2o_handler_t *self, h2o_req_t *req)
-{
-    static h2o_generator_t generator = { NULL, NULL };
-    printf("hello_handler : %s : %d\n", req->method.base, (uint)req->method.len);
-    if (! req->method.isEq("GET"))
-        return -1;
-    //printf("===Request path = %s\n", req->path.base);
-    size_t body_size = 1024;
-    h2o_iovec_t body;
-    body.base = req->pool.alloc_for<char>(body_size);
-    req->res.content_length = body.len = snprintf(body.base, body_size, "Hello %.*s", (int)req->path.len, req->path.base);
-
-    size_t cursor;
-    for (cursor = 0; cursor < req->headers.size; ++cursor) {
-        h2o_header_t *t = req->headers.entries + cursor;
-        req->res.content_length = body.len += snprintf(
-                    body.base + body.len, body_size - body.len,
-                    "\n%.*s : %.*s",
-                    (int)t->name->len, t->name->base,
-                    (int)t->value.len, t->value.base);
-    }
-    req->res.status = 200;
-    req->res.reason = "OK";
-    req->addResponseHeader(H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-    req->start_response(&generator);
-    req->send(&body, 1, 1);
-
-    return 0;
 }
 
 int main(int argc, char **argv)
@@ -1626,6 +1561,10 @@ int main(int argc, char **argv)
 #if H2O_USE_MRUBY
                 printf(
                     "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
+#endif
+#if H2O_USE_LUA
+                printf(
+                    "lua: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
 #endif
                 exit(0);
             case 'h':
@@ -1772,9 +1711,6 @@ int main(int argc, char **argv)
             return EX_CONFIG;
         }
     }
-
-    //register custom global handlers after reading the config file
-    register_handler_global(&conf.globalconf, "/C/", my_h2o_c_handler);
 
     /* pid file must be written after setuid, since we need to remove it  */
     if (conf.pid_file != NULL) {

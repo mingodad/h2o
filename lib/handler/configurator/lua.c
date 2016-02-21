@@ -31,13 +31,39 @@ struct lua_configurator_t : h2o_scripting_configurator_t {
     lua_configurator_t():h2o_scripting_configurator_t("lua"){}
 
     int compile_test(h2o_scripting_config_vars_t *config, char *errbuf) override;
-    int compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char *errbuf);
 
     h2o_scripting_handler_t *pathconf_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars) override
     {
         return (h2o_scripting_handler_t*)h2o_lua_register(pathconf, vars);
     }
 };
+
+static void set_h2o_root(lua_State *L)
+{
+    const char *root = getenv("H2O_ROOT");
+    if (root == NULL)
+        root = H2O_TO_STR(H2O_ROOT);
+    lua_pushstring(L, root);
+    lua_setglobal(L, "H2O_ROOT");
+}
+
+int h2o_lua_compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char *errbuf)
+{
+    set_h2o_root(L);
+
+    /* parse */
+    int result = luaL_loadbuffer(L, config->source.base, config->source.len, config->path);
+    if (result && !lua_isnil(L, -1)) {
+        const char *msg = lua_tostring(L, -1);
+        if (msg == NULL) msg = "(error object is not a string)";
+        fprintf(stderr, "%s: %s\n", H2O_LUA_MODULE_NAME, msg);
+         lua_pop(L, 1);
+        goto Exit;
+    }
+
+Exit:
+    return result;
+}
 
 int lua_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *errbuf)
 {
@@ -47,7 +73,7 @@ int lua_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *
         fprintf(stderr, "%s: no memory\n", H2O_LUA_MODULE_NAME);
         abort();
     }
-    int ok = this->compile_code(L, config, errbuf);
+    int ok = h2o_lua_compile_code(L, config, errbuf);
     lua_close(L);
 
     return ok;
@@ -71,34 +97,6 @@ h2o_lua_handler_t *h2o_lua_register(h2o_pathconf_t *pathconf, h2o_scripting_conf
     return handler;
 }
 
-static void set_h2o_root(lua_State *L)
-{
-    const char *root = getenv("H2O_ROOT");
-    if (root == NULL)
-        root = H2O_TO_STR(H2O_ROOT);
-    lua_pushstring(L, root);
-    lua_setglobal(L, "H2O_ROOT");
-}
-
-int lua_configurator_t::compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char *errbuf)
-{
-    set_h2o_root(L);
-
-    /* parse */
-    int result = luaL_loadbuffer(L, config->source.base, config->source.len, config->path);
-    if (result && !lua_isnil(L, -1)) {
-        const char *msg = lua_tostring(L, -1);
-        if (msg == NULL) msg = "(error object is not a string)";
-        fprintf(stderr, "%s: %s\n", H2O_LUA_MODULE_NAME, msg);
-         lua_pop(L, 1);
-        goto Exit;
-    }
-
-Exit:
-    return result;
-}
-
-
 void h2o_lua_register_configurator(h2o_globalconf_t *conf)
 {
     auto c = conf->configurator_create<lua_configurator_t>();
@@ -116,6 +114,9 @@ void h2o_lua_handler_t::on_context_init(h2o_context_t *ctx)
         fprintf(stderr, "%s: no memory\n", H2O_LUA_MODULE_NAME);
         abort();
     }
+
+    /* compile code (must be done for each thread) */
+    int rc = h2o_lua_compile_code(handler_ctx->L, &this->config, NULL);
 
     ctx->set_handler_context(this, handler_ctx);
 }
