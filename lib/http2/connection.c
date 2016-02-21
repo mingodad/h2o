@@ -117,7 +117,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
 
 static void on_idle_timeout(h2o_timeout_entry_t *entry)
 {
-    auto conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
+    auto conn = (h2o_http2_conn_t*)entry->data;
 
     enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_t::create(H2O_STRLIT("idle timeout")));
     close_connection(conn);
@@ -130,6 +130,7 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
     if (conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed == 0) {
         assert(conn->_pending_reqs.is_empty());
         conn->_timeout_entry.cb = on_idle_timeout;
+        conn->_timeout_entry.data = conn;
         conn->super.ctx->http2.idle_timeout.start(conn->super.ctx->loop, &conn->_timeout_entry);
     }
 }
@@ -996,7 +997,7 @@ int do_emit_writereq(h2o_http2_conn_t *conn)
 
 static void emit_writereq(h2o_timeout_entry_t *entry)
 {
-    auto conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.timeout_entry, entry);
+    auto conn = (h2o_http2_conn_t*)entry->data;
 
     do_emit_writereq(conn);
 }
@@ -1039,6 +1040,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
     conn->_write.streams_to_proceed.init_anchor();
     conn->_write.timeout_entry.cb = emit_writereq;
+    conn->_write.timeout_entry.data = conn;
     conn->_write.window.init(&conn->peer_settings);
 
     return conn;

@@ -404,6 +404,7 @@ static void set_timeout(fcgi_generator_t *generator, h2o_timeout_t *timeout, h2o
     generator->timeout.stop();
 
     generator->timeout.cb = cb;
+    generator->timeout.data = generator;
     timeout->start(generator->req->conn->ctx->loop, &generator->timeout);
 }
 
@@ -605,7 +606,7 @@ static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t
 }
 
 static void on_rw_timeout(h2o_timeout_entry_t *entry) {
-    auto generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
+    auto generator = (fcgi_generator_t*)entry->data;
 
     generator->req->log_error(MODULE_NAME, "I/O timeout");
     errorclose(generator);
@@ -724,7 +725,7 @@ static void do_stop(h2o_generator_t *_generator, h2o_req_t *req) {
 }
 
 static void on_connect_timeout(h2o_timeout_entry_t *entry) {
-    auto generator = H2O_STRUCT_FROM_MEMBER(fcgi_generator_t, timeout, entry);
+    auto generator = (fcgi_generator_t*)entry->data;
 
     generator->req->log_error(MODULE_NAME, "connect timeout");
     errorclose(generator);

@@ -180,7 +180,7 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
 
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
 {
-    auto req = H2O_STRUCT_FROM_MEMBER(h2o_req_t, _timeout_entry, entry);
+    auto req = (h2o_req_t*)entry->data;
     req->proceed_response();
 }
 
@@ -219,6 +219,7 @@ void h2o_req_t::init(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     /* init properties that should be initialized to non-zero */
     req->conn = conn;
     req->_timeout_entry.cb = deferred_proceed_cb;
+    req->_timeout_entry.data = req;
     req->res.reason = "OK"; /* default to "OK" regardless of the status value, it's not important after all (never sent in HTTP2) */
     req->res.content_length = SIZE_MAX;
     req->preferred_chunk_size = SIZE_MAX;
@@ -288,7 +289,7 @@ void h2o_req_t::delegate_request(h2o_handler_t *current_handler)
 
 static void on_delegate_request_cb(h2o_timeout_entry_t *entry)
 {
-    auto args = H2O_STRUCT_FROM_MEMBER(delegate_request_deferred_t, _timeout, entry);
+    auto args = (delegate_request_deferred_t*)entry->data;
     args->req->delegate_request(args->current_handler);
 }
 
@@ -297,6 +298,7 @@ void h2o_req_t::delegate_request_deferred(h2o_handler_t *current_handler)
     auto args = this->pool.alloc_for<delegate_request_deferred_t>();
     *args = {this, current_handler};
     args->_timeout.cb = on_delegate_request_cb;
+    args->_timeout.data = args;
     this->conn->ctx->zero_timeout.start(this->conn->ctx->loop, &args->_timeout);
 }
 
@@ -346,7 +348,7 @@ void h2o_req_t::reprocess_request(h2o_iovec_t method, const h2o_url_scheme_t *sc
 
 static void on_reprocess_request_cb(h2o_timeout_entry_t *entry)
 {
-    auto args = H2O_STRUCT_FROM_MEMBER(reprocess_request_deferred_t, _timeout, entry);
+    auto args = (reprocess_request_deferred_t*)entry->data;
     args->req->reprocess_request(args->method, args->scheme, args->authority, args->path, args->overrides, args->is_delegated);
 }
 
@@ -356,6 +358,7 @@ void h2o_req_t::reprocess_request_deferred(h2o_iovec_t method, const h2o_url_sch
     auto args = this->pool.alloc_for<reprocess_request_deferred_t>();
     *args = {this, method, scheme, authority, path, overrides, is_delegated};
     args->_timeout.cb = on_reprocess_request_cb;
+    args->_timeout.data = args;
     this->conn->ctx->zero_timeout.start(this->conn->ctx->loop, &args->_timeout);
 }
 
@@ -478,7 +481,7 @@ void h2o_req_t::send_error(int status, const char *reason, const char *body, int
 
 static void send_error_deferred_cb(h2o_timeout_entry_t *entry)
 {
-    auto args = H2O_STRUCT_FROM_MEMBER(send_error_deferred_t, _timeout, entry);
+    auto args = (send_error_deferred_t*)entry->data;
     reset_response(args->req);
     args->req->send_error(args->status, args->reason, args->body, args->flags);
 }
@@ -488,6 +491,7 @@ void h2o_req_t::send_error_deferred(int status, const char *reason, const char *
     auto args = this->pool.alloc_for<send_error_deferred_t>();
     *args = {this, status, reason, body, flags};
     args->_timeout.cb = send_error_deferred_cb;
+    args->_timeout.data = args;
     this->conn->ctx->zero_timeout.start(this->conn->ctx->loop, &args->_timeout);
     h2o_mem_alloca_free(args);
 }

@@ -93,7 +93,7 @@ static void on_body_error(h2o_http1client_private_t *client, const char *errstr)
 
 static void on_body_timeout(h2o_timeout_entry_t *entry)
 {
-    auto client = H2O_STRUCT_FROM_MEMBER(h2o_http1client_private_t, _timeout, entry);
+    auto client = (h2o_http1client_private_t*)entry->data;
     on_body_error(client, "I/O timeout");
 }
 
@@ -304,13 +304,14 @@ static void on_head(h2o_socket_t *sock, int status)
     client->super.sock->bytes_read = client->super.sock->input->size;
 
     client->_timeout.cb = on_body_timeout;
+    client->_timeout.data = client;
     sock->read_start(reader);
     reader(client->super.sock, 0);
 }
 
 static void on_head_timeout(h2o_timeout_entry_t *entry)
 {
-    auto client = H2O_STRUCT_FROM_MEMBER(h2o_http1client_private_t, _timeout, entry);
+    auto client = (h2o_http1client_private_t*)entry->data;
     on_error_before_head(client, "I/O timeout");
 }
 
@@ -327,12 +328,13 @@ static void on_send_request(h2o_socket_t *sock, int status)
 
     client->super.sock->read_start(on_head);
     client->_timeout.cb = on_head_timeout;
+    client->_timeout.data = client;
     h2o_timeout_link(client);
 }
 
 static void on_send_timeout(h2o_timeout_entry_t *entry)
 {
-    auto client = H2O_STRUCT_FROM_MEMBER(h2o_http1client_private_t, _timeout, entry);
+    auto client = (h2o_http1client_private_t*)entry->data;
     on_error_before_head(client, "I/O timeout");
 }
 
@@ -364,6 +366,7 @@ static void on_connect(h2o_socket_t *sock, int status)
     client->super.sock->write(reqbufs, reqbufcnt, on_send_request);
     /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
     client->_timeout.cb = on_send_timeout;
+    client->_timeout.data = client;
     h2o_timeout_link(client);
 }
 
@@ -386,7 +389,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data)
 
 static void on_connect_timeout(h2o_timeout_entry_t *entry)
 {
-    auto client = H2O_STRUCT_FROM_MEMBER(h2o_http1client_private_t, _timeout, entry);
+    auto client = (h2o_http1client_private_t*)entry->data;
     on_connect_error(client, "connection timeout");
 }
 
@@ -442,6 +445,7 @@ void h2o_http1client_t::connect(h2o_http1client_t **_client, void *data, h2o_htt
     /* setup */
     client = create_client(_client, data, ctx, cb);
     client->_timeout.cb = on_connect_timeout;
+    client->_timeout.data = client;
     h2o_timeout_link(client);
 
     { /* directly call connect(2) if `host` is an IP address */

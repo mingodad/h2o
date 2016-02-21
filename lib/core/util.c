@@ -47,6 +47,7 @@ static h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t
     data->sock = sock;
     data->timeout = {};
     data->timeout.cb = on_accept_timeout;
+    data->timeout.data = data;
     ctx->ctx->handshake_timeout.start(ctx->ctx->loop, &data->timeout);
     data->async_resumption_get_req = NULL;
     data->connected_at = connected_at;
@@ -105,7 +106,7 @@ void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *memc, unsign
 void on_accept_timeout(h2o_timeout_entry_t *entry)
 {
     /* TODO log */
-    auto data = H2O_STRUCT_FROM_MEMBER(struct h2o_accept_data_t, timeout, entry);
+    auto data = (h2o_accept_data_t*)entry->data;
     if (data->async_resumption_get_req != NULL) {
         async_resumption_context.memc->cancel_get(data->async_resumption_get_req);
         data->async_resumption_get_req = NULL;

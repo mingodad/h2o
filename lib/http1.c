@@ -130,6 +130,7 @@ static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_time
     if (timeout != NULL) {
         timeout->start(conn->super.ctx->loop, &conn->_timeout_entry);
         conn->_timeout_entry.cb = cb;
+        conn->_timeout_entry.data = conn;
     }
 }
 
@@ -501,7 +502,7 @@ void reqread_on_read(h2o_socket_t *sock, int status)
 
 static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 {
-    auto conn = H2O_STRUCT_FROM_MEMBER(h2o_http1_conn_t, _timeout_entry, entry);
+    auto conn = (h2o_http1_conn_t*)entry->data;
 
     /* TODO log */
     conn->req.http1_is_persistent = 0;

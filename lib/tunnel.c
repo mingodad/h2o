@@ -46,7 +46,7 @@ static void close_connection(struct h2o_tunnel_t *tunnel)
 
 static void on_timeout(h2o_timeout_entry_t *entry)
 {
-    auto tunnel = H2O_STRUCT_FROM_MEMBER(struct h2o_tunnel_t, timeout_entry, entry);
+    auto tunnel = (h2o_tunnel_t*)entry->data;
     close_connection(tunnel);
 }
 
@@ -115,6 +115,7 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_
     tunnel->timeout = timeout;
     tunnel->timeout_entry = {};
     tunnel->timeout_entry.cb = on_timeout;
+    tunnel->timeout_entry.data = tunnel;
     tunnel->sock[0] = sock1;
     tunnel->sock[1] = sock2;
     sock1->data = tunnel;
