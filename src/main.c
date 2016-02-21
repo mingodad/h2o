@@ -61,6 +61,9 @@
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
+#if H2O_USE_LUA
+#include "h2o/lua_.h"
+#endif
 #include "standalone.h"
 
 #ifdef TCP_FASTOPEN
@@ -1483,6 +1486,9 @@ static void setup_configurators(void)
     register_configurator(redirect);
 #if H2O_USE_MRUBY
     register_configurator(mruby);
+#endif
+#if H2O_USE_LUA
+    register_configurator(lua);
 #endif
 #undef register_configurator
 }

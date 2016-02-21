@@ -39,7 +39,7 @@ int h2o_scripting_configurator_t::on_config_scripting_handler(h2o_configurator_c
 
     /* check if there is any error in source */
     char errbuf[1024];
-    if (!self->compile_test(self->vars, errbuf)) {
+    if (self->compile_test(self->vars, errbuf)) {
         cmd->errprintf(node, "%s compile error:%s", self->scripting_language_name, errbuf);
         goto Error;
     }
@@ -88,7 +88,7 @@ int h2o_scripting_configurator_t::on_config_scripting_handler_file(h2o_configura
 
     /* check if there is any error in source */
     char errbuf[1024];
-    if (!self->compile_test(self->vars, errbuf)) {
+    if (self->compile_test(self->vars, errbuf)) {
         cmd->errprintf(node, "failed to compile file:%s:%s",
                 node->data.scalar, errbuf);
         goto Exit;
@@ -149,4 +149,13 @@ void h2o_scripting_configurator_t::register_configurator(h2o_scripting_configura
     CMD_NAME("handler-file");
     c->define_command(buf, cf, h2o_scripting_configurator_t::on_config_scripting_handler_file);
     #undef CMD_NAME
+}
+
+void h2o_scripting_handler_t::dispose(h2o_base_handler_t *_handler)
+{
+    auto handler = (h2o_scripting_handler_t *)_handler;
+
+    h2o_mem_free(handler->config.source.base);
+    h2o_mem_free(handler->config.path);
+    h2o_mem_free(handler);
 }

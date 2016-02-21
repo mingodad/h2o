@@ -358,15 +358,6 @@ void h2o_mruby_handler_t::on_context_dispose(h2o_context_t *ctx)
     h2o_mem_free(handler_ctx);
 }
 
-void h2o_mruby_handler_t::dispose(h2o_base_handler_t *_handler)
-{
-    auto handler = (h2o_mruby_handler_t *)_handler;
-
-    h2o_mem_free(handler->config.source.base);
-    h2o_mem_free(handler->config.path);
-    h2o_mem_free(handler);
-}
-
 static void report_exception(h2o_req_t *req, mrb_state *mrb)
 {
     mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);

@@ -11,7 +11,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gnu_gcc_compiler_as_g" />
-				<Option parameters="--conf=fastcgi.conf" />
+				<Option parameters="--conf=examples/h2o_lua/h2o-dad.conf" />
 				<Compiler>
 					<Add option="-g" />
 					<Add option="-fpermissive" />
@@ -148,17 +148,20 @@
 			<Add directory="deps/mruby/include" />
 			<Add directory="deps/mruby-input-stream/src" />
 			<Add directory="deps/golombset" />
+			<Add directory="../../../../local/luajit/include/luajit" />
 		</Compiler>
 		<Linker>
 			<Add library="libressl-build/lib/libssl.a" />
 			<Add library="libressl-build/lib/libcrypto.a" />
 			<Add library="pthread" />
+			<Add library="lua" />
+			<Add library="mruby/host/lib/libmruby.a" />
 			<Add library="m" />
 			<Add library="dl" />
 			<Add library="z" />
-			<Add library="mruby/host/lib/libmruby.a" />
 			<Add directory="libressl-build/lib" />
 			<Add directory="mruby/host/lib" />
+			<Add directory="../../../../local/luajit/lib" />
 		</Linker>
 		<Unit filename="deps/cloexec/cloexec.c">
 			<Option compilerVar="CC" />
@@ -242,10 +245,12 @@
 		<Unit filename="include/h2o/http2_internal.h" />
 		<Unit filename="include/h2o/http2_scheduler.h" />
 		<Unit filename="include/h2o/linklist.h" />
+		<Unit filename="include/h2o/lua_.h" />
 		<Unit filename="include/h2o/memcached.h" />
 		<Unit filename="include/h2o/memory.h" />
 		<Unit filename="include/h2o/mruby_.h" />
 		<Unit filename="include/h2o/multithread.h" />
+		<Unit filename="include/h2o/scripting.h" />
 		<Unit filename="include/h2o/serverutil.h" />
 		<Unit filename="include/h2o/socket.h" />
 		<Unit filename="include/h2o/socket/evloop.h" />
@@ -358,6 +363,9 @@
 		<Unit filename="lib/handler/configurator/headers.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="lib/handler/configurator/lua.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lib/handler/configurator/mruby.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -368,6 +376,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/configurator/reproxy.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/configurator/scripting.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/errordoc.c">

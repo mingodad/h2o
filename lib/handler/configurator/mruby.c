@@ -45,7 +45,7 @@ int mruby_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         abort();
     }
-    int ok = !mrb_nil_p(h2o_mruby_compile_code(mrb, config, errbuf));
+    int ok = mrb_nil_p(h2o_mruby_compile_code(mrb, config, errbuf));
     mrb_close(mrb);
 
     return ok;
