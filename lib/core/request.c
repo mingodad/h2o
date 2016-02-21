@@ -253,7 +253,7 @@ void h2o_req_t::dispose(h2o_req_t *req)
 {
     close_generator_and_filters(req);
 
-    req->_timeout_entry.unlink();
+    req->_timeout_entry.stop();
 
     if (req->version != 0 && req->pathconf != NULL) {
         auto &loggers = req->pathconf->loggers;
@@ -297,7 +297,7 @@ void h2o_req_t::delegate_request_deferred(h2o_handler_t *current_handler)
     auto args = this->pool.alloc_for<delegate_request_deferred_t>();
     *args = {this, current_handler};
     args->_timeout.cb = on_delegate_request_cb;
-    this->conn->ctx->zero_timeout.link(this->conn->ctx->loop, &args->_timeout);
+    this->conn->ctx->zero_timeout.start(this->conn->ctx->loop, &args->_timeout);
 }
 
 void h2o_req_t::reprocess_request(h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
@@ -356,7 +356,7 @@ void h2o_req_t::reprocess_request_deferred(h2o_iovec_t method, const h2o_url_sch
     auto args = this->pool.alloc_for<reprocess_request_deferred_t>();
     *args = {this, method, scheme, authority, path, overrides, is_delegated};
     args->_timeout.cb = on_reprocess_request_cb;
-    this->conn->ctx->zero_timeout.link(this->conn->ctx->loop, &args->_timeout);
+    this->conn->ctx->zero_timeout.start(this->conn->ctx->loop, &args->_timeout);
 }
 
 void h2o_req_t::start_response(h2o_generator_t *generator)
@@ -415,7 +415,7 @@ void h2o_req_t::send_next(h2o_ostream_t *ostream, h2o_iovec_t *bufs, size_t bufc
         assert(this->_ostr_top == ostream);
         this->_ostr_top = ostream->next;
     } else if (bufcnt == 0) {
-        this->conn->ctx->zero_timeout.link(this->conn->ctx->loop, &this->_timeout_entry);
+        this->conn->ctx->zero_timeout.start(this->conn->ctx->loop, &this->_timeout_entry);
         return;
     }
     ostream->next->do_send(ostream->next, this, bufs, bufcnt, is_final);
@@ -488,7 +488,7 @@ void h2o_req_t::send_error_deferred(int status, const char *reason, const char *
     auto args = this->pool.alloc_for<send_error_deferred_t>();
     *args = {this, status, reason, body, flags};
     args->_timeout.cb = send_error_deferred_cb;
-    this->conn->ctx->zero_timeout.link(this->conn->ctx->loop, &args->_timeout);
+    this->conn->ctx->zero_timeout.start(this->conn->ctx->loop, &args->_timeout);
     h2o_mem_alloca_free(args);
 }
 

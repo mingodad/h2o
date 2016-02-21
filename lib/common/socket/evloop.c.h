@@ -519,7 +519,7 @@ int h2o_evloop_run(h2o_evloop_t *loop)
 
     /* run the timeouts */
     for (node = loop->_timeouts.next; node != &loop->_timeouts; node = node->next) {
-        auto timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _link, node);
+        auto timeout = (h2o_timeout_t*)node;
         timeout->run(loop, loop->_now);
     }
     /* assert h2o_timeout_run has called run_pending */
@@ -531,12 +531,12 @@ int h2o_evloop_run(h2o_evloop_t *loop)
 
 void h2o_timeout__do_init(h2o_evloop_t *loop, h2o_timeout_t *timeout)
 {
-    loop->_timeouts.insert(&timeout->_link);
+    loop->_timeouts.insert(timeout);
 }
 
 void h2o_timeout__do_dispose(h2o_evloop_t *loop, h2o_timeout_t *timeout)
 {
-    timeout->_link.unlink();
+    timeout->unlink();
 }
 
 void h2o_timeout__do_link(h2o_evloop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)

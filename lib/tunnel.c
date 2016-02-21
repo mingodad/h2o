@@ -36,7 +36,7 @@ static void on_write_complete(h2o_socket_t *sock, int status);
 
 static void close_connection(struct h2o_tunnel_t *tunnel)
 {
-    tunnel->timeout_entry.unlink();
+    tunnel->timeout_entry.stop();
 
     h2o_socket_t::close(tunnel->sock[0]);
     h2o_socket_t::close(tunnel->sock[1]);
@@ -52,8 +52,8 @@ static void on_timeout(h2o_timeout_entry_t *entry)
 
 static inline void reset_timeout(struct h2o_tunnel_t *tunnel)
 {
-    tunnel->timeout_entry.unlink();
-    tunnel->timeout->link(tunnel->ctx->loop, &tunnel->timeout_entry);
+    tunnel->timeout_entry.stop();
+    tunnel->timeout->start(tunnel->ctx->loop, &tunnel->timeout_entry);
 }
 
 static inline void on_read(h2o_socket_t *sock, int status)
@@ -119,7 +119,7 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_
     tunnel->sock[1] = sock2;
     sock1->data = tunnel;
     sock2->data = tunnel;
-    tunnel->timeout->link(tunnel->ctx->loop, &tunnel->timeout_entry);
+    tunnel->timeout->start(tunnel->ctx->loop, &tunnel->timeout_entry);
 
     /* Trash all data read before tunnel establishment */
     h2o_buffer_consume_all(&sock1->input);

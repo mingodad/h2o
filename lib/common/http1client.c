@@ -55,7 +55,7 @@ struct h2o_http1client_private_t {
 
 static inline void h2o_timeout_link(h2o_http1client_private_t *client)
 {
-    client->super.ctx->io_timeout->link(client->super.ctx->loop, &client->_timeout);
+    client->super.ctx->io_timeout->start(client->super.ctx->loop, &client->_timeout);
 }
 
 static void close_client(h2o_http1client_private_t *client)
@@ -80,7 +80,7 @@ static void close_client(h2o_http1client_private_t *client)
             sockpool->connect_req = NULL;
         }
     }
-    client->_timeout.unlink();
+    client->_timeout.stop();
     h2o_mem_free(client);
 }
 
@@ -101,7 +101,7 @@ static void on_body_until_close(h2o_socket_t *sock, int status)
 {
     auto client = (h2o_http1client_private_t*)sock->data;
 
-    client->_timeout.unlink();
+    client->_timeout.stop();
 
     if (status != 0) {
         client->_cb.on_body(&client->super, h2o_http1client_error_is_eos);
@@ -123,7 +123,7 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
 {
     auto client = (h2o_http1client_private_t*)sock->data;
 
-    client->_timeout.unlink();
+    client->_timeout.stop();
 
     if (status != 0) {
         on_body_error(client, "I/O error (body; content-length)");
@@ -165,7 +165,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
     auto client = (h2o_http1client_private_t*)sock->data;
     h2o_buffer_t *inbuf;
 
-    client->_timeout.unlink();
+    client->_timeout.stop();
 
     if (status != 0) {
         on_body_error(client, "I/O error (body; chunked)");
@@ -224,7 +224,7 @@ static void on_head(h2o_socket_t *sock, int status)
     size_t msg_len, num_headers, i;
     h2o_socket_cb reader;
 
-    client->_timeout.unlink();
+    client->_timeout.stop();
 
     if (status != 0) {
         on_error_before_head(client, "I/O error (head)");
@@ -318,7 +318,7 @@ static void on_send_request(h2o_socket_t *sock, int status)
 {
     auto client = (h2o_http1client_private_t*)sock->data;
 
-    client->_timeout.unlink();
+    client->_timeout.stop();
 
     if (status != 0) {
         on_error_before_head(client, "I/O error (send request)");
@@ -349,7 +349,7 @@ static void on_connect(h2o_socket_t *sock, int status)
     h2o_iovec_t *reqbufs;
     size_t reqbufcnt;
 
-    client->_timeout.unlink();
+    client->_timeout.stop();
 
     if (status != 0) {
         on_connect_error(client, "connection failed");

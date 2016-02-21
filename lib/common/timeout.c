@@ -44,7 +44,7 @@ uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts)
 
     /* change wake_at to the minimum value of the timeouts */
     for (node = timeouts->next; node != timeouts; node = node->next) {
-        auto timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _link, node);
+        auto timeout = (h2o_timeout_t*)node;
         if (!timeout->_entries.is_empty()) {
             auto entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_entry_t, _link, timeout->_entries.next);
             uint64_t entry_wake_at = entry->registered_at + timeout->timeout;
@@ -71,7 +71,7 @@ void h2o_timeout_t::dispose(h2o_loop_t *loop, h2o_timeout_t *timeout)
     h2o_timeout__do_dispose(loop, timeout);
 }
 
-void h2o_timeout_t::link(h2o_loop_t *loop, h2o_timeout_entry_t *entry)
+void h2o_timeout_t::start(h2o_loop_t *loop, h2o_timeout_entry_t *entry)
 {
     /* insert at tail, so that the entries are sorted in ascending order */
     this->_entries.insert(&entry->_link);
@@ -81,7 +81,7 @@ void h2o_timeout_t::link(h2o_loop_t *loop, h2o_timeout_entry_t *entry)
     h2o_timeout__do_link(loop, this, entry);
 }
 
-void h2o_timeout_entry_t::unlink()
+void h2o_timeout_entry_t::stop()
 {
     if (this->_link.is_linked()) {
         this->_link.unlink();

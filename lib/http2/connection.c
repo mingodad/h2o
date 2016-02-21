@@ -78,7 +78,7 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
 
 static void graceful_shutdown_resend_goaway(h2o_timeout_entry_t *entry)
 {
-    auto ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
+    auto ctx = (h2o_context_t*)entry->data;
     h2o_linklist_t *node;
 
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
@@ -102,6 +102,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
     if (ctx->http2._graceful_shutdown_timeout.cb != NULL)
         return;
     ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
+    ctx->http2._graceful_shutdown_timeout.data = ctx;
 
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
         auto conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
@@ -111,7 +112,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
             conn->request_write();
         }
     }
-    ctx->one_sec_timeout.link(ctx->loop, &ctx->http2._graceful_shutdown_timeout);
+    ctx->one_sec_timeout.start(ctx->loop, &ctx->http2._graceful_shutdown_timeout);
 }
 
 static void on_idle_timeout(h2o_timeout_entry_t *entry)
@@ -124,12 +125,12 @@ static void on_idle_timeout(h2o_timeout_entry_t *entry)
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
-    conn->_timeout_entry.unlink();
+    conn->_timeout_entry.stop();
 
     if (conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed == 0) {
         assert(conn->_pending_reqs.is_empty());
         conn->_timeout_entry.cb = on_idle_timeout;
-        conn->super.ctx->http2.idle_timeout.link(conn->super.ctx->loop, &conn->_timeout_entry);
+        conn->super.ctx->http2.idle_timeout.start(conn->super.ctx->loop, &conn->_timeout_entry);
     }
 }
 
@@ -226,7 +227,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
 {
     h2o_http2_stream_t *stream;
 
-    assert(!conn->_write.timeout_entry.is_linked());
+    assert(!conn->_write.timeout_entry.is_active());
 
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
     assert(conn->num_streams.pull.open == 0);
@@ -240,13 +241,13 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
     h2o_hpack_dispose_header_table(&conn->_output_header_table);
     assert(conn->_pending_reqs.is_empty());
-    conn->_timeout_entry.unlink();
+    conn->_timeout_entry.stop();
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
         h2o_buffer_dispose(&conn->_write.buf_in_flight);
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(conn->_write.streams_to_proceed.is_empty());
-    assert(!conn->_write.timeout_entry.is_linked());
+    assert(!conn->_write.timeout_entry.is_active());
     if (conn->_headers_unparsed != NULL)
         h2o_buffer_dispose(&conn->_headers_unparsed);
     if (conn->casper != NULL)
@@ -262,7 +263,7 @@ void close_connection(h2o_http2_conn_t *conn)
 {
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
-    if (conn->_write.buf_in_flight != NULL || conn->_write.timeout_entry.is_linked()) {
+    if (conn->_write.buf_in_flight != NULL || conn->_write.timeout_entry.is_active()) {
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         close_connection_now(conn);
@@ -851,8 +852,8 @@ static void on_read(h2o_socket_t *sock, int status)
     parse_input(conn);
 
     /* write immediately, if there is no write in flight and if pending write exists */
-    if (conn->_write.timeout_entry.is_linked()) {
-        conn->_write.timeout_entry.unlink();
+    if (conn->_write.timeout_entry.is_active()) {
+        conn->_write.timeout_entry.stop();
         do_emit_writereq(conn);
     }
 }
@@ -925,7 +926,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     }
 
     /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
-    conn->_write.timeout_entry.unlink();
+    conn->_write.timeout_entry.stop();
 
     /* write more, if possible */
     if (do_emit_writereq(conn))

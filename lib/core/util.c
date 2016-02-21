@@ -47,7 +47,7 @@ static h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t
     data->sock = sock;
     data->timeout = {};
     data->timeout.cb = on_accept_timeout;
-    ctx->ctx->handshake_timeout.link(ctx->ctx->loop, &data->timeout);
+    ctx->ctx->handshake_timeout.start(ctx->ctx->loop, &data->timeout);
     data->async_resumption_get_req = NULL;
     data->connected_at = connected_at;
 
@@ -58,7 +58,7 @@ static h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t
 static void free_accept_data(struct h2o_accept_data_t *data)
 {
     assert(data->async_resumption_get_req == NULL);
-    data->timeout.unlink();
+    data->timeout.stop();
     h2o_mem_free(data);
 }
 

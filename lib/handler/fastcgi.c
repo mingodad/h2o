@@ -401,16 +401,16 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs,
 }
 
 static void set_timeout(fcgi_generator_t *generator, h2o_timeout_t *timeout, h2o_timeout_cb cb) {
-    generator->timeout.unlink();
+    generator->timeout.stop();
 
     generator->timeout.cb = cb;
-    timeout->link(generator->req->conn->ctx->loop, &generator->timeout);
+    timeout->start(generator->req->conn->ctx->loop, &generator->timeout);
 }
 
 static void close_generator(fcgi_generator_t *generator) {
     /* can be called more than once */
 
-    generator->timeout.unlink();
+    generator->timeout.stop();
     if (generator->connect_req != NULL) {
         h2o_socketpool_cancel_connect(generator->connect_req);
         generator->connect_req = NULL;
@@ -453,7 +453,7 @@ static void send_eos_and_close(fcgi_generator_t *generator, int can_keepalive) {
         h2o_socket_t::close(generator->sock);
     generator->sock = NULL;
 
-    generator->timeout.unlink();
+    generator->timeout.stop();
 
     if (generator->resp.sending.bytes_inflight == 0)
         do_send(generator);

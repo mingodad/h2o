@@ -77,14 +77,14 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     /* FIXME decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well
      */
-    auto pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.entry, timeout_entry);
+    auto pool = (h2o_socketpool_t *)timeout_entry->data;
 
     if (pthread_mutex_trylock(&pool->_shared.mutex) == 0) {
         destroy_expired(pool);
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 
-    pool->_interval_cb.timeout.link(pool->_interval_cb.loop, &pool->_interval_cb.entry);
+    pool->_interval_cb.timeout.start(pool->_interval_cb.loop, &pool->_interval_cb.entry);
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, size_t capacity)
@@ -138,7 +138,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_destroy(&pool->_shared.mutex);
 
     if (pool->_interval_cb.loop != NULL) {
-        pool->_interval_cb.entry.unlink();
+        pool->_interval_cb.entry.stop();
         h2o_timeout_t::dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
     switch (pool->type) {
@@ -158,8 +158,9 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
     pool->_interval_cb.loop = loop;
     pool->_interval_cb.timeout.init(loop, 1000);
     pool->_interval_cb.entry.cb = on_timeout;
+    pool->_interval_cb.entry.data = pool;
 
-    pool->_interval_cb.timeout.link(loop, &pool->_interval_cb.entry);
+    pool->_interval_cb.timeout.start(loop, &pool->_interval_cb.entry);
 }
 
 static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *errstr)

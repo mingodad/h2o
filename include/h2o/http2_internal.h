@@ -401,8 +401,8 @@ struct h2o_http2_conn_t {
     {
         assert(this->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
         if (this->_write.buf_in_flight == NULL) {
-            if (!this->_write.timeout_entry.is_linked())
-                this->super.ctx->zero_timeout.link(this->super.ctx->loop, &this->_write.timeout_entry);
+            if (!this->_write.timeout_entry.is_active())
+                this->super.ctx->zero_timeout.start(this->super.ctx->loop, &this->_write.timeout_entry);
         }
     }
 

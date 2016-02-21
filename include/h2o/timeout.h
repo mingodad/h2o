@@ -42,14 +42,15 @@ struct h2o_timeout_entry_t {
     uint64_t registered_at;
     h2o_timeout_cb cb;
     h2o_linklist_t _link;
+    void *data;
     /**
      * deactivates a timeout entry, by unlinking it from a timeout
      */
-    void unlink();
+    void stop();
     /**
      * returns a boolean value indicating if the timeout is linked (i.e. active) or not
      */
-    int is_linked()
+    int is_active()
     {
         return _link.is_linked();
     }
@@ -58,9 +59,8 @@ struct h2o_timeout_entry_t {
 /**
  * represents a collection of h2o_timeout_entry_t linked to a single timeout value
  */
-struct h2o_timeout_t {
+struct h2o_timeout_t : h2o_linklist_t {
     uint64_t timeout;
-    h2o_linklist_t _link;
     h2o_linklist_t _entries; /* link list of h2o_timeout_entry_t */
     struct st_h2o_timeout_backend_properties_t _backend;
 
@@ -74,7 +74,7 @@ struct h2o_timeout_t {
     /**
      * activates a timeout entry, by linking it to a timeout
      */
-    void link(h2o_loop_t *loop, h2o_timeout_entry_t *entry);
+    void start(h2o_loop_t *loop, h2o_timeout_entry_t *entry);
     /**
      *
      */
