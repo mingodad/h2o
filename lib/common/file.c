@@ -63,5 +63,5 @@ Error:
     if (fd != -1)
         close(fd);
     h2o_mem_free(ret.base);
-    return (h2o_iovec_t){};
+    return {};
 }

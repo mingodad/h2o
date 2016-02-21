@@ -223,7 +223,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         /* update casper if necessary */
         if (stream->req.hostconf->http2.casper.track_all_types || is_blocking_asset(&stream->req)) {
             ssize_t etag_index = stream->req.headers.find(H2O_TOKEN_ETAG, -1);
-            h2o_iovec_t etag = etag_index != -1 ? stream->req.headers[etag_index].value : (h2o_iovec_t){};
+            h2o_iovec_t etag = etag_index != -1 ? stream->req.headers[etag_index].value : h2o_iovec_t({});
             if (conn->casper->lookup(stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
                 /* cancel if the pushed resource is already marked as cached */
                 if (conn->is_push(stream->stream_id))

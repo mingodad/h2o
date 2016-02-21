@@ -365,7 +365,7 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(
     return resolved.path;
 
 None:
-    return (h2o_iovec_t){};
+    return {};
 }
 
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */

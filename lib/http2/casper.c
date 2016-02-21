@@ -169,7 +169,7 @@ h2o_iovec_t h2o_http2_casper_t::get_cookie()
         return this->cookie_cache;
 
     if (this->keys.size == 0)
-        return (h2o_iovec_t){};
+        return {};
 
     /* encode as binary */
     char tiny_bin_buf[128], *bin_buf = tiny_bin_buf;

@@ -821,7 +821,7 @@ static void parse_input(h2o_http2_conn_t *conn)
         } else if (ret < 0) {
             if (ret != H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY) {
                 enqueue_goaway(conn, (int)ret,
-                               err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){});
+                               err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : h2o_iovec_t({}));
             }
             close_connection(conn);
             return;
