@@ -176,5 +176,5 @@ void h2o_ctest_register_configurator(h2o_globalconf_t *conf)
     auto cf = h2o_CONFIGURATOR_FLAG(H2O_CONFIGURATOR_FLAG_PATH |
                                     H2O_CONFIGURATOR_FLAG_DEFERRED |
                                     H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR);
-    c->define_command("c.handler", cf, on_config_ctest_handler);
+    c->define_command("ctest.handler", cf, on_config_ctest_handler);
 }
