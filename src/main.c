@@ -1136,6 +1136,8 @@ static void on_sigterm(int signo)
     //this is the unique writer of thread.shutdown_requested
     for (unsigned i = 0; i != conf.num_threads; ++i) {
         conf.threads[i].shutdown_requested = 1;
+        //on OS X we need to wakeup the thread
+        conf.threads[i].server_notifications.send_wakeup();
     }
 }
 
