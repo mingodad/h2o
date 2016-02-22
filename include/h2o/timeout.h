@@ -62,7 +62,7 @@ struct h2o_timeout_entry_t {
 struct h2o_timeout_t : h2o_linklist_t {
     uint64_t timeout;
     h2o_linklist_t _entries; /* link list of h2o_timeout_entry_t */
-    struct st_h2o_timeout_backend_properties_t _backend;
+    h2o_timeout_backend_properties_t _backend;
 
     /**
      * initializes and registers a timeout

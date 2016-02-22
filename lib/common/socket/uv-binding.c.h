@@ -230,7 +230,7 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 
 static void on_timeout(uv_timer_t *timer)
 {
-    auto timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _backend.timer, timer);
+    auto timeout = (h2o_timeout_t*)((h2o_timeout_backend_properties_t*)timer)->data;
 
     timeout->run(timer->loop, h2o_now(timer->loop));
     if (!timeout->_entries.is_empty())
@@ -240,7 +240,8 @@ static void on_timeout(uv_timer_t *timer)
 void schedule_timer(h2o_timeout_t *timeout)
 {
     auto entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_entry_t, _link, timeout->_entries.next);
-    uv_timer_start(&timeout->_backend.timer, on_timeout,
+    timeout->_backend.data = timeout;
+    uv_timer_start((uv_timer_t*)&timeout->_backend, on_timeout,
                    entry->registered_at + timeout->timeout - h2o_now(timeout->_backend.timer.loop), 0);
 }
 

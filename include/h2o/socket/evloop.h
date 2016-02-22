@@ -47,7 +47,7 @@ struct h2o_evloop_t {
 
 typedef h2o_evloop_t h2o_loop_t;
 
-struct st_h2o_timeout_backend_properties_t {
+struct h2o_timeout_backend_properties_t {
     char _dummy; /* sizeof(empty_struct) differs bet. C (GCC extension) and C++ */
 };
 
