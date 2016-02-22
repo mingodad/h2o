@@ -418,7 +418,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
         while (1) {
             if (*buf != ',') {
                 if (needs_comma)
-    				return NULL;
+                    goto Error;
                 break;
             }
             needs_comma = 0;
@@ -433,7 +433,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
         if (H2O_LIKELY((range_start = h2o_strtosizefwd(&buf, buf_end - buf)) != SIZE_MAX)) {
             CHECK_EOF();
             if (*buf++ != '-')
-                return NULL;
+                goto Error;
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
             if (H2O_UNLIKELY(range_start >= file_size)) {
                 range_start = SIZE_MAX;
@@ -448,7 +448,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
             CHECK_EOF();
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
             if (H2O_UNLIKELY(range_count == SIZE_MAX))
-                return NULL;
+                goto Error;
             if (H2O_LIKELY(range_count != 0)) {
                 if (H2O_UNLIKELY(range_count > file_size)) range_count = file_size;
                 range_start = file_size - range_count;
@@ -585,7 +585,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
-        h2o_iovec_t *index_file = self->index_files.size ? &self->index_files[0] : nullptr;
+        h2o_iovec_t *index_file = nullptr;
         for (size_t i = 0; i != self->index_files.size; ++i) {
             index_file = &self->index_files[i];
             memcpy(rpath + rpath_len, index_file->base, index_file->len);
@@ -609,7 +609,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             if (errno != ENOENT)
                 break;
         }
-        if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
+        if ((!index_file || (index_file->base == NULL)) && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
             rpath[rpath_len] = '\0';
             if (method_type == METHOD_IS_OTHER) {
                 send_method_not_allowed(req);
