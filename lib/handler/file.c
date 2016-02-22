@@ -582,9 +582,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
-        size_t index_files_count = 0;
-        for (; index_files_count != self->index_files.size; ++index_files_count) {
-            auto index_file = self->index_files[index_files_count];
+        for (size_t i = 0; i != self->index_files.size; ++i) {
+            auto index_file = self->index_files[i];
             memcpy(rpath + rpath_len, index_file.base, index_file.len);
             rpath[rpath_len + index_file.len] = '\0';
             if ((generator = create_generator(req, rpath, rpath_len + index_file.len, &is_dir, self->flags)) != NULL) {
@@ -606,7 +605,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             if (errno != ENOENT)
                 break;
         }
-        if (!index_files_count && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
+        if ((self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
             rpath[rpath_len] = '\0';
             if (method_type == METHOD_IS_OTHER) {
                 send_method_not_allowed(req);
