@@ -41,7 +41,7 @@ struct h2o_memcached_context_t {
     char *host;
     uint16_t port;
     h2o_iovec_t prefix;
-    volatile sig_atomic_t shutdown_requested;
+    int shutdown_requested;
 
     static h2o_memcached_context_t *create(const char *host, uint16_t port, size_t num_threads, const char *prefix);
     h2o_memcached_req_t *get(h2o_multithread_receiver_t *receiver, h2o_iovec_t key,

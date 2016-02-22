@@ -42,7 +42,7 @@ struct h2o_multithread_receiver_t {
     h2o_linklist_t _link;
     h2o_linklist_t _messages;
     h2o_multithread_receiver_cb cb;
-    h2o_multithread_receiver_t():queue(nullptr), _link({}), _messages({}), cb(nullptr){}
+    h2o_multithread_receiver_t():queue(nullptr), _link({}), _messages({}), cb(nullptr) {}
     /**
      * sends a message
      */

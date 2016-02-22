@@ -118,7 +118,7 @@ typedef enum en_run_mode_t {
 struct conf_threads_t {
         pthread_t tid;
         h2o_context_t ctx;
-        volatile sig_atomic_t shutdown_requested;
+        int shutdown_requested; //intentionally ignoring multiple reader/one writer data race on this
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
         //conf_threads_t():tid(0),ctx({}),server_notifications({}), memcached({}){}
@@ -142,7 +142,6 @@ static struct {
     size_t num_threads;
     int tfo_queues;
     conf_threads_t *threads;
-    volatile sig_atomic_t shutdown_requested;
     pthread_mutex_t mutex;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
@@ -162,7 +161,6 @@ static struct {
     0,               /* initialized in main() */
     0,               /* initialized in main() */
     NULL,            /* thread_ids */
-    0,               /* shutdown_requested */
     {},            /* global mutex */
     {},              /* state */
 };
@@ -1123,11 +1121,10 @@ static yoml_t *load_config(const char *fn)
 
 static void notify_all_threads(void)
 {
-    unsigned i;
-    for (i = 0; i != conf.num_threads; ++i) {
+    for (unsigned i = 0; i != conf.num_threads; ++i) {
+        //intentionally ignoring read thread data race on thread.shutdown_requested
         if(!conf.threads[i].shutdown_requested)
         {
-            //fprintf(stderr, "notify_all_threads %d\n", i);
             conf.threads[i].server_notifications.send_wakeup();
         }
     }
@@ -1135,8 +1132,11 @@ static void notify_all_threads(void)
 
 static void on_sigterm(int signo)
 {
-    conf.shutdown_requested = 1;
-    notify_all_threads();
+    //intentionally ignoring thread data write race on thread.shutdown_requested
+    //this is the unique writer of thread.shutdown_requested
+    for (unsigned i = 0; i != conf.num_threads; ++i) {
+        conf.threads[i].shutdown_requested = 1;
+    }
 }
 
 #ifdef __GLIBC__
@@ -1285,6 +1285,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     conf_threads_t *thread_at_idx = &conf.threads[thread_index];
     thread_at_idx->ctx.init(h2o_evloop_create(), &conf.globalconf);
+
     h2o_multithread_register_receiver(thread_at_idx->ctx.queue, &thread_at_idx->server_notifications,
                                       on_server_notification);
     h2o_multithread_register_receiver(thread_at_idx->ctx.queue, &thread_at_idx->memcached,
@@ -1321,19 +1322,15 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     update_listener_state(listeners);
 
     /* the main loop */
-    thread_at_idx->shutdown_requested = 0;
-    while (1) {
-        if (conf.shutdown_requested)
-            break;
+    //intentionally ignoring read thread data race on shutdown_requested
+    while (!thread_at_idx->shutdown_requested) {
         update_listener_state(listeners);
         /* run the loop once */
         h2o_evloop_run(thread_at_idx->ctx.loop);
         thread_at_idx->ctx.filecache->clear();
     }
-    thread_at_idx->shutdown_requested = 1;
 
     //fprintf(stderr, "shutdown_requested %td\n", (ptrdiff_t)_thread_index);
-    //notify_all_threads();
 
     if (thread_index == 0)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
@@ -1350,8 +1347,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     while (num_connections(0) != 0)
         h2o_evloop_run(thread_at_idx->ctx.loop);
 
-    pthread_mutex_lock(&conf.mutex);
     /* the process that detects num_connections becoming zero performs the last cleanup */
+    pthread_mutex_lock(&conf.mutex);
     if (conf.pid_file != NULL)
     {
         unlink(conf.pid_file);
@@ -1360,9 +1357,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     pthread_mutex_unlock(&conf.mutex);
 
     //fprintf(stderr, "exiting thread %td\n", (ptrdiff_t)_thread_index);
-
-    /*give other threads a chance to finish their work*/
-    //sleep(1);
+    //sleep(1); //to be able to see the debug fprintf messages
 
     _exit(0);
 }

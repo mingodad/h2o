@@ -72,7 +72,7 @@ static struct {
         char *host;
         uint16_t port;
     } memcached;
-    volatile sig_atomic_t shutdown_requested;
+    int shutdown_requested;
 } conf;
 
 static void *cache_cleanup_thread(void *_contexts)
@@ -301,15 +301,16 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
     return altered;
 }
 
-H2O_NORETURN static void *ticket_internal_updater(void *unused)
+static void *ticket_internal_updater(void *unused)
 {
-    while (1) {
+    while (!conf.shutdown_requested) {
         pthread_rwlock_wrlock(&session_tickets.rwlock);
         update_tickets(&session_tickets.tickets, time(NULL));
         pthread_rwlock_unlock(&session_tickets.rwlock);
         /* sleep for certain amount of time */
         sleep(120 - (rand() >> 16) % 7);
     }
+    return NULL;
 }
 
 static int serialize_ticket_entry(char *buf, size_t bufsz, struct session_ticket_t *ticket)
@@ -554,9 +555,9 @@ Exit:
     return retry;
 }
 
-H2O_NORETURN static void *ticket_memcached_updater(void *unused)
+static void *ticket_memcached_updater(void *unused)
 {
-    while (1) {
+    while (!conf.shutdown_requested) {
         /* connect */
         yrmcds conn;
         yrmcds_error err;
@@ -574,6 +575,7 @@ H2O_NORETURN static void *ticket_memcached_updater(void *unused)
         yrmcds_close(&conn);
         sleep(60);
     }
+    return NULL;
 }
 
 static int load_tickets_file(const char *fn)
@@ -614,11 +616,11 @@ Exit:
 #undef ERR_PREFIX
 }
 
-H2O_NORETURN static void *ticket_file_updater(void *unused)
+static void *ticket_file_updater(void *unused)
 {
     time_t last_mtime = 1; /* file is loaded if mtime changes, 0 is used to indicate that the file was missing */
 
-    while (1) {
+    while (!conf.shutdown_requested) {
         struct stat st;
         if (stat(conf.ticket.vars.file.filename, &st) != 0) {
             if (last_mtime != 0) {
@@ -635,6 +637,7 @@ H2O_NORETURN static void *ticket_file_updater(void *unused)
         }
         sleep(10);
     }
+    return NULL;
 }
 
 static void ticket_init_defaults(void)
