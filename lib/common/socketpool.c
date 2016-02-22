@@ -21,11 +21,15 @@
  */
 #include <assert.h>
 #include <errno.h>
-#include <netdb.h>
 #include <stdlib.h>
-#include <sys/socket.h>
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+#else
+    #include <netdb.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+#endif
 #include <sys/types.h>
-#include <netinet/in.h>
 #include "h2o/hostinfo.h"
 #include "h2o/linklist.h"
 #include "h2o/socketpool.h"
@@ -101,7 +105,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, size
 
 void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, size_t capacity)
 {
-    assert(salen <= sizeof(pool->peer.sockaddr.bytes));
+    assert(size_t(salen) <= sizeof(pool->peer.sockaddr.bytes));
 
     common_init(pool, H2O_SOCKETPOOL_TYPE_SOCKADDR, capacity);
     memcpy(&pool->peer.sockaddr.bytes, sa, salen);

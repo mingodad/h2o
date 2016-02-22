@@ -19,9 +19,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <sys/socket.h>
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+#else
+    #include <sys/socket.h>
+    #include <sys/un.h>
+#endif
 #include <sys/types.h>
-#include <sys/un.h>
 #include "h2o/memory.h"
 #include "h2o/string_.h"
 #include "h2o/url.h"

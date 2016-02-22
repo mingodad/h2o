@@ -19,16 +19,19 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <arpa/inet.h>
+#ifdef _WIN32
+#else
+    #include <arpa/inet.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+    #include <pwd.h>
+    #include <sys/un.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <pwd.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <sys/un.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/serverutil.h"

@@ -22,7 +22,10 @@
 #ifndef h2o__url_h
 #define h2o__url_h
 
-#include <sys/un.h>
+#ifdef _WIN32
+#else
+    #include <sys/un.h>
+#endif
 #include "h2o/memory.h"
 
 #define H2O_PORT_NOT_SET 65535

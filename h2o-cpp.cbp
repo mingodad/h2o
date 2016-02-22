@@ -126,6 +126,19 @@
 					<Add option="-ltsan" />
 				</Linker>
 			</Target>
+			<Target title="Debug Windows">
+				<Option output="h2o-cpp" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug-Windows/" />
+				<Option type="1" />
+				<Option compiler="mingw64_gnu_gcc_compiler_c_as_c" />
+				<Option parameters="--conf=examples/h2o_lua/h2o-dad.conf" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-fpermissive" />
+					<Add option="-std=c++1y" />
+					<Add directory="deps/win32" />
+				</Compiler>
+			</Target>
 		</Build>
 		<Compiler>
 			<Add option="-Wall" />
@@ -140,6 +153,7 @@
 			<Add option="-D__c_as_cpp=1" />
 			<Add directory="include" />
 			<Add directory="deps/picohttpparser" />
+			<Add directory="deps/yaml/include" />
 			<Add directory="deps/yoml" />
 			<Add directory="deps/klib" />
 			<Add directory="deps/cloexec" />
@@ -206,6 +220,20 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="deps/picohttpparser/picohttpparser.h" />
+		<Unit filename="deps/win32/mman.c">
+			<Option compilerVar="CC" />
+			<Option target="Debug Windows" />
+		</Unit>
+		<Unit filename="deps/win32/mman.h">
+			<Option target="Debug Windows" />
+		</Unit>
+		<Unit filename="deps/win32/win32_port.c">
+			<Option compilerVar="CC" />
+			<Option target="Debug Windows" />
+		</Unit>
+		<Unit filename="deps/win32/win32_port.h">
+			<Option target="Debug Windows" />
+		</Unit>
 		<Unit filename="deps/yaml/include/yaml.h" />
 		<Unit filename="deps/yaml/src/api.c">
 			<Option compilerVar="CC" />

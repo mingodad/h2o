@@ -28,6 +28,9 @@
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#ifdef _WIN32
+    #include "win32_port.h"
+#endif // _WIN32
 
 static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {

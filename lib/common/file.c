@@ -25,7 +25,11 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/uio.h>
+#ifdef _WIN32
+    #include "win32_port.h"
+#else
+    #include <sys/uio.h>
+#endif
 #include <unistd.h>
 #include "h2o/file.h"
 

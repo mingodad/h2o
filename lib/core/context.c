@@ -24,6 +24,9 @@
 #include <sys/time.h>
 #include "h2o.h"
 #include "h2o/memcached.h"
+#ifdef _WIN32
+    #include <pthread.h>
+#endif
 
 void h2o_context_t::init_pathconf_context(h2o_pathconf_t *pathconf)
 {

@@ -26,6 +26,9 @@
 #include "h2o/linklist.h"
 #include "h2o/memcached.h"
 #include "h2o/string_.h"
+#ifdef _WIN32
+    #include "win32_port.h"
+#endif
 
 struct h2o_memcached_conn_t {
     h2o_memcached_context_t *ctx;

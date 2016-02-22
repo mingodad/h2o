@@ -19,7 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <sys/un.h>
+#ifdef _WIN32
+#else
+    #include <sys/un.h>
+#endif
 #include "h2o.h"
 #include "h2o/socketpool.h"
 

@@ -4,14 +4,19 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+    //#include <winsock2.h>
+#else
+    #include <poll.h>
+    #include <netdb.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+    #include <sys/socket.h>
+#endif
 #include <sys/types.h>
 #include <unistd.h>
 

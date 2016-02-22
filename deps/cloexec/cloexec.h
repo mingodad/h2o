@@ -23,7 +23,11 @@
 #define CLOEXEC_H
 
 #include <pthread.h>
-#include <sys/socket.h>
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+#else
+    #include <sys/socket.h>
+#endif
 #include <sys/types.h>
 #include <unistd.h>
 

@@ -26,6 +26,9 @@
 #include "khash.h"
 #include "h2o/memory.h"
 #include "h2o/filecache.h"
+#ifdef _WIN32
+    #include <pthread.h>
+#endif
 
 KHASH_SET_INIT_STR(opencache_set);
 

@@ -22,9 +22,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <netdb.h>
+#ifdef _WIN32
+#else
+    #include <netdb.h>
+    #include <sys/un.h>
+#endif
 #include <string.h>
-#include <sys/un.h>
 #include <unistd.h>
 #include <openssl/err.h>
 #include "h2o/socket.h"

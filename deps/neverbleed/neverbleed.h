@@ -23,7 +23,10 @@
 #define NEVERBLEED_H
 
 #include <pthread.h>
-#include <sys/un.h>
+#ifdef _WIN32
+#else
+    #include <sys/un.h>
+#endif
 #include <openssl/engine.h>
 
 #ifdef __cplusplus

@@ -21,20 +21,23 @@
  */
 #include <errno.h>
 #include <fcntl.h>
-#include <grp.h>
+#ifdef _WIN32
+#else
+    #include <grp.h>
+    #include <pwd.h>
+    #include <spawn.h>
+    #include <sys/wait.h>
+    #if !defined(_SC_NPROCESSORS_ONLN)
+        #include <sys/sysctl.h>
+    #endif
+#endif
 #include <pthread.h>
-#include <pwd.h>
 #include <signal.h>
-#include <spawn.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
-#if !defined(_SC_NPROCESSORS_ONLN)
-#include <sys/sysctl.h>
-#endif
 #include "cloexec.h"
 #include "h2o/memory.h"
 #include "h2o/serverutil.h"

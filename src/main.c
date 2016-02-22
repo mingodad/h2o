@@ -21,29 +21,33 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <limits.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <pthread.h>
-#include <pwd.h>
 #include <signal.h>
-#include <spawn.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+#else
+    #include <sys/resource.h>
+    #include <spawn.h>
+    #include <pwd.h>
+    #include <netdb.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+    #include <arpa/inet.h>
+    # include <sys/socket.h>
+    #include <sys/un.h>
+    #include <sys/wait.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/un.h>
-#include <sys/wait.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>

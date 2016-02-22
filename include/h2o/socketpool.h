@@ -26,8 +26,12 @@
 extern "C" {
 #endif
 
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+#else
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+#endif
 #include <pthread.h>
 #include "h2o/linklist.h"
 #include "h2o/multithread.h"

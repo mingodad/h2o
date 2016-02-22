@@ -27,7 +27,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
+#ifdef _WIN32
+    #include "win32_port.h"
+    #include "mman.h"
+#else
+    #include <sys/mman.h>
+#endif
 #include <unistd.h>
 #include "h2o/memory.h"
 

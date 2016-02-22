@@ -23,6 +23,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "h2o/time_.h"
+#ifdef _WIN32
+    #include <pthread.h>
+#endif
 
 static char *emit_wday(char *dst, int wday)
 {

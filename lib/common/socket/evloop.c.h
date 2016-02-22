@@ -19,11 +19,15 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/uio.h>
+#ifdef _WIN32
+    #include <ws2tcpip.h>
+#else
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+    #include <sys/socket.h>
+    #include <sys/uio.h>
+#endif
 #include <unistd.h>
 #include "cloexec.h"
 #include "h2o/linklist.h"
