@@ -396,11 +396,11 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
 {
 #define CHECK_EOF()                \
     if (buf == buf_end)            \
-        goto Error;
+        return NULL;
 
 #define CHECK_OVERFLOW(range)      \
     if (range == SIZE_MAX)         \
-        goto Error;
+        return NULL;
 
     size_t range_start = SIZE_MAX, range_count = 0;
     char *buf = range_value->base, *buf_end = buf + range_value->len;
@@ -418,7 +418,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
         while (1) {
             if (*buf != ',') {
                 if (needs_comma)
-                    goto Error;
+                    return NULL;
                 break;
             }
             needs_comma = 0;
@@ -433,7 +433,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
         if (H2O_LIKELY((range_start = h2o_strtosizefwd(&buf, buf_end - buf)) != SIZE_MAX)) {
             CHECK_EOF();
             if (*buf++ != '-')
-                goto Error;
+                return NULL;
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
             if (H2O_UNLIKELY(range_start >= file_size)) {
                 range_start = SIZE_MAX;
@@ -448,7 +448,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
             CHECK_EOF();
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
             if (H2O_UNLIKELY(range_count == SIZE_MAX))
-                goto Error;
+                return NULL;
             if (H2O_LIKELY(range_count != 0)) {
                 if (H2O_UNLIKELY(range_count > file_size)) range_count = file_size;
                 range_start = file_size - range_count;
@@ -456,7 +456,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
                 range_start = SIZE_MAX;
             }
         } else {
-            goto Error;
+            return NULL;
         }
 
         if (H2O_LIKELY(range_start != SIZE_MAX)) {
@@ -475,9 +475,6 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
     return ranges.entries;
 #undef CHECK_EOF
 #undef CHECK_OVERFLOW
-Error:
-    ranges.clear_free();
-    return NULL;
 }
 
 static void gen_rand_string(h2o_iovec_t *s)
