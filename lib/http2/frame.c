@@ -107,7 +107,7 @@ void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id,
 }
 
 void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id,
-        int32_t window_size_increment)
+        uint32_t window_size_increment)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, stream_id);
     dst = h2o_http2_encode32u(dst, window_size_increment);
@@ -191,7 +191,7 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload,
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
         padlen = *src++;
-        if (src_end - src < padlen) {
+        if (uint32_t(src_end - src) < padlen) {
             *err_desc = "invalid HEADERS frame";
             return H2O_HTTP2_ERROR_PROTOCOL;
         }

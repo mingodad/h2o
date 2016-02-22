@@ -405,8 +405,8 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id,
         h2o_http2_window_t *window, size_t consumed)
 {
     window->consume(consumed);
-    if (window->get() * 2 < H2O_HTTP2_SETTINGS_HOST.initial_window_size) {
-        int32_t delta = (int32_t)(H2O_HTTP2_SETTINGS_HOST.initial_window_size -
+    if (window->get() * 2 < ssize_t(H2O_HTTP2_SETTINGS_HOST.initial_window_size)) {
+        uint32_t delta = (H2O_HTTP2_SETTINGS_HOST.initial_window_size -
                 window->get());
         h2o_http2_encode_window_update_frame(&conn->_write.buf, stream_id, delta);
         conn->request_write();

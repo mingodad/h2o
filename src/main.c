@@ -298,7 +298,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
         /* sleep until next_at */
         if ((now = time(NULL)) < next_at) {
             time_t sleep_secs = next_at - now;
-            sleep(sleep_secs < UINT_MAX ? (unsigned)sleep_secs : UINT_MAX);
+            sleep(unsigned(sleep_secs) < UINT_MAX ? (unsigned)sleep_secs : UINT_MAX);
             continue;
         }
         /* fetch the response */
