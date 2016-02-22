@@ -582,19 +582,19 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
-        h2o_iovec_t *index_file = nullptr;
-        for (size_t i = 0; i != self->index_files.size; ++i) {
-            index_file = &self->index_files[i];
-            memcpy(rpath + rpath_len, index_file->base, index_file->len);
-            rpath[rpath_len + index_file->len] = '\0';
-            if ((generator = create_generator(req, rpath, rpath_len + index_file->len, &is_dir, self->flags)) != NULL) {
-                rpath_len += index_file->len;
+        size_t index_files_count = 0;
+        for (; index_files_count != self->index_files.size; ++index_files_count) {
+            auto index_file = self->index_files[index_files_count];
+            memcpy(rpath + rpath_len, index_file.base, index_file.len);
+            rpath[rpath_len + index_file.len] = '\0';
+            if ((generator = create_generator(req, rpath, rpath_len + index_file.len, &is_dir, self->flags)) != NULL) {
+                rpath_len += index_file.len;
                 goto Opened;
             }
             if (is_dir) {
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
                 h2o_iovec_t dest;
-                h2o_concat(dest, &req->pool, req->path_normalized, *index_file, h2o_iovec_t::create(H2O_STRLIT("/")));
+                h2o_concat(dest, &req->pool, req->path_normalized, index_file, h2o_iovec_t::create(H2O_STRLIT("/")));
                 dest = h2o_uri_escape(&req->pool, dest.base, dest.len, "/");
                 if (req->query_at != SIZE_MAX)
                 {
@@ -606,7 +606,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             if (errno != ENOENT)
                 break;
         }
-        if ((!index_file || (index_file->base == NULL)) && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
+        if (!index_files_count && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
             rpath[rpath_len] = '\0';
             if (method_type == METHOD_IS_OTHER) {
                 send_method_not_allowed(req);
