@@ -1348,6 +1348,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         h2o_evloop_run(thread_at_idx->ctx.loop);
 
     /* the process that detects num_connections becoming zero performs the last cleanup */
+
+    shutdown_ssl(); //safe to be called multiple times when num_connections == 0
+
     pthread_mutex_lock(&conf.mutex);
     if (conf.pid_file != NULL)
     {
@@ -1355,6 +1358,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         conf.pid_file = NULL;
     }
     pthread_mutex_unlock(&conf.mutex);
+
 
     //fprintf(stderr, "exiting thread %td\n", (ptrdiff_t)_thread_index);
     //sleep(1); //to be able to see the debug fprintf messages
