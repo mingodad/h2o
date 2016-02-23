@@ -22,11 +22,11 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-typedef H2O_VECTOR<h2o_access_log_filehandle_t *> st_h2o_access_log_filehandle_vector_t;
+typedef H2O_VECTOR<h2o_access_log_filehandle_t *> h2o_access_log_filehandle_vector_t;
 
 struct h2o_access_log_configurator_t : h2o_configurator_t {
-    st_h2o_access_log_filehandle_vector_t *handles;
-    st_h2o_access_log_filehandle_vector_t _handles_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    h2o_access_log_filehandle_vector_t *handles;
+    h2o_access_log_filehandle_vector_t _handles_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 
     int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
     int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
