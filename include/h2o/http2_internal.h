@@ -196,6 +196,7 @@ struct h2o_http2_stream_t {
     h2o_http2_stream_state_t state;
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
+    h2o_http2_priority_t received_priority;
     h2o_buffer_t *_req_body;         /* NULL unless request body IS expected */
     size_t _expected_content_length; /* SIZE_MAX if unknown */
     H2O_VECTOR<h2o_iovec_t> _data;
@@ -444,7 +445,8 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
+                                          const h2o_http2_priority_t *received_priority);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);

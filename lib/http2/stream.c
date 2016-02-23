@@ -32,8 +32,8 @@ static size_t sz_min(size_t x, size_t y)
     return x < y ? x : y;
 }
 
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn,
-        uint32_t stream_id, h2o_req_t *src_req)
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
+                                          const h2o_http2_priority_t *received_priority)
 {
     auto stream = h2o_mem_alloc_for<h2o_http2_stream_t>();
 
@@ -45,6 +45,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn,
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     stream->output_window.init(&conn->peer_settings);
     stream->input_window.init(&H2O_HTTP2_SETTINGS_HOST);
+    stream->received_priority = *received_priority;
     stream->_expected_content_length = SIZE_MAX;
 
     /* init request */
