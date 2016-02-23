@@ -159,6 +159,7 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 ENDIF ()
 
 
+#SET(CMAKE_C_FLAGS "-g -fpermissive -std=c++1y -fno-exceptions -fno-rtti -D__c_as_cpp=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
 SET(CMAKE_C_FLAGS "-g -fpermissive -std=c++1y -D__c_as_cpp=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
 
 IF (COMPILER_OPTIMIZATION)
@@ -235,6 +236,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/scripting.c
     lib/handler/ctest.c
+    lib/handler/hello.c
 
     lib/http1.c
 

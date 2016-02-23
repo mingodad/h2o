@@ -24,6 +24,9 @@
 #include "h2o/ctest_.h"
 #include <ctype.h>
 
+//global mutext to test congestion
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 #if 0
 typedef int (*on_req_handler_ptr)(h2o_handler_t *, h2o_req_t *);
 
@@ -97,8 +100,12 @@ static int my_h2o_c_handler(h2o_handler_t *self, h2o_req_t *req)
 
 #endif
 
-static int on_req(h2o_handler_t *self, h2o_req_t *req)
+static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
+    //auto self = (h2o_ctest_handler_t *)_self;
+
+    //intentionally one thread at a time
+    pthread_mutex_lock(&mutex);
     static h2o_generator_t generator = { NULL, NULL };
     //printf("hello_handler : %s : %d\n", req->method.base, (uint)req->method.len);
     if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
@@ -153,6 +160,9 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
     req->res.reason = "OK";
     req->addResponseHeader(H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
     req->start_response(&generator);
+
+    pthread_mutex_unlock(&mutex);
+
     req->send(&body, 1, 1);
 
     return 0;
@@ -165,6 +175,7 @@ static int on_config_ctest_handler(h2o_configurator_command_t *cmd,
 
     /* register */
     auto handler = ctx->pathconf->create_handler<h2o_ctest_handler_t>();
+
     handler->on_req = on_req;
 
     return 0;

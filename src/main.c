@@ -62,6 +62,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/serverutil.h"
+#include "h2o/hello_.h"
 #include "h2o/ctest_.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
@@ -89,7 +90,7 @@ struct listener_ssl_config_t {
         unsigned max_failures;
         char *cmd;
         pthread_t updater_tid; /* should be valid when and only when interval != 0 */
-        volatile sig_atomic_t shutdown_requested;
+        int shutdown_requested;
         struct {
             pthread_mutex_t mutex;
             h2o_buffer_t *data;
@@ -1491,6 +1492,7 @@ static void setup_configurators(void)
     register_configurator(reproxy);
     register_configurator(redirect);
     register_configurator(ctest);
+    register_configurator(hello);
 #if H2O_USE_MRUBY
     register_configurator(mruby);
 #endif
