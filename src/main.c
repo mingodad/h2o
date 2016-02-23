@@ -1047,16 +1047,14 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
-static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_pid_file(h2o_configurator_command_t *cmd, char *result)
 {
-    conf.pid_file = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
-    return 0;
+    conf.pid_file = result;
 }
 
-static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_error_log(h2o_configurator_command_t *cmd, char *result)
 {
-    conf.error_log = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
-    return 0;
+    conf.error_log = result;
 }
 
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

@@ -44,16 +44,16 @@ struct fastcgi_configurator_t : h2o_configurator_t {
     int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
-static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+#define FASTCGI_VARS(x)((fastcgi_configurator_t *)cmd->configurator)->vars->x
+
+static void on_config_timeout_io(h2o_configurator_command_t *cmd, uint64_t result)
 {
-    auto self = (fastcgi_configurator_t *)cmd->configurator;
-    return cmd->scanf(node, "%" PRIu64, &self->vars->io_timeout);
+    FASTCGI_VARS(io_timeout) = result;
 }
 
-static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_timeout_keepalive(h2o_configurator_command_t *cmd, uint64_t result)
 {
-    auto self = (fastcgi_configurator_t *)cmd->configurator;
-    return cmd->scanf(node, "%" PRIu64, &self->vars->keepalive_timeout);
+    FASTCGI_VARS(keepalive_timeout) = result;
 }
 
 static int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -73,13 +73,9 @@ static int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static int on_config_send_delegated_uri(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_send_delegated_uri(h2o_configurator_command_t *cmd, bool result)
 {
-    ssize_t v = cmd->get_one_of(node, "OFF,ON");
-    if (v == -1)
-        return -1;
-    ((fastcgi_configurator_t *)cmd->configurator)->vars->send_delegated_uri = (int)v;
-    return 0;
+    FASTCGI_VARS(send_delegated_uri) = result;
 }
 
 static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

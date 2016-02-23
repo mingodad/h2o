@@ -55,6 +55,11 @@ struct h2o_configurator_context_t {
 };
 
 typedef int (*h2o_configurator_command_cb)(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
+typedef void (*h2o_configurator_command_OnOff_cb)(h2o_configurator_command_t *cmd, bool result);
+typedef void (*h2o_configurator_command_u64_cb)(h2o_configurator_command_t *cmd, uint64_t result);
+//int get confused with bool
+//typedef void (*h2o_configurator_command_int_cb)(h2o_configurator_command_t *cmd, int result);
+typedef void (*h2o_configurator_command_str_cb)(h2o_configurator_command_t *cmd, char *result);
 
 struct h2o_configurator_command_t {
     /**
@@ -69,6 +74,7 @@ struct h2o_configurator_command_t {
      * mandatory callback called to handle the command
      */
     h2o_configurator_command_cb cb;
+    void *cb_data;
     /**
      * flags
      */
@@ -127,7 +133,11 @@ struct h2o_configurator_t : h2o_linklist_t {
     /**
      *
      */
-    void define_command(const char *name, int flags, h2o_configurator_command_cb cb);
+    void define_command(const char *name, int flags, h2o_configurator_command_cb cb, void *data=nullptr);
+    void define_command(const char *name, int flags, h2o_configurator_command_OnOff_cb cb);
+    void define_command(const char *name, int flags, h2o_configurator_command_u64_cb cb);
+    //void define_command(const char *name, int flags, h2o_configurator_command_int_cb cb);
+    void define_command(const char *name, int flags, h2o_configurator_command_str_cb cb);
 };
 
 inline bool isScalar(yoml_t *node, const char *value)

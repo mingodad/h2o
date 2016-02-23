@@ -27,6 +27,8 @@ struct h2o_file_config_vars_t {
     int flags;
 };
 
+#define FILE_VARS(x)((h2o_file_configurator_t *)cmd->configurator)->vars->x
+
 struct h2o_file_configurator_t : h2o_configurator_t {
     h2o_file_config_vars_t *vars;
     h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
@@ -63,58 +65,22 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
-static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_etag(h2o_configurator_command_t *cmd, bool result)
 {
-    auto self = (h2o_file_configurator_t *)cmd->configurator;
-
-    switch (cmd->get_one_of(node, "OFF,ON")) {
-    case 0: /* off */
-        self->vars->flags |= H2O_FILE_FLAG_NO_ETAG;
-        break;
-    case 1: /* on */
-        self->vars->flags &= ~H2O_FILE_FLAG_NO_ETAG;
-        break;
-    default: /* error */
-        return -1;
-    }
-
-    return 0;
+    if (result) FILE_VARS(flags) &= ~H2O_FILE_FLAG_NO_ETAG; //on
+    else FILE_VARS(flags) |= H2O_FILE_FLAG_NO_ETAG; //off
 }
 
-static int on_config_send_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_send_gzip(h2o_configurator_command_t *cmd, bool result)
 {
-    auto self = (h2o_file_configurator_t *)cmd->configurator;
-
-    switch (cmd->get_one_of(node, "OFF,ON")) {
-    case 0: /* off */
-        self->vars->flags &= ~H2O_FILE_FLAG_SEND_GZIP;
-        break;
-    case 1: /* on */
-        self->vars->flags |= H2O_FILE_FLAG_SEND_GZIP;
-        break;
-    default: /* error */
-        return -1;
-    }
-
-    return 0;
+    if (result) FILE_VARS(flags) |= H2O_FILE_FLAG_SEND_GZIP; //on
+    else FILE_VARS(flags) &= ~H2O_FILE_FLAG_SEND_GZIP; //off
 }
 
-static int on_config_dir_listing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_dir_listing(h2o_configurator_command_t *cmd, bool result)
 {
-    auto self = (h2o_file_configurator_t *)cmd->configurator;
-
-    switch (cmd->get_one_of(node, "OFF,ON")) {
-    case 0: /* off */
-        self->vars->flags &= ~H2O_FILE_FLAG_DIR_LISTING;
-        break;
-    case 1: /* on */
-        self->vars->flags |= H2O_FILE_FLAG_DIR_LISTING;
-        break;
-    default: /* error */
-        return -1;
-    }
-
-    return 0;
+    if (result) FILE_VARS(flags) |= H2O_FILE_FLAG_DIR_LISTING; //on
+    else FILE_VARS(flags) &= ~H2O_FILE_FLAG_DIR_LISTING; //off
 }
 
 static const char **dup_strlist(const char **s)

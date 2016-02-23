@@ -22,6 +22,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 
@@ -329,14 +330,9 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
     return cmd->scanf(node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
 }
 
-static int on_config_http2_reprioritize_blocking_assets(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
-                                                        yoml_t *node)
+static void on_config_http2_reprioritize_blocking_assets(h2o_configurator_command_t *cmd, bool result)
 {
-    ssize_t on = cmd->get_one_of(node, "OFF,ON");
-    if (on == -1)
-        return -1;
-    ((core_configurator_t *)cmd->configurator)->vars->http2.reprioritize_blocking_assets = (int)on;
-    return 0;
+    ((core_configurator_t *)cmd->configurator)->vars->http2.reprioritize_blocking_assets = result;
 }
 
 static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -670,13 +666,72 @@ void h2o_globalconf_t::dispose_configurators()
     }
 }
 
-void h2o_configurator_t::define_command(const char *name, int flags, h2o_configurator_command_cb cb)
+void h2o_configurator_t::define_command(const char *name, int flags, h2o_configurator_command_cb cb, void *data)
 {
     auto cmd = this->commands.append_new(NULL);
     cmd->configurator = this;
     cmd->flags = flags;
     cmd->name = h2o_strdup(NULL, name, strlen(name)).base; //can be a temproary string
     cmd->cb = cb;
+    cmd->cb_data = data;
+}
+
+static int on_config_OnOff(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t ret = cmd->get_one_of(node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    ((h2o_configurator_command_OnOff_cb)(cmd->cb_data))(cmd, (bool)ret);
+    return 0;
+}
+
+void h2o_configurator_t::define_command(const char *name, int flags, h2o_configurator_command_OnOff_cb cb)
+{
+    this->define_command(name, flags, on_config_OnOff, (void*)cb);
+}
+
+static int on_config_u64(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    uint64_t result;
+    int rc = cmd->scanf(node, "%" PRIu64, &result);
+    if(rc) ((h2o_configurator_command_u64_cb)(cmd->cb_data))(cmd, result);
+    return rc;
+}
+
+void h2o_configurator_t::define_command(const char *name, int flags, h2o_configurator_command_u64_cb cb)
+{
+    this->define_command(name, flags, on_config_u64, (void*)cb);
+}
+
+/*
+static int on_config_int(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int result;
+    int rc = cmd->scanf(node, "%d", &result);
+    if(rc) ((h2o_configurator_command_int_cb)(cmd->cb_data))(cmd, result);
+    return rc;
+}
+
+void h2o_configurator_t::define_command(const char *name, int flags, h2o_configurator_command_int_cb cb)
+{
+    this->define_command(name, flags, on_config_int, (void*)cb);
+}
+*/
+
+static int on_config_str(h2o_configurator_command_t *cmd,
+        h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    char *result = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    ((h2o_configurator_command_str_cb)(cmd->cb_data))(cmd, result);
+    return 0;
+}
+
+void h2o_configurator_t::define_command(const char *name, int flags, h2o_configurator_command_str_cb cb)
+{
+    this->define_command(name, flags, on_config_str, (void*)cb);
 }
 
 h2o_configurator_command_t *h2o_globalconf_t::configurator_get_command(const char *name)

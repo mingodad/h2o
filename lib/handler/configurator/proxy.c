@@ -31,47 +31,31 @@ struct proxy_configurator_t : h2o_configurator_t {
     int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
-static int on_config_websocket_timeout(h2o_configurator_command_t *cmd,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+#define PROXY_VARS(x) ((proxy_configurator_t *)cmd->configurator)->vars->x
+
+static void on_config_websocket_timeout(h2o_configurator_command_t *cmd, uint64_t result)
 {
-    auto self = (proxy_configurator_t *)cmd->configurator;
-    return cmd->scanf(node, "%" PRIu64,
-            &self->vars->websocket.timeout);
+    PROXY_VARS(websocket.timeout) = result;
 }
 
-static int on_config_websocket(h2o_configurator_command_t *cmd,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_websocket(h2o_configurator_command_t *cmd,bool result)
 {
-    ssize_t ret = cmd->get_one_of(node, "OFF,ON");
-    if (ret == -1)
-        return -1;
-    ((proxy_configurator_t *)cmd->configurator)->vars->websocket.enabled = (int)ret;
-    return 0;
+    PROXY_VARS(websocket.enabled) = result;
 }
 
-static int on_config_timeout_io(h2o_configurator_command_t *cmd,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_timeout_io(h2o_configurator_command_t *cmd, uint64_t result)
 {
-    auto self = (proxy_configurator_t *)cmd->configurator;
-    return cmd->scanf(node, "%" PRIu64, &self->vars->io_timeout);
+    PROXY_VARS(io_timeout) = result;
 }
 
-static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_timeout_keepalive(h2o_configurator_command_t *cmd, uint64_t result)
 {
-    auto self = (proxy_configurator_t *)cmd->configurator;
-    return cmd->scanf(node, "%" PRIu64,
-            &self->vars->keepalive_timeout);
+    PROXY_VARS(keepalive_timeout) = result;
 }
 
-static int on_config_preserve_host(h2o_configurator_command_t *cmd,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_preserve_host(h2o_configurator_command_t *cmd, bool result)
 {
-    ssize_t ret = cmd->get_one_of(node, "OFF,ON");
-    if (ret == -1)
-        return -1;
-    ((proxy_configurator_t *)cmd->configurator)->vars->preserve_host = (int)ret;
-    return 0;
+    PROXY_VARS(preserve_host) = result;
 }
 
 static int on_config_reverse_url(h2o_configurator_command_t *cmd,

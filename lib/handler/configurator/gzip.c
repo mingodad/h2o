@@ -33,13 +33,9 @@ struct gzip_configurator_t : h2o_configurator_t {
     int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
-static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_gzip(h2o_configurator_command_t *cmd, bool result)
 {
-    auto self = (gzip_configurator_t *)cmd->configurator;
-
-    if ((self->vars->on = (int)cmd->get_one_of(node, "OFF,ON")) == -1)
-        return -1;
-    return 0;
+    ((gzip_configurator_t *)cmd->configurator)->vars->on = result;
 }
 
 int gzip_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)

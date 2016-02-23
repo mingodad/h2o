@@ -34,14 +34,9 @@ struct reproxy_configurator_t : h2o_configurator_t {
     int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
-static int on_config_reproxy(h2o_configurator_command_t *cmd,
-        h2o_configurator_context_t *ctx, yoml_t *node)
+static void on_config_reproxy(h2o_configurator_command_t *cmd, bool result)
 {
-    ssize_t ret = cmd->get_one_of(node, "OFF,ON");
-    if (ret == -1)
-        return -1;
-    ((reproxy_configurator_t *)cmd->configurator)->vars->enabled = (int)ret;
-    return 0;
+    ((reproxy_configurator_t *)cmd->configurator)->vars->enabled = result;
 }
 
 int reproxy_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
