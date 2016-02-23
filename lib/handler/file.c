@@ -87,11 +87,11 @@ const char **h2o_file_default_index_files = default_index_files;
 
 static int tm_is_lessthan(struct tm *x, struct tm *y)
 {
-#define CMP(f)                     \
-    if (x->f < y->f)               \
-        return 1;                  \
-    else if (x->f > y->f)          \
-        return 0;
+#define CMP(f) \
+    diff = x->f - y->f; \
+    if (diff) return diff < 0;
+
+    int diff;
     CMP(tm_year);
     CMP(tm_mon);
     CMP(tm_mday);
