@@ -71,10 +71,10 @@ static void on_config_etag(h2o_configurator_command_t *cmd, bool result)
     else FILE_VARS(flags) |= H2O_FILE_FLAG_NO_ETAG; //off
 }
 
-static void on_config_send_gzip(h2o_configurator_command_t *cmd, bool result)
+static void on_config_send_compressed(h2o_configurator_command_t *cmd, bool result)
 {
-    if (result) FILE_VARS(flags) |= H2O_FILE_FLAG_SEND_GZIP; //on
-    else FILE_VARS(flags) &= ~H2O_FILE_FLAG_SEND_GZIP; //off
+    if (result) FILE_VARS(flags) |= H2O_FILE_FLAG_SEND_COMPRESSED; //on
+    else FILE_VARS(flags) &= ~H2O_FILE_FLAG_SEND_COMPRESSED; //off
 }
 
 static void on_config_dir_listing(h2o_configurator_command_t *cmd, bool result)
@@ -130,6 +130,7 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 
     cf = h2o_CONFIGURATOR_FLAG(cf | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR);
     self->define_command("file.etag", cf, on_config_etag);
-    self->define_command("file.send-gzip", cf, on_config_send_gzip);
+    self->define_command("file.send-compressed", cf, on_config_send_compressed);
+    self->define_command("file.send-gzip", cf, on_config_send_compressed);
     self->define_command("file.dirlisting", cf, on_config_dir_listing);
 }
