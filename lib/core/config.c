@@ -158,7 +158,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
     if (hostconf->authority.port == H2O_PORT_NOT_SET) {
         hostconf->authority.hostport = hostconf->authority.host;
     } else {
-        size_t hostport_size = hostconf->authority.host.len + sizeof("[]:65535");
+        size_t hostport_size = hostconf->authority.host.len + sizeof("[]:" H2O_UINT16_LONGEST_STR);
         hostconf->authority.hostport.base = h2o_mem_alloc_for<char>(hostport_size);
         const char *hostport_fmt = (strchr(hostconf->authority.host.base, ':') != NULL)
                                     ? "[%s]:%" PRIu16 : "%s:%" PRIu16;

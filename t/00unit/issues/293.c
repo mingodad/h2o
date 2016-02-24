@@ -33,7 +33,7 @@ static void register_authority(h2o_globalconf_t *globalconf, h2o_iovec_t host, u
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, "/");
     h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
 
-    auto authority = h2o_mem_alloc_for<char>(host.len + sizeof(":65535"));
+    auto authority = h2o_mem_alloc_for<char>(host.len + sizeof(":" H2O_UINT16_LONGEST_STR));
     sprintf(authority, "%.*s:%" PRIu16, (int)host.len, host.base, port);
     auto cmds = h2o_mem_alloc_for<h2o_headers_command_t>(2);
     cmds[0] = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, &x_authority, {authority, strlen(authority)}};
