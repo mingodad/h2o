@@ -636,7 +636,7 @@ static int h2o_lua_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
                 //write_error_message(conn, error_msg, error_len);
                 result = 0;
             } else {
-                result = lua_toboolean(L, -1) ? 1 : 0;
+                result = lua_tointeger(L, -1);
             }
         };
         lua_settop(L, saved_top);
