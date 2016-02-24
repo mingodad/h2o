@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <inttypes.h>
 #include <stdint.h>
 #ifdef _WIN32
     #include <ws2tcpip.h>
@@ -34,6 +35,7 @@ extern "C" {
 #endif
 #include <openssl/ssl.h>
 #include "h2o/memory.h"
+#include "h2o/string_.h"
 
 #ifndef H2O_USE_LIBUV
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_POLL || H2O_USE_KQUEUE
@@ -199,6 +201,17 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa);
 
 /**
+ *
+ */
+const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
+int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
+const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
+int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock);
+static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+/**
  * compares socket addresses
  */
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
@@ -233,6 +246,29 @@ void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
 
 /* inline defs */
 
+inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    const char *s = h2o_socket_get_ssl_protocol_version(sock);
+    return s != NULL ? h2o_iovec_t::create(s, strlen(s)) : h2o_iovec_t::create(H2O_STRLIT("-"));
+}
+
+inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    switch (h2o_socket_get_ssl_session_reused(sock)) {
+    case 0:
+        return h2o_iovec_t::create(H2O_STRLIT("0"));
+    case 1:
+        return h2o_iovec_t::create(H2O_STRLIT("1"));
+    default:
+        return h2o_iovec_t::create(H2O_STRLIT("-"));
+    }
+}
+
+inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    const char *s = h2o_socket_get_ssl_cipher(sock);
+    return s != NULL ? h2o_iovec_t::create(s, strlen(s)) : h2o_iovec_t::create(H2O_STRLIT("-"));
+}
 
 #if defined( __cplusplus) && !defined(__c_as_cpp)
 }
