@@ -47,7 +47,7 @@ struct h2o_sendfile_generator_t {
     } file;
     h2o_req_t *req;
     size_t bytesleft;
-    int is_gzip : 1;
+    h2o_iovec_t content_encoding;
     int send_vary : 1;
     int send_etag : 1;
     char *buf;
@@ -225,27 +225,32 @@ static h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *pa
             int flags)
 {
     h2o_filecache_ref_t *fileref;
-    int is_gzip;
+    h2o_iovec_t content_encoding;
 
     *is_dir = 0;
 
     if ((flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0 && req->version >= 0x101) {
         ssize_t header_index;
-        if ((header_index = req->headers.find(H2O_TOKEN_ACCEPT_ENCODING, -1)) != -1 &&
-            h2o_contains_token(req->headers[header_index].value.base, req->headers[header_index].value.len,
-               H2O_STRLIT("gzip"), ',')) {
-            char *gzpath = req->pool.alloc_for<char>(path_len + 4);
-            memcpy(gzpath, path, path_len);
-            strcpy(gzpath + path_len, ".gz");
-            if ((fileref = req->conn->ctx->filecache->open_file(gzpath, O_RDONLY | O_CLOEXEC)) != NULL) {
-                is_gzip = 1;
-                goto Opened;
-            }
+        if ((header_index = req->headers.find(H2O_TOKEN_ACCEPT_ENCODING, -1)) != -1) {
+            h2o_iovec_t accept_encoding = req->headers[header_index].value;
+            char *variant_path = req->pool.alloc_for<char>(path_len + sizeof(".gz"));
+#define TRY_VARIANT(enc, ext) \
+    if(h2o_contains_token(accept_encoding.base, accept_encoding.len, enc, sizeof(enc) - 1, ',')) { \
+        memcpy(variant_path, path, path_len); \
+        strcpy(variant_path + path_len, ext); \
+        if ((fileref = req->conn->ctx->filecache->open_file(variant_path, O_RDONLY | O_CLOEXEC)) != NULL) { \
+            content_encoding = h2o_iovec_t::create(enc, sizeof(enc) - 1); \
+            goto Opened; \
+        } \
+    }
+            TRY_VARIANT("br", ".br");
+            TRY_VARIANT("gzip", ".gz");
+#undef TRY_VARIANT
         }
     }
     if ((fileref = req->conn->ctx->filecache->open_file(path, O_RDONLY | O_CLOEXEC)) == NULL)
         return NULL;
-    is_gzip = 0;
+    content_encoding = (h2o_iovec_t){};
 
 Opened:
     if (S_ISDIR(fileref->st.st_mode)) {
@@ -263,7 +268,7 @@ Opened:
     self->bytesleft = self->file.ref->st.st_size;
     self->ranged.range_count = 0;
     self->ranged.range_infos = NULL;
-    self->is_gzip = is_gzip;
+    self->content_encoding = content_encoding;
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0;
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
 
@@ -304,8 +309,8 @@ static void do_send_file(h2o_sendfile_generator_t *self, h2o_req_t *req, int sta
     self->file.ref->get_last_modified(self->header_bufs.last_modified);
     req->addResponseHeader(H2O_TOKEN_LAST_MODIFIED, self->header_bufs.last_modified, H2O_TIMESTR_RFC1123_LEN);
     add_headers_unconditional(self, req);
-    if (self->is_gzip)
-        req->addResponseHeader(H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
+    if (self->content_encoding.base != NULL)
+        req->addResponseHeader(H2O_TOKEN_CONTENT_ENCODING, self->content_encoding);
     if (self->ranged.range_count == 0)
         req->addResponseHeader(H2O_TOKEN_ACCEPT_RANGES, H2O_STRLIT("bytes"));
     else if (self->ranged.range_count == 1) {
