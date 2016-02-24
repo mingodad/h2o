@@ -1,2 +1,2 @@
 ulimit -n 4096
-./h2o_lua --conf=examples/h2o/h2o-dad.conf
+./h2o --conf=examples/h2o_lua/h2o-dad.conf

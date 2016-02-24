@@ -78,6 +78,9 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
 
+SET(WITH_LUA_DEFAULT "OFF")
+OPTION(WITH_LUA "whether or not to build with mruby support" ${WITH_LUA_DEFAULT})
+
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/include")
     SET(BUNDLED_SSL_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libssl.a" "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libcrypto.a")
@@ -237,6 +240,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/scripting.c
+    lib/handler/configurator/lua.c
     lib/handler/ctest.c
     lib/handler/hello.c
 

@@ -1,0 +1,10 @@
+if [ -L server.crt ] && [ "$(readlink server.crt)" = "server0.crt" ]
+then
+    rm server.crt server.key
+    ln -s fullchain.pem server.crt
+    ln -s privkey.pem server.key
+else
+    rm server.crt server.key
+    ln -s server0.crt server.crt
+    ln -s server0.key server.key
+fi

@@ -75,40 +75,15 @@ struct h2o_lua_handler_t : h2o_scripting_handler_t {
 struct h2o_lua_context_t {
     h2o_lua_handler_t *handler;
     lua_State *L;
-    int proc;
-    /*
-    mrb_value constants;
-    struct {
-        mrb_sym sym_call;
-        mrb_sym sym_close;
-        mrb_sym sym_method;
-        mrb_sym sym_headers;
-        mrb_sym sym_body;
-        mrb_sym sym_async;
-    } symbols;
-    */
 };
-
-struct h2o_lua_chunked_t;
-struct h2o_lua_http_request_context_t;
 
 struct h2o_lua_generator_t : h2o_generator_t {
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
-    h2o_lua_context_t *ctx;
-    //mrb_value rack_input;
-    h2o_lua_chunked_t *chunked;
+    int h2o_generator_idx,
+        h2o_generator_lua_cb_proceed_idx,
+        h2o_generator_lua_cb_data_idx,
+        h2o_generator_lua_cb_stop_idx;
 };
-
-#define H2O_LUA_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
-#define H2O_LUA_CALLBACK_ID_SEND_CHUNKED_EOS -2
-#define H2O_LUA_CALLBACK_ID_HTTP_JOIN_RESPONSE -3
-#define H2O_LUA_CALLBACK_ID_HTTP_FETCH_CHUNK -4
-
-enum { H2O_LUA_CALLBACK_NEXT_ACTION_STOP, H2O_LUA_CALLBACK_NEXT_ACTION_IMMEDIATE, H2O_LUA_CALLBACK_NEXT_ACTION_ASYNC };
-
-/* handler/mruby.c */
-extern __thread h2o_lua_generator_t *h2o_lua_current_generator;
-void h2o_lua__assert_failed(lua_State *L, const char *file, int line);
 
 /* handler/configurator/lua.c */
 h2o_lua_handler_t *h2o_lua_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars);
