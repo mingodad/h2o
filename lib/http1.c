@@ -764,8 +764,8 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     conn->super.ctx = ctx->ctx;
     conn->super.hosts = ctx->hosts;
     conn->super.connected_at = connected_at;
+    conn->super.id = __sync_add_and_fetch(&h2o_connection_id, 1);
     conn->super.callbacks = &callbacks;
-    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
     conn->sock = sock;
     sock->data = conn;
 
