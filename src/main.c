@@ -538,7 +538,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_neverbleed) {
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
-            neverbleed = h2o_mem_alloc_for<neverbleed_t>();
+            neverbleed = h2o_mem_calloc_for<neverbleed_t>();
             if (neverbleed_init(neverbleed, errbuf) != 0) {
                 fprintf(stderr, "%s\n", errbuf);
                 abort();
@@ -594,8 +594,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     { /* create a new entry in the SSL context list */
-        auto ssl_config = h2o_mem_alloc_for<listener_ssl_config_t>();
-        h2o_clearmem(ssl_config);
+        auto ssl_config = h2o_mem_calloc_for<listener_ssl_config_t>();
         listener->ssl.push_back(NULL, ssl_config);
         if (ctx->hostconf != NULL) {
             listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
@@ -672,7 +671,7 @@ static listener_config_t *find_listener(struct sockaddr *addr, socklen_t addrlen
 
 static listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
 {
-    auto listener = h2o_mem_alloc_for<listener_config_t>();
+    auto listener = h2o_mem_calloc_for<listener_config_t>();
 
     memcpy(&listener->addr, addr, addrlen);
     listener->fd = fd;
@@ -683,7 +682,6 @@ static listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t 
         listener->hosts = h2o_mem_alloc_for<h2o_hostconf_t*>();
         listener->hosts[0] = NULL;
     }
-    h2o_clearmem(&listener->ssl);
     listener->proxy_protocol = proxy_protocol;
 
     conf.listeners = h2o_mem_realloc_for<listener_config_t*>(conf.listeners, sizeof(listener_config_t*) * (conf.num_listeners + 1));

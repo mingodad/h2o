@@ -1083,10 +1083,9 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
            log_priority_received_weight} /* http2 */
         }}                               /* loggers */
     };
-    auto conn = h2o_mem_alloc_for<h2o_http2_conn_t>();
+    auto conn = h2o_mem_calloc_for<h2o_http2_conn_t>();
 
     /* init the connection */
-    h2o_clearmem(conn);
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
     conn->super.connected_at = connected_at;

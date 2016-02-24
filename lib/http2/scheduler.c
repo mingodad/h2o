@@ -131,7 +131,7 @@ static void init_node(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_node
 static h2o_http2_scheduler_queue_t *get_queue(h2o_http2_scheduler_node_t *node)
 {
     if (node->_queue == NULL) {
-        node->_queue = h2o_mem_alloc_for<h2o_http2_scheduler_queue_t>();
+        node->_queue = h2o_mem_calloc_for<h2o_http2_scheduler_queue_t>();
         queue_init(node->_queue);
     }
     return node->_queue;

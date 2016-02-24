@@ -311,7 +311,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
 
 void h2o_mruby_handler_t::on_context_init(h2o_context_t *ctx)
 {
-    auto handler_ctx = h2o_mem_alloc_for<h2o_mruby_context_t>();
+    auto handler_ctx = h2o_mem_calloc_for<h2o_mruby_context_t>();
 
     handler_ctx->handler = this;
 

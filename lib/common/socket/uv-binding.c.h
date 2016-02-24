@@ -131,7 +131,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
 
 static h2o_uv_socket_t *create_socket(h2o_loop_t *loop)
 {
-    auto tcp = h2o_mem_alloc_for<uv_tcp_t>();
+    auto tcp = h2o_mem_calloc_for<uv_tcp_t>();
 
     if (uv_tcp_init(loop, tcp) != 0) {
         h2o_mem_free(tcp);

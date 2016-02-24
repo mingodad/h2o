@@ -372,7 +372,7 @@ void h2o_memcached_context_t::remove(h2o_iovec_t key, int flags)
 
 h2o_memcached_context_t *h2o_memcached_context_t::create(const char *host, uint16_t port, size_t num_threads, const char *prefix)
 {
-    auto ctx = h2o_mem_alloc_for<h2o_memcached_context_t>();
+    auto ctx = h2o_mem_calloc_for<h2o_memcached_context_t>();
 
     pthread_mutex_init(&ctx->mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);

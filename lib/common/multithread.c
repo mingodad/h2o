@@ -103,8 +103,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 
 h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
 {
-    auto queue = h2o_mem_alloc_for<h2o_multithread_queue_t>();
-    *queue = {};
+    auto queue = h2o_mem_calloc_for<h2o_multithread_queue_t>();
 
 #if H2O_USE_LIBUV
     uv_async_init(loop, &queue->async, (uv_async_cb)queue_cb);

@@ -41,7 +41,7 @@ static void on_accept_timeout(h2o_timeout_entry_t *entry);
 
 static h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-    auto data = h2o_mem_alloc_for<h2o_accept_data_t>();
+    auto data = h2o_mem_calloc_for<h2o_accept_data_t>();
 
     data->ctx = ctx;
     data->sock = sock;

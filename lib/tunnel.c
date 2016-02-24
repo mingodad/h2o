@@ -110,7 +110,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
 
 h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_socket_t *sock2, h2o_timeout_t *timeout)
 {
-    auto tunnel = h2o_mem_alloc_for<h2o_tunnel_t>();
+    auto tunnel = h2o_mem_calloc_for<h2o_tunnel_t>();
     tunnel->ctx = ctx;
     tunnel->timeout = timeout;
     tunnel->timeout_entry = {};

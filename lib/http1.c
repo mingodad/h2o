@@ -755,7 +755,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
           {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
           {}                                                                       /* http2 */
         }}};
-    auto conn = h2o_mem_alloc_for<h2o_http1_conn_t>();
+    auto conn = h2o_mem_calloc_for<h2o_http1_conn_t>();
 
     /* zero-fill all properties exept req */
     memset(conn, 0, offsetof(h2o_http1_conn_t, req));

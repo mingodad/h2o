@@ -35,10 +35,10 @@ static size_t sz_min(size_t x, size_t y)
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
                                           const h2o_http2_priority_t *received_priority)
 {
-    auto stream = h2o_mem_alloc_for<h2o_http2_stream_t>();
+    auto stream = h2o_mem_calloc_for<h2o_http2_stream_t>();
 
     /* init properties (other than req) */
-    memset(stream, 0, offsetof(h2o_http2_stream_t, req));
+    //memset(stream, 0, offsetof(h2o_http2_stream_t, req));
     stream->stream_id = stream_id;
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;

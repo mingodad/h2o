@@ -314,13 +314,12 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;
 
-    auto entry = h2o_mem_alloc_for<pool_entry_t>();
+    auto entry = h2o_mem_calloc_for<pool_entry_t>();
     if (sock->do_export(&entry->sockinfo) != 0) {
         h2o_mem_free(entry);
         __sync_sub_and_fetch(&pool->_shared.count, 1);
         return -1;
     }
-    h2o_clearmem(&entry->link);
     entry->added_at = h2o_now(h2o_socket_get_loop(sock));
 
     pthread_mutex_lock(&pool->_shared.mutex);

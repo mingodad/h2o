@@ -48,7 +48,7 @@ static unsigned calc_key(h2o_http2_casper_t *casper, const char *path,
 h2o_http2_casper_t *h2o_http2_casper_t::create(unsigned capacity_bits,
         unsigned remainder_bits)
 {
-    auto casper = h2o_mem_alloc_for<h2o_http2_casper_t>();
+    auto casper = h2o_mem_calloc_for<h2o_http2_casper_t>();
 
     h2o_clearmem(&casper->keys);
     casper->capacity_bits = capacity_bits;

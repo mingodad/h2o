@@ -304,7 +304,7 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout
 {
     auto req = self->src_req;
     auto sock = self->client->steal_socket();
-    auto info = h2o_mem_alloc_for<rp_ws_upgrade_info_t>();
+    auto info = h2o_mem_calloc_for<rp_ws_upgrade_info_t>();
     info->upstream_sock = sock;
     info->timeout = timeout;
     info->ctx = req->conn->ctx;

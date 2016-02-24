@@ -66,7 +66,7 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
         }
         /* save the value */
         if (*self->args == NULL)
-            *self->args = h2o_mem_alloc_for<h2o_expires_args_t>();
+            *self->args = h2o_mem_calloc_for<h2o_expires_args_t>();
         (*self->args)->mode = H2O_EXPIRES_MODE_MAX_AGE;
         (*self->args)->data.max_age = value;
     } else {
@@ -83,7 +83,7 @@ int expires_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
     if (this->args[0] != NULL) {
         /* duplicate */
         assert(this->args[0]->mode == H2O_EXPIRES_MODE_MAX_AGE);
-        this->args[1] = h2o_mem_alloc_for<h2o_expires_args_t>();
+        this->args[1] = h2o_mem_calloc_for<h2o_expires_args_t>();
         *this->args[1] = *this->args[0];
     } else {
         this->args[1] = NULL;

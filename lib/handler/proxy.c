@@ -85,18 +85,18 @@ void rp_handler_t::on_context_init(h2o_context_t *ctx)
     if (ctx->globalconf->proxy.io_timeout == this->config.io_timeout && !this->config.websocket.enabled)
         return;
 
-    auto client_ctx = h2o_mem_alloc_for<h2o_http1client_ctx_t>();
+    auto client_ctx = h2o_mem_calloc_for<h2o_http1client_ctx_t>();
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     if (ctx->globalconf->proxy.io_timeout == this->config.io_timeout) {
         client_ctx->io_timeout = &ctx->proxy.io_timeout;
     } else {
-        client_ctx->io_timeout = h2o_mem_alloc_for<h2o_timeout_t>();
+        client_ctx->io_timeout = h2o_mem_calloc_for<h2o_timeout_t>();
         client_ctx->io_timeout->init(client_ctx->loop, this->config.io_timeout);
     }
     if (this->config.websocket.enabled) {
         /* FIXME avoid creating h2o_timeout_t for every path-level context in case the timeout values are the same */
-        client_ctx->websocket_timeout = h2o_mem_alloc_for<h2o_timeout_t>();
+        client_ctx->websocket_timeout = h2o_mem_calloc_for<h2o_timeout_t>();
         client_ctx->websocket_timeout->init(client_ctx->loop, this->config.websocket.timeout);
     } else {
         client_ctx->websocket_timeout = NULL;
@@ -143,7 +143,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf,
     auto self = pathconf->create_handler<rp_handler_t>();
     self->on_req = on_req;
     if (config->keepalive_timeout != 0) {
-        self->sockpool = h2o_mem_alloc_for<h2o_socketpool_t>();
+        self->sockpool = h2o_mem_calloc_for<h2o_socketpool_t>();
         struct sockaddr_un sa;
         const char *to_sa_err;
         if ((to_sa_err = h2o_url_host_to_sun(upstream->host, &sa))

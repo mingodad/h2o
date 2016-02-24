@@ -753,7 +753,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req) {
 }
 
 void h2o_fastcgi_handler_t::on_context_init(h2o_context_t *ctx) {
-    auto handler_ctx = h2o_mem_alloc_for<fcgi_context_t>();
+    auto handler_ctx = h2o_mem_calloc_for<fcgi_context_t>();
 
     /* use the first event loop for handling timeouts of the socket pool */
     if (this->sockpool.timeout == UINT64_MAX)

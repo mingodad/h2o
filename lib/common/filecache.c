@@ -49,7 +49,7 @@ static inline void release_from_cache(h2o_filecache_t *cache, khiter_t iter)
 
 h2o_filecache_t *h2o_filecache_t::create(size_t capacity)
 {
-    auto cache = h2o_mem_alloc_for<h2o_filecache_t>();
+    auto cache = h2o_mem_calloc_for<h2o_filecache_t>();
 
     cache->hash_table = kh_init(opencache_set);
     cache->lru.init_anchor();
