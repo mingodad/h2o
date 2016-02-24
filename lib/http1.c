@@ -757,7 +757,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         }}};
     auto conn = h2o_mem_alloc_for<h2o_http1_conn_t>();
 
-    /* zero-fill all properties expect req */
+    /* zero-fill all properties exept req */
     memset(conn, 0, offsetof(h2o_http1_conn_t, req));
 
     /* init properties that need to be non-zero */
@@ -765,6 +765,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     conn->super.hosts = ctx->hosts;
     conn->super.connected_at = connected_at;
     conn->super.callbacks = &callbacks;
+    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
     conn->sock = sock;
     sock->data = conn;
 

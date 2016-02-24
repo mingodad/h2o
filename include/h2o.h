@@ -870,6 +870,10 @@ struct h2o_conn_t {
      */
     struct timeval connected_at;
     /**
+     * connection id
+     */
+    uint64_t id;
+    /**
      * callbacks
      */
     const h2o_conn_callbacks_t *callbacks;
@@ -1314,6 +1318,11 @@ extern const h2o_iovec_t *h2o_alpn_protocols;
  */
 void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
+ * creates a new connection
+ */
+static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                         const h2o_conn_callbacks_t *callbacks);
+/**
  * setups accept context for async SSL resumption
  */
 void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
@@ -1327,6 +1336,8 @@ size_t h2o_stringify_protocol_version(char *dst, int version);
 h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
                                                    const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                                    h2o_iovec_t *base_path);
+
+extern uint64_t h2o_connection_id;
 
 /* request */
 
@@ -1624,6 +1635,19 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
+inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                         const h2o_conn_callbacks_t *callbacks)
+{
+    auto conn = (h2o_conn_t *)h2o_mem_alloc_for<char>(sz);
+
+    conn->ctx = ctx;
+    conn->hosts = hosts;
+    conn->connected_at = connected_at;
+    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+    conn->callbacks = callbacks;
+
+    return conn;
+}
 
 
 inline void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot)

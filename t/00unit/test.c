@@ -64,10 +64,11 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **ho
     static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
     auto conn = h2o_mem_alloc_for<h2o_loopback_conn_t>();
 
-    memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
+    memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_loopback_conn_t, req) - sizeof(conn->super));
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
     conn->super.callbacks = &callbacks;
+    conn->super.id = __sync_add_and_fetch(&h2o_connection_id, 1);
     h2o_req_t::init(&conn->req, &conn->super, NULL);
     h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;

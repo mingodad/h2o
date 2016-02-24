@@ -1091,6 +1091,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->super.hosts = hosts;
     conn->super.connected_at = connected_at;
     conn->super.callbacks = &callbacks;
+    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);
