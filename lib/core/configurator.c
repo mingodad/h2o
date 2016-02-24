@@ -696,7 +696,7 @@ static int on_config_u64(h2o_configurator_command_t *cmd,
 {
     uint64_t result;
     int rc = cmd->scanf(node, "%" PRIu64, &result);
-    if(rc) ((h2o_configurator_command_u64_cb)(cmd->cb_data))(cmd, result);
+    if(rc == 0) ((h2o_configurator_command_u64_cb)(cmd->cb_data))(cmd, result);
     return rc;
 }
 
@@ -711,7 +711,7 @@ static int on_config_int(h2o_configurator_command_t *cmd,
 {
     int result;
     int rc = cmd->scanf(node, "%d", &result);
-    if(rc) ((h2o_configurator_command_int_cb)(cmd->cb_data))(cmd, result);
+    if(rc == 0) ((h2o_configurator_command_int_cb)(cmd->cb_data))(cmd, result);
     return rc;
 }
 
