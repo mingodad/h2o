@@ -79,6 +79,7 @@ struct h2o_lua_context_t {
 
 struct h2o_lua_generator_t : h2o_generator_t {
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
+    lua_State *L;
     int h2o_generator_idx,
         h2o_generator_lua_cb_proceed_idx,
         h2o_generator_lua_cb_data_idx,

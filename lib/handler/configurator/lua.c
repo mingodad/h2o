@@ -213,6 +213,18 @@ static int lua_h2o_req_set_int_response_content_length(lua_State *L)
     return 0;
 }
 
+static int lua_h2o_req_console(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    int top = lua_gettop(L);
+    for(int i=2; i <= top; ++i)
+    {
+        fprintf(stderr, "%s\t", lua_tostring(L, i));
+    }
+    fprintf(stderr, "\n");
+    return 0;
+}
+
 static int lua_h2o_req_send(lua_State *L)
 {
     CHECK_H2O_REQUEST();
@@ -244,9 +256,8 @@ static int lua_h2o_req_send(lua_State *L)
 static void do_lua_generator_proceed(h2o_generator_t *generator, h2o_req_t *req)
 {
     auto self = (h2o_lua_generator_t *)generator;
-    auto lua_ctx = (h2o_lua_context_t*)req->conn->ctx;
 
-    lua_State *L = lua_ctx->L;
+    lua_State *L = self->L;
     if(L)
     {
         int saved_top = lua_gettop(L);
@@ -279,9 +290,8 @@ static void do_lua_generator_proceed(h2o_generator_t *generator, h2o_req_t *req)
 static void do_lua_generator_stop(h2o_generator_t *generator, h2o_req_t *req)
 {
     auto self = (h2o_lua_generator_t *)generator;
-    auto lua_ctx = (h2o_lua_context_t*)req->conn->ctx;
 
-    lua_State *L = lua_ctx->L;
+    lua_State *L = self->L;
     if(L)
     {
         int saved_top = lua_gettop(L);
@@ -320,6 +330,17 @@ static void do_lua_generator_stop(h2o_generator_t *generator, h2o_req_t *req)
     }
 }
 
+static void on_generator_dispose(void *_generator)
+{
+    auto lg = (h2o_lua_generator_t *)_generator;
+
+    lg->req = NULL;
+    luaL_unref(lg->L, LUA_REGISTRYINDEX, lg->h2o_generator_lua_cb_proceed_idx);
+    luaL_unref(lg->L, LUA_REGISTRYINDEX, lg->h2o_generator_lua_cb_stop_idx);
+    luaL_unref(lg->L, LUA_REGISTRYINDEX, lg->h2o_generator_idx);
+    if(lg->h2o_generator_lua_cb_data_idx) luaL_unref(lg->L, LUA_REGISTRYINDEX, lg->h2o_generator_lua_cb_data_idx);
+}
+
 static int lua_h2o_req_start_response(lua_State *L)
 {
     CHECK_H2O_REQUEST();
@@ -327,7 +348,9 @@ static int lua_h2o_req_start_response(lua_State *L)
     if (lua_type(L, 2) != LUA_TFUNCTION) luaL_error(L, "function to proceed expected");
     if (lua_type(L, 3) != LUA_TFUNCTION) luaL_error(L, "function to stop expected");
 
-    auto lg = (h2o_lua_generator_t*)lua_newuserdata(L, sizeof(h2o_lua_generator_t));
+    auto lg = req->pool.alloc_shared_for<h2o_lua_generator_t>(1, on_generator_dispose);
+    h2o_clearmem(lg);
+    lg->L = L;
     lg->proceed = do_lua_generator_proceed;
     lg->stop = do_lua_generator_stop;
 
@@ -346,7 +369,7 @@ static int lua_h2o_req_start_response(lua_State *L)
 
     req->start_response(lg);
     //trying to call send without seting req->reazon segfaults
-    //h2o_send(req, NULL, 0, 0);
+    req->send(NULL, 0, 0);
     return 0;
 }
 
@@ -368,6 +391,7 @@ static const luaL_reg reqFunctions[] = {
     LUA_REG_REQ_GET_INT_FUNC(http1_is_persistent),
     {"header", lua_h2o_req_get_set_header},
     {"send", lua_h2o_req_send},
+    {"console", lua_h2o_req_console},
     {"start_response", lua_h2o_req_start_response},
     {"response_status", lua_h2o_req_set_int_response_status},
     {"response_reason", lua_h2o_req_set_str_response_reason},
@@ -623,7 +647,7 @@ static int h2o_lua_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
         lua_pushcfunction(L, traceback);  /* push traceback function */
         int error_func = lua_gettop(L);
 
-        lua_getglobal(L, "h2oManageRequest");
+        lua_getglobal(L, "h2oHandleRequest");
         if(lua_isfunction(L,-1)) {
             *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
             luaL_getmetatable(L, H2O_REQUEST_METATABLE);
