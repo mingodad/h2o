@@ -290,9 +290,7 @@ static char *append_unsafe_string(char *pos, const char *src, size_t len)
     return pos;
 }
 
-typedef socklen_t (*address_cb)(h2o_conn_t *conn, struct sockaddr *sa);
-
-static char *append_addr(char *pos, address_cb cb, h2o_conn_t *conn)
+static char *append_addr(char *pos, h2o_get_address_info_cb cb, h2o_conn_t *conn)
 {
     struct sockaddr_storage ss;
     socklen_t sslen;
@@ -311,7 +309,7 @@ Fail:
     return pos;
 }
 
-static char *append_port(char *pos, address_cb cb, h2o_conn_t *conn)
+static char *append_port(char *pos, h2o_get_address_info_cb cb, h2o_conn_t *conn)
 {
     struct sockaddr_storage ss;
     socklen_t sslen;

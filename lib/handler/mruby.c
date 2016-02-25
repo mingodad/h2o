@@ -367,25 +367,21 @@ static void report_exception(h2o_req_t *req, mrb_state *mrb)
 }
 
 static void stringify_address(h2o_conn_t *conn,
-        socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *), mrb_state *mrb,
+        h2o_get_address_info_cb cb, mrb_state *mrb,
         mrb_value *host, mrb_value *port)
 {
-    struct sockaddr_storage ss;
-    socklen_t sslen;
-    char buf[NI_MAXHOST];
-
+    h2o_socket_address remote_addr = {};
     *host = mrb_nil_value();
     *port = mrb_nil_value();
 
-    if ((sslen = cb(conn, (sockaddr *)&ss)) == 0)
+    if(h2o_get_address_info(remote_addr, conn, cb))
         return;
-    size_t l = h2o_socket_getnumerichost((sockaddr *)&ss, sslen, buf);
-    if (l != SIZE_MAX)
-        *host = mrb_str_new(mrb, buf, l);
-    int32_t p = h2o_socket_getport((sockaddr *)&ss);
-    if (p != -1) {
-        l = (int)sprintf(buf, "%" PRIu16, (uint16_t)p);
-        *port = mrb_str_new(mrb, buf, l);
+
+    if (remote_addr.remote_addr_len)
+        *host = mrb_str_new(mrb, remote_addr.remote_addr, remote_addr.remote_addr_len);
+    if (remote_addr.port) {
+        int l = (int)sprintf(remote_addr.remote_addr, "%" PRIu16, remote_addr.port);
+        *port = mrb_str_new(mrb, remote_addr.remote_addr, l);
     }
 }
 

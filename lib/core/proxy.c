@@ -107,15 +107,12 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
 static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake)
 {
     h2o_iovec_t buf;
-    size_t offset = 0, remote_addr_len = SIZE_MAX;
-    char remote_addr[NI_MAXHOST];
-    struct sockaddr_storage ss;
-    socklen_t sslen;
+    size_t offset = 0;
+    h2o_socket_address remote_addr = {};
     h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
 
     /* for x-f-f */
-    if ((sslen = req->conn->callbacks->get_peername(req->conn, (sockaddr *)&ss)) != 0)
-        remote_addr_len = h2o_socket_getnumerichost((sockaddr *)&ss, sslen, remote_addr);
+    req->conn->get_peername(remote_addr);
 
     /* build response */
     buf.len = req->method.len + req->path.len + req->authority.len + 512;
@@ -213,9 +210,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
     APPEND_CHAR('\r');
     APPEND_CHAR('\n');
-    if (remote_addr_len != SIZE_MAX) {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
-        APPEND(remote_addr, remote_addr_len);
+    if (remote_addr.remote_addr_len != 0) {
+        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr.remote_addr_len);
+        APPEND(remote_addr.remote_addr, remote_addr.remote_addr_len);
     } else {
         FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
     }

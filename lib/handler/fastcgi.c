@@ -191,22 +191,18 @@ static void *append_pair(h2o_mem_pool_t *pool, iovec_vector_t *blocks,
 static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs,
         const char *addrlabel, size_t addrlabel_len,
         const char *portlabel, size_t portlabel_len,
-        socklen_t(*cb)(h2o_conn_t *conn, struct sockaddr *)) {
-    struct sockaddr_storage ss;
-    socklen_t sslen;
-    char buf[NI_MAXHOST];
+        h2o_get_address_info_cb cb) {
+    h2o_socket_address remote_addr = {};
 
-    if ((sslen = cb(req->conn, (sockaddr *) &ss)) == 0)
+    if(h2o_get_address_info(remote_addr, req->conn, cb))
         return;
 
-    size_t l = h2o_socket_getnumerichost((sockaddr *) &ss, sslen, buf);
-    if (l != SIZE_MAX)
-        append_pair(&req->pool, vecs, addrlabel, addrlabel_len, buf, l);
-    int32_t port = h2o_socket_getport((sockaddr *) &ss);
-    if (port != -1) {
-        char buf[6];
-        int l = sprintf(buf, "%" PRIu16, (uint16_t) port);
-        append_pair(&req->pool, vecs, portlabel, portlabel_len, buf, (size_t) l);
+    if (remote_addr.remote_addr_len)
+        append_pair(&req->pool, vecs, addrlabel, addrlabel_len,
+                    remote_addr.remote_addr, remote_addr.remote_addr_len);
+    if (remote_addr.port) {
+        int l = sprintf(remote_addr.remote_addr, "%" PRIu16, remote_addr.port);
+        append_pair(&req->pool, vecs, portlabel, portlabel_len, remote_addr.remote_addr, (size_t) l);
     }
 }
 

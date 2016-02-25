@@ -816,15 +816,26 @@ struct h2o_res_t {
     h2o_mime_attributes_t *mime_attr;
 };
 
+struct h2o_socket_address {
+    struct sockaddr_storage ss;
+    uint16_t port;
+    uint16_t remote_addr_len;
+    char remote_addr[NI_MAXHOST];
+};
+
+typedef socklen_t (*h2o_get_address_info_cb)(h2o_conn_t *conn, struct sockaddr *sa);
+
+int h2o_get_address_info(h2o_socket_address &sa, h2o_conn_t *conn, h2o_get_address_info_cb cb);
+
 struct h2o_conn_callbacks_t {
     /**
      * getsockname (return size of the obtained address, or 0 if failed)
      */
-    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
+    h2o_get_address_info_cb get_sockname;
     /**
      * getpeername (return size of the obtained address, or 0 if failed)
      */
-    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+    h2o_get_address_info_cb get_peername;
     /**
      * callback for server push (may be NULL)
      */
@@ -877,6 +888,16 @@ struct h2o_conn_t {
      * callbacks
      */
     const h2o_conn_callbacks_t *callbacks;
+
+    int get_sockname(h2o_socket_address &sa)
+    {
+        return h2o_get_address_info(sa, this, this->callbacks->get_sockname);
+    }
+
+    int get_peername(h2o_socket_address &sa)
+    {
+        return h2o_get_address_info(sa, this, this->callbacks->get_peername);
+    }
 };
 
 /**
@@ -1193,6 +1214,10 @@ struct h2o_req_t {
     void addResponseHeader(const h2o_token_t *token, const h2o_iovec_t value)
     {
         this->res.headers.add(&this->pool, token, value.base, value.len);
+    }
+    void addResponseHeader(const h2o_iovec_t key, const h2o_iovec_t value)
+    {
+        this->res.headers.add(&this->pool, key.base, key.len, 1, value.base, value.len);
     }
     /**
      * logs an error

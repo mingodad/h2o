@@ -615,3 +615,15 @@ int h2o_req_t::puth_path_in_link_header(const char *value, size_t value_len)
     this->conn->callbacks->push_path(this, path.base, path.len);
     return 0;
 }
+
+int h2o_get_address_info(h2o_socket_address &sa, h2o_conn_t *conn, h2o_get_address_info_cb cb)
+{
+    socklen_t sslen;
+    if ((sslen = cb(conn, (sockaddr *)&sa.ss)) == 0)
+        return -1;
+    sa.remote_addr_len = (uint16_t)h2o_socket_getnumerichost((sockaddr *) &sa.ss, sslen, sa.remote_addr);
+    sa.port = (uint16_t)h2o_socket_getport((sockaddr *) &sa.ss);
+
+    return 0;
+}
+
