@@ -22,43 +22,45 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-struct gzip_config_vars_t {
+struct compress_config_vars_t {
     int on;
 };
 
-struct gzip_configurator_t : h2o_configurator_t {
-    struct gzip_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+struct compress_configurator_t : h2o_configurator_t {
+    struct compress_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 
     int enter(h2o_configurator_context_t *ctx, yoml_t *node) override;
     int exit(h2o_configurator_context_t *ctx, yoml_t *node) override;
 };
 
-static void on_config_gzip(h2o_configurator_command_t *cmd, bool result)
+static void on_config_compress(h2o_configurator_command_t *cmd, bool result)
 {
-    ((gzip_configurator_t *)cmd->configurator)->vars->on = result;
+    ((compress_configurator_t *)cmd->configurator)->vars->on = result;
 }
 
-int gzip_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
+int compress_configurator_t::enter(h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ++this->vars;
     this->vars[0] = this->vars[-1];
     return 0;
 }
 
-int gzip_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
+int compress_configurator_t::exit(h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (ctx->pathconf != NULL && this->vars->on)
-        h2o_gzip_register(ctx->pathconf);
+        h2o_compress_register(ctx->pathconf);
 
     --this->vars;
     return 0;
 }
 
-void h2o_gzip_register_configurator(h2o_globalconf_t *conf)
+void h2o_compress_register_configurator(h2o_globalconf_t *conf)
 {
-    auto c = conf->configurator_create<gzip_configurator_t>();
+    auto c = conf->configurator_create<compress_configurator_t>();
 
+    c->define_command("compress", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_compress);
     c->define_command("gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_gzip);
+                                    on_config_compress);
     c->vars = c->_vars_stack;
 }

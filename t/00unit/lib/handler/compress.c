@@ -20,9 +20,11 @@
  * IN THE SOFTWARE.
  */
 #include <stdlib.h>
+#include <zlib.h>
 #include "../../test.h"
 #define BUF_SIZE 256
-#include "../../../../lib/handler/gzip.c"
+#include "../../../../lib/handler/compress/gzip.c"
+#include "../../../../lib/handler/compress.c"
 
 static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expected, size_t expectedlen)
 {
@@ -30,8 +32,8 @@ static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expecte
     size_t decbuf_size = (expectedlen+1);
     char decbuf[decbuf_size];
 
-    zs.zalloc = gzip_encoder_alloc;
-    zs.zfree = gzip_encoder_free;
+    zs.zalloc = alloc_cb;
+    zs.zfree = free_cb;
     zs.next_out = (Bytef *)decbuf;
     zs.avail_out = (unsigned)decbuf_size;
 
@@ -63,19 +65,16 @@ static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expecte
 void test_gzip_simple(void)
 {
     h2o_mem_pool_t pool;
-    iovec_vector_t bufs = {};
+    h2o_iovec_t inbuf, *outbufs;
+    size_t outbufcnt;
 
     pool.init();
 
-    z_stream zs = {};
-    zs.zalloc = gzip_encoder_alloc;
-    zs.zfree = gzip_encoder_free;
-    deflateInit2(&zs, Z_BEST_SPEED, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
-    expand_buf(&pool, &bufs);
-    size_t bufindex = compress_chunk(&pool, &zs, H2O_STRLIT("hello world"), Z_FINISH, &bufs, 0);
-    deflateEnd(&zs);
+    h2o_compress_context_t *compressor = h2o_compress_gzip_open(&pool);
+    inbuf = h2o_iovec_t::create(H2O_STRLIT("hello world"));
+    compressor->compress(compressor, &inbuf, 1, 1, &outbufs, &outbufcnt);
 
-    check_result(bufs.entries, bufindex + 1, H2O_STRLIT("hello world"));
+    check_result(outbufs, outbufcnt, H2O_STRLIT("hello world"));
 
     pool.clear();
 }
@@ -100,25 +99,17 @@ void test_gzip_multi(void)
     "hedge.\n\n"
 
     h2o_mem_pool_t pool;
-    iovec_vector_t bufs = {};
+    h2o_iovec_t inbufs[] = {{H2O_STRLIT(P1)}, {H2O_STRLIT(P2)}, {H2O_STRLIT(P3)}}, *outbufs;
+    size_t outbufcnt;
 
     pool.init();
 
-    z_stream zs = {};
-    zs.zalloc = gzip_encoder_alloc;
-    zs.zfree = gzip_encoder_free;
-    deflateInit2(&zs, Z_BEST_SPEED, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
-    expand_buf(&pool, &bufs);
+    h2o_compress_context_t *compressor = h2o_compress_gzip_open(&pool);
+    compressor->compress(compressor, inbufs, sizeof(inbufs) / sizeof(inbufs[0]), 1, &outbufs, &outbufcnt);
 
-    size_t bufindex = compress_chunk(&pool, &zs, H2O_STRLIT(P1), Z_NO_FLUSH, &bufs, 0);
-    bufindex = compress_chunk(&pool, &zs, H2O_STRLIT(P2), Z_SYNC_FLUSH, &bufs, bufindex);
-    bufindex = compress_chunk(&pool, &zs, H2O_STRLIT(P3), Z_SYNC_FLUSH, &bufs, bufindex);
-    bufindex = compress_chunk(&pool, &zs, "", 0, Z_FINISH, &bufs, bufindex);
-    deflateEnd(&zs);
+    assert(outbufcnt > 1); /* we want to test multi-vec output */
 
-    assert(bufindex != 0); /* we want to test multi-vec output */
-
-    check_result(bufs.entries, bufindex + 1, H2O_STRLIT(P1 P2 P3));
+    check_result(outbufs, outbufcnt, H2O_STRLIT(P1 P2 P3));
 
     pool.clear();
 

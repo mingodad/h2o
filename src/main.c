@@ -1481,11 +1481,11 @@ static void setup_configurators(void)
     }
 #define register_configurator(cf) h2o_##cf##_register_configurator(&conf.globalconf);
     register_configurator(access_log);
+    register_configurator(compress);
     register_configurator(expires);
     register_configurator(errordoc);
     register_configurator(fastcgi);
     register_configurator(file);
-    register_configurator(gzip);
     register_configurator(headers);
     register_configurator(proxy);
     register_configurator(reproxy);
