@@ -267,6 +267,7 @@
 		<Unit filename="include/h2o/ctest_.h" />
 		<Unit filename="include/h2o/file.h" />
 		<Unit filename="include/h2o/filecache.h" />
+		<Unit filename="include/h2o/hello_.h" />
 		<Unit filename="include/h2o/hostinfo.h" />
 		<Unit filename="include/h2o/http1.h" />
 		<Unit filename="include/h2o/http1client.h" />
@@ -432,6 +433,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/headers.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/hello.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/mimemap.c">
