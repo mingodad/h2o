@@ -129,6 +129,7 @@ h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool)
 {
     auto self = pool->alloc_shared_for<gzip_context_t>(1, do_free);
 
+    self->super.name = h2o_iovec_init(H2O_STRLIT("gzip"));
     self->super.compress = do_compress;
     self->zs.zalloc = alloc_cb;
     self->zs.zfree = free_cb;

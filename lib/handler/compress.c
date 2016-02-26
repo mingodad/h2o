@@ -38,11 +38,6 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
     h2o_iovec_t *outbufs;
     size_t outbufcnt;
 
-    /* initialize compressor */
-    if (self->compressor == NULL)
-        self->compressor = h2o_compress_gzip_open(&req->pool);
-
-    /* compress */
     self->compressor->compress(self->compressor, inbufs, inbufcnt, is_final, &outbufs, &outbufcnt);
 
     /* send next */
@@ -52,6 +47,8 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     compress_encoder_t *encoder;
+    int compressible_types;
+    h2o_compress_context_t *compressor;
     ssize_t i;
     size_t content_encoding_header_index, accept_ranges_header_index;
 
@@ -73,6 +70,9 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         goto Next;
     if (!h2o_contains_token(req->headers.entries[i].value.base, req->headers.entries[i].value.len, H2O_STRLIT("gzip"), ','))
         goto Next;
+    /* skip if failed to gather the list of compressible types */
+    if ((compressible_types = h2o_get_compressible_types(&req->headers)) == 0)
+        goto Next;
 
     content_encoding_header_index = SIZE_MAX, accept_ranges_header_index = SIZE_MAX;
     /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges */
@@ -87,9 +87,21 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     if (content_encoding_header_index != SIZE_MAX)
         goto Next;
 
+    /* open the compressor */
+#if H2O_USE_BROTLI
+    if ((compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
+        compressor = h2o_compress_brotli_open(&req->pool);
+    } else
+#endif
+    if ((compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {
+        compressor = h2o_compress_gzip_open(&req->pool);
+    } else {
+        goto Next;
+    }
+
     /* adjust the response headers */
     req->res.content_length = SIZE_MAX;
-    req->addResponseHeader(H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
+    req->addResponseHeader(H2O_TOKEN_CONTENT_ENCODING, compressor->name);
     req->addResponseHeader(H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
     if (accept_ranges_header_index != SIZE_MAX) {
         req->res.headers[accept_ranges_header_index].value = h2o_iovec_t::create(H2O_STRLIT("none"));
@@ -101,8 +113,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     encoder = (compress_encoder_t *)req->add_ostream(sizeof(*encoder), slot);
     encoder->super.do_send = do_send;
     slot = &encoder->super.next;
-
-    encoder->compressor = NULL;
+    encoder->compressor = compressor;
 
     /* adjust preferred chunk size (compress by 8192 bytes) */
     if (req->preferred_chunk_size > BUF_SIZE)
