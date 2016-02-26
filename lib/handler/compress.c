@@ -27,10 +27,15 @@
 #define BUF_SIZE 8192
 #endif
 
-typedef struct st_compress_encoder_t {
+struct st_compress_filter_t {
+    h2o_filter_t super;
+    h2o_compress_args_t args;
+};
+
+struct st_compress_encoder_t {
     h2o_ostream_t super;
     h2o_compress_context_t *compressor;
-} compress_encoder_t;
+};
 
 static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
@@ -44,9 +49,10 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
     req->send_next(&self->super, outbufs, outbufcnt, is_final);
 }
 
-static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
+static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    compress_encoder_t *encoder;
+    struct st_compress_filter_t *self = (void *)_self;
+    struct st_compress_encoder_t *encoder;
     int compressible_types;
     h2o_compress_context_t *compressor;
     ssize_t i;
@@ -89,12 +95,12 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 
     /* open the compressor */
 #if H2O_USE_BROTLI
-    if ((compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
-        compressor = h2o_compress_brotli_open(&req->pool, req->res.content_length);
+    if (self->args.brotli.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
+        compressor = h2o_compress_brotli_open(&req->pool, self->args.brotli.quality, req->res.content_length);
     } else
 #endif
-    if ((compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {
-        compressor = h2o_compress_gzip_open(&req->pool);
+    if (self->args.gzip.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {
+        compressor = h2o_compress_gzip_open(&req->pool, self->args.gzip.quality);
     } else {
         goto Next;
     }
@@ -123,8 +129,9 @@ Next:
     req->setup_next_ostream(slot);
 }
 
-void h2o_compress_register(h2o_pathconf_t *pathconf)
+void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args)
 {
-    auto self = pathconf->create_filter<h2o_filter_t>();
+    auto self = pathconf->create_filter<compress_filter_t>();
     self->on_setup_ostream = on_setup_ostream;
+    self->args = *args;
 }

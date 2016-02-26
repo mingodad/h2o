@@ -15,14 +15,21 @@ hosts:
         file.dir: @{[DOC_ROOT]}
       /on:
         file.dir: @{[DOC_ROOT]}
-        gzip: ON
+        compress: ON
       /off-by-mime:
         file.dir: @{[DOC_ROOT]}
-        gzip: ON
+        compress: ON
         file.mime.settypes:
           text/plain:
             extensions: [".txt"]
             is_compressible: NO
+      /compress-jpg:
+        file.dir: @{[DOC_ROOT]}
+        compress: ON
+        file.mime.settypes:
+          image/jpg:
+            extensions: [".jpg"]
+            is_compressible: YES
 EOT
 
 run_with_curl($server, sub {
