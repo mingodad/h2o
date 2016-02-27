@@ -20,7 +20,7 @@
  * IN THE SOFTWARE.
  */
  extern "C" {
-#include "picohttpparser.h"
+#include "h2o/httpparser.h"
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/error.h>
@@ -113,7 +113,7 @@ static void on_dispose(void *_ctx)
 }
 
 static void post_response(h2o_mruby_http_request_context_t *ctx,
-        int status, const phr_header *headers_sorted,
+        int status, const PHR_HEADER *headers_sorted,
                           size_t num_headers)
 {
     mrb_state *mrb = ctx->generator->ctx->mrb;
@@ -134,12 +134,12 @@ static void post_response(h2o_mruby_http_request_context_t *ctx,
             h2o_phr_header_name_is_literal(headers_sorted[i], "transfer-encoding"))
             continue;
         /* build and set the hash entry */
-        mrb_value k = mrb_str_new(mrb, headers_sorted[i].name, headers_sorted[i].name_len);
-        mrb_value v = mrb_str_new(mrb, headers_sorted[i].value, headers_sorted[i].value_len);
+        mrb_value k = mrb_str_new(mrb, PHR_HEADER_NAME(headers_sorted[i].), PHR_HEADER_NAME_LEN(headers_sorted[i].));
+        mrb_value v = mrb_str_new(mrb, PHR_HEADER_VALUE(headers_sorted[i].), PHR_HEADER_VALUE_LEN(headers_sorted[i].));
         while (i + 1 < num_headers && h2o_phr_header_name_cmp(headers_sorted[i], headers_sorted[i + 1])) {
             ++i;
             v = mrb_str_cat_lit(mrb, v, "\n");
-            v = mrb_str_cat(mrb, v, headers_sorted[i].value, headers_sorted[i].value_len);
+            v = mrb_str_cat(mrb, v, PHR_HEADER_VALUE(headers_sorted[i].), PHR_HEADER_VALUE_LEN(headers_sorted[i].));
         }
         mrb_hash_set(mrb, headers_hash, k, v);
     }
@@ -170,7 +170,7 @@ static void post_response(h2o_mruby_http_request_context_t *ctx,
 static void post_error(h2o_mruby_http_request_context_t *ctx,
         const char *errstr)
 {
-    static const phr_header headers_sorted[] =
+    static const PHR_HEADER headers_sorted[] =
         {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
 
     ctx->client = NULL;
@@ -236,18 +236,18 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
 static int headers_sort_cb(const void *_x, const void *_y)
 {
-    auto x = (const struct phr_header *)_x, y = (const struct phr_header *)_y;
+    auto x = (const PHR_HEADER *)_x, y = (const PHR_HEADER *)_y;
 
-    if (x->name_len < y->name_len)
+    if (PHR_HEADER_NAME_LEN(x->) < PHR_HEADER_NAME_LEN(y->))
         return -1;
-    if (x->name_len > y->name_len)
+    if (PHR_HEADER_NAME_LEN(x->) > PHR_HEADER_NAME_LEN(y->))
         return 1;
-    return memcmp(x->name, y->name, x->name_len);
+    return memcmp(PHR_HEADER_NAME(x->), PHR_HEADER_NAME(y->), PHR_HEADER_NAME_LEN(x->));
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client,
         const char *errstr, int minor_version, int status,
-        h2o_iovec_t msg, phr_header *headers, size_t num_headers)
+        h2o_iovec_t msg, PHR_HEADER *headers, size_t num_headers)
 {
     auto ctx = (h2o_mruby_http_request_context_t *)client->data;
 

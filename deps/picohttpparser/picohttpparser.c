@@ -237,7 +237,7 @@ static const char* parse_http_version(const char* buf, const char* buf_end,
 }
 
 static const char* parse_headers(const char* buf, const char* buf_end,
-                                 struct phr_header* headers,
+                                 PHR_HEADER* headers,
                                  size_t* num_headers, size_t max_headers,
                                  int* ret)
 {
@@ -262,7 +262,7 @@ static const char* parse_headers(const char* buf, const char* buf_end,
       }
       /* parsing name, but do not discard SP before colon, see
        * http://www.mozilla.org/security/announce/2006/mfsa2006-33.html */
-      headers[*num_headers].name = buf;
+      PHR_HEADER_NAME(headers[*num_headers].) = buf;
       static const char ranges1[] __attribute__((aligned(16))) = "::\x00\037";
       int found;
       buf = findchar_fast(buf, buf_end, ranges1, sizeof(ranges1) - 1, &found);
@@ -279,7 +279,7 @@ static const char* parse_headers(const char* buf, const char* buf_end,
         ++buf;
         CHECK_EOF();
       }
-      headers[*num_headers].name_len = buf - headers[*num_headers].name;
+      PHR_HEADER_NAME_LEN(headers[*num_headers].) = buf - PHR_HEADER_NAME(headers[*num_headers].);
       ++buf;
       for (; ; ++buf) {
         CHECK_EOF();
@@ -288,11 +288,11 @@ static const char* parse_headers(const char* buf, const char* buf_end,
         }
       }
     } else {
-      headers[*num_headers].name = NULL;
-      headers[*num_headers].name_len = 0;
+      PHR_HEADER_NAME(headers[*num_headers].) = NULL;
+      PHR_HEADER_NAME_LEN(headers[*num_headers].) = 0;
     }
-    if ((buf = get_token_to_eol(buf, buf_end, &headers[*num_headers].value,
-                                &headers[*num_headers].value_len, ret))
+    if ((buf = get_token_to_eol(buf, buf_end, PHR_HEADER_VALUE(&headers[*num_headers].),
+                                PHR_HEADER_VALUE_LEN(&headers[*num_headers].), ret))
         == NULL) {
       return NULL;
     }
@@ -303,7 +303,7 @@ static const char* parse_headers(const char* buf, const char* buf_end,
 static const char* parse_request(const char* buf, const char* buf_end,
                                  const char** method, size_t* method_len,
                                  const char** path, size_t* path_len,
-                                 int* minor_version, struct phr_header* headers,
+                                 int* minor_version, PHR_HEADER* headers,
                                  size_t* num_headers, size_t max_headers,
                                  int* ret)
 {
@@ -339,7 +339,7 @@ static const char* parse_request(const char* buf, const char* buf_end,
 
 int phr_parse_request(const char* buf_start, size_t len, const char** method,
                       size_t* method_len, const char** path, size_t* path_len,
-                      int* minor_version, struct phr_header* headers,
+                      int* minor_version, PHR_HEADER* headers,
                       size_t* num_headers, size_t last_len)
 {
   const char * buf = buf_start, * buf_end = buf_start + len;
@@ -372,7 +372,7 @@ int phr_parse_request(const char* buf_start, size_t len, const char** method,
 static const char* parse_response(const char* buf, const char* buf_end,
                                   int* minor_version, int* status,
                                   const char** msg, size_t* msg_len,
-                                  struct phr_header* headers,
+                                  PHR_HEADER* headers,
                                   size_t* num_headers, size_t max_headers,
                                   int* ret)
 {
@@ -404,7 +404,7 @@ static const char* parse_response(const char* buf, const char* buf_end,
 
 int phr_parse_response(const char* buf_start, size_t len, int* minor_version,
                        int* status, const char** msg, size_t* msg_len,
-                       struct phr_header* headers, size_t* num_headers,
+                       PHR_HEADER* headers, size_t* num_headers,
                        size_t last_len)
 {
   const char * buf = buf_start, * buf_end = buf + len;
@@ -433,7 +433,7 @@ int phr_parse_response(const char* buf_start, size_t len, int* minor_version,
 }
 
 int phr_parse_headers(const char* buf_start, size_t len,
-                      struct phr_header* headers, size_t* num_headers,
+                      PHR_HEADER* headers, size_t* num_headers,
                       size_t last_len)
 {
   const char* buf = buf_start, * buf_end = buf + len;
