@@ -70,6 +70,9 @@
 #if H2O_USE_LUA
 #include "h2o/lua_.h"
 #endif
+#if H2O_USE_SQUILU
+#include "h2o/squilu_.h"
+#endif
 #include "standalone.h"
 
 #ifdef TCP_FASTOPEN
@@ -1494,6 +1497,9 @@ static void setup_configurators(void)
 #endif
 #if H2O_USE_LUA
     register_configurator(lua);
+#endif
+#if H2O_USE_SQUILU
+    register_configurator(squilu);
 #endif
 #undef register_configurator
 }
