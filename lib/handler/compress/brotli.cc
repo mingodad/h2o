@@ -63,7 +63,7 @@ namespace {
 void brotli_context::_clear_bufs()
 {
     for (std::vector<h2o_iovec_t>::iterator i = bufs_.begin(); i != bufs_.end(); ++i)
-        free(i->base);
+        h2o_mem_free(i->base);
     bufs_.clear();
 }
 
