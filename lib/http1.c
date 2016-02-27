@@ -23,7 +23,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "picohttpparser.h"
+#include "h2o/httpparser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"

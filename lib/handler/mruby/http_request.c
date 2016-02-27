@@ -20,7 +20,7 @@
  * IN THE SOFTWARE.
  */
  extern "C" {
-#include "picohttpparser.h"
+#include "h2o/httpparser.h"
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/error.h>

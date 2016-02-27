@@ -29,7 +29,7 @@
     #include <sys/un.h>
 #endif
 #include <sys/types.h>
-#include "picohttpparser.h"
+#include "h2o/httpparser.h"
 #include "h2o/string_.h"
 #include "h2o/hostinfo.h"
 #include "h2o/http1client.h"

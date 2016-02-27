@@ -21,7 +21,7 @@
  */
 #include <inttypes.h>
 #include <stdio.h>
-#include "picohttpparser.h"
+#include "h2o/httpparser.h"
 #include "h2o.h"
 
 #define FCGI_VERSION_1 1

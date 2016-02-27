@@ -27,7 +27,7 @@
     #include <netdb.h>
     #include <sys/socket.h>
 #endif
-#include "picohttpparser.h"
+#include "h2o/httpparser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http1client.h"
