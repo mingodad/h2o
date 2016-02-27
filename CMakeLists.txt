@@ -78,9 +78,6 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
 
-SET(WITH_LUA_DEFAULT "OFF")
-OPTION(WITH_LUA "whether or not to build with mruby support" ${WITH_LUA_DEFAULT})
-
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/include")
     SET(BUNDLED_SSL_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libssl.a" "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libcrypto.a")
@@ -165,7 +162,7 @@ ENDIF ()
 
 
 #SET(CMAKE_C_FLAGS "-g -fpermissive -std=c++1y -fno-exceptions -fno-rtti -D__c_as_cpp=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
-SET(CMAKE_C_FLAGS "-g -fpermissive -std=c++1y -D__c_as_cpp=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
+SET(CMAKE_C_FLAGS "-g -fpermissive -std=c++1y  -fno-exceptions -fno-rtti -D__c_as_cpp=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
 
 IF (COMPILER_OPTIMIZATION)
 	SET(CMAKE_C_FLAGS "${COMPILER_OPTIMIZATION} ${CMAKE_C_FLAGS}")
@@ -240,7 +237,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/scripting.c
-    lib/handler/configurator/lua.c
     lib/handler/ctest.c
     lib/handler/hello.c
 
@@ -254,6 +250,22 @@ SET(LIB_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c
     lib/http2/stream.c)
+
+SET(WITH_LUA_DEFAULT "OFF")
+OPTION(WITH_LUA "whether or not to build with lua support" ${WITH_LUA_DEFAULT})
+
+IF (WITH_LUA)
+    #SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_USE_LUA")
+    LIST(APPEND LIB_SOURCE_FILES "lib/handler/configurator/lua.c")
+ENDIF (WITH_LUA)
+
+SET(WITH_SQUILU_DEFAULT "OFF")
+OPTION(WITH_SQUILU "whether or not to build with lua support" ${WITH_SQUILU_DEFAULT})
+
+IF (WITH_SQUILU)
+    #SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_USE_SQUILU")
+    LIST(APPEND LIB_SOURCE_FILES "lib/handler/squilu.c")
+ENDIF (WITH_SQUILU)
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}

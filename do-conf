@@ -1,10 +1,11 @@
 #PKG_CONFIG_PATH=$HOME/local/lib/pkgconfig 
 cmake \
     -DWITH_BUNDLED_SSL=ON \
-    -DCMAKE_C_FLAGS="-march=native -DH2O_USE_LUA -I$HOME/local/luajit/include/lua" \
-    -DWITH_OTHER_LIBS="lua -ldl -L$HOME/local/luajit/lib" \
-    -DWITH_MRUBY=ON
-#    -DWITH_LUA=ON
+    -DCMAKE_C_FLAGS="-march=native -DH2O_USE_LUA -I$HOME/local/luajit/include/lua -DH2O_USE_SQUILU -I$HOME/dev/SquiLu/SquiLu/include" \
+    -DWITH_OTHER_LIBS="lua -ldl -L$HOME/local/luajit/lib  -L$HOME/dev/SquiLu/SquiLu/bin -lsquilu -luuid" \
+    -DWITH_MRUBY=ON \
+    -DWITH_LUA=ON \
+    -DWITH_SQUILU=ON
 #    -DCMAKE_C_FLAGS="-fsanitize=address -march=native -O2" \
 #    -DWITH_OTHER_LIBS="asan -lpthread" \
 #    -DCMAKE_C_FLAGS="-march=native -O2 -DH2O_USE_POLL=1" \

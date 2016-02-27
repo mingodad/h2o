@@ -125,6 +125,7 @@ LUA_H2O_REQ_GET_STR(path_normalized)
 //LUA_H2O_REQ_GET_STR(scheme)
 LUA_H2O_REQ_GET_STR(entity)
 LUA_H2O_REQ_GET_STR(upgrade)
+LUA_H2O_REQ_GET_STR(remote_user)
 
 #define LUA_H2O_REQ_GET_INT(key) static int lua_h2o_req_get_int_##key(lua_State *L) \
 {\
@@ -133,9 +134,20 @@ LUA_H2O_REQ_GET_STR(upgrade)
     return 1;\
 }
 
+static int lua_h2o_req_get_int_content_length(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    lua_pushinteger(L, req->entity.len);
+    return 1;
+}
+
 LUA_H2O_REQ_GET_INT(version)
 LUA_H2O_REQ_GET_INT(bytes_sent)
+LUA_H2O_REQ_GET_INT(num_reprocessed)
+LUA_H2O_REQ_GET_INT(num_delegated)
 LUA_H2O_REQ_GET_INT(http1_is_persistent)
+LUA_H2O_REQ_GET_INT(res_is_delegated)
+LUA_H2O_REQ_GET_INT(preferred_chunk_size)
 
 static int lua_h2o_req_get_str_scheme(lua_State *L)
 {
@@ -144,10 +156,64 @@ static int lua_h2o_req_get_str_scheme(lua_State *L)
     return 1;
 }
 
+static int lua_h2o_req_get_str_remote_address(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    h2o_socket_address remote_addr = {};
+    if(h2o_get_address_info(remote_addr, req->conn, req->conn->callbacks->get_peername))
+        return 0;
+    lua_pushlstring(L, remote_addr.remote_addr, remote_addr.remote_addr_len);
+    return 1;
+}
+
+static int lua_h2o_req_get_int_remote_port(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    h2o_socket_address remote_addr = {};
+    if(h2o_get_address_info(remote_addr, req->conn, req->conn->callbacks->get_peername))
+        return 0;
+    lua_pushinteger(L, remote_addr.port);
+    return 1;
+}
+
+static int lua_h2o_req_get_str_server_address(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    h2o_socket_address remote_addr = {};
+    if(h2o_get_address_info(remote_addr, req->conn, req->conn->callbacks->get_sockname))
+        return 0;
+    lua_pushlstring(L, remote_addr.remote_addr, remote_addr.remote_addr_len);
+    return 1;
+}
+
+static int lua_h2o_req_get_int_server_port(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    h2o_socket_address remote_addr = {};
+    if(h2o_get_address_info(remote_addr, req->conn, req->conn->callbacks->get_sockname))
+        return 0;
+    lua_pushinteger(L, remote_addr.port);
+    return 1;
+}
+
 static int lua_h2o_req_get_int_default_port(lua_State *L)
 {
     CHECK_H2O_REQUEST();
     lua_pushinteger(L, req->scheme->default_port);
+    return 1;
+}
+
+static int lua_h2o_req_get_str_query_string(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    if(req->query_at != SIZE_MAX)
+    {
+        lua_pushlstring(L, req->path.base + req->query_at + 1, req->path.len - (req->query_at + 1));
+    }
+    else
+    {
+        lua_pushlstring(L, "", 0);
+    }
     return 1;
 }
 
@@ -176,10 +242,14 @@ static int lua_h2o_req_get_set_header(lua_State *L)
         break;
     case 3: //set header
         {
-            size_t value_len;
-            key = lua_tolstring(L, 2, &len);
-            const char *value = lua_tolstring(L, 3, &value_len);
-            req->res.headers.add(&req->pool, key, len, 0, value, value_len);
+            h2o_iovec_t key;
+            key.base = (char*)lua_tolstring(L, 2, &key.len);
+            key.strdup(&req->pool, key);
+
+            h2o_iovec_t value;
+            value.base = (char*)lua_tolstring(L, 3, &value.len);
+            value.strdup(&req->pool, value);
+            req->addResponseHeader(key, value);
             return 0;
         }
         break;
@@ -232,6 +302,7 @@ static int lua_h2o_req_send(lua_State *L)
 
     h2o_iovec_t body;
     body.base = (char*)luaL_checklstring(L, 2, &body.len);
+    body.strdup(&req->pool, body);
 
     int is_final = 1;
 
@@ -239,6 +310,7 @@ static int lua_h2o_req_send(lua_State *L)
     {
         h2o_iovec_t content_type;
         content_type.base = (char*)lua_tolstring(L, 3, &content_type.len);
+        content_type.strdup(&req->pool, content_type);
         req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, content_type.base, content_type.len);
         req->res.content_length = body.len;
         req->res.status = 200;
@@ -250,6 +322,20 @@ static int lua_h2o_req_send(lua_State *L)
         req->start_response(&generator);
     }
     req->send(&body, 1, is_final);
+    return 0;
+}
+
+static int lua_h2o_req_send_redirect(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+
+    int status = luaL_checkint(L, 2);
+    size_t reason_len = 0;
+    const char *reason = luaL_checklstring(L, 3, &reason_len);
+    size_t url_len = 0;
+    const char *url = luaL_checklstring(L, 4, &url_len);
+
+    req->send_redirect(status, h2o_strdup(&req->pool, reason, reason_len).base, h2o_strdup(&req->pool, url, url_len));
     return 0;
 }
 
@@ -317,7 +403,7 @@ static void do_lua_generator_stop(h2o_generator_t *generator, h2o_req_t *req)
                 //write_error_message(conn, error_msg, error_len);
             }
         }
-
+///fixme generator on_dispose do this ?
         luaL_unref(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_proceed_idx);
         luaL_unref(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_stop_idx);
         if(self->h2o_generator_lua_cb_data_idx)
@@ -373,29 +459,51 @@ static int lua_h2o_req_start_response(lua_State *L)
     return 0;
 }
 
+static int lua_h2o_req_reprocess_request(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+
+    return 0;
+}
+
 #define LUA_REG_REQ_GET_STR_FUNC(name) { #name, lua_h2o_req_get_str_##name }
 #define LUA_REG_REQ_GET_INT_FUNC(name) { #name, lua_h2o_req_get_int_##name }
+#define LUA_REG_REQ_SET_STR_FUNC(name) { #name, lua_h2o_req_set_str_##name }
+#define LUA_REG_REQ_SET_INT_FUNC(name) { #name, lua_h2o_req_set_int_##name }
 
 static const luaL_reg reqFunctions[] = {
-    LUA_REG_REQ_GET_STR_FUNC(authority),
     {"host", lua_h2o_req_get_str_authority},
-    LUA_REG_REQ_GET_STR_FUNC(method),
-    LUA_REG_REQ_GET_STR_FUNC(path),
-    LUA_REG_REQ_GET_STR_FUNC(path_normalized),
-    LUA_REG_REQ_GET_STR_FUNC(scheme),
+    LUA_REG_REQ_GET_STR_FUNC(authority),
+    LUA_REG_REQ_GET_INT_FUNC(bytes_sent),
+    LUA_REG_REQ_GET_INT_FUNC(content_length),
     LUA_REG_REQ_GET_INT_FUNC(default_port),
     LUA_REG_REQ_GET_STR_FUNC(entity),
+    LUA_REG_REQ_GET_INT_FUNC(http1_is_persistent),
+    LUA_REG_REQ_GET_STR_FUNC(method),
+    LUA_REG_REQ_GET_INT_FUNC(num_delegated),
+    LUA_REG_REQ_GET_INT_FUNC(num_reprocessed),
+    LUA_REG_REQ_GET_STR_FUNC(path),
+    LUA_REG_REQ_GET_STR_FUNC(path_normalized),
+    LUA_REG_REQ_GET_INT_FUNC(preferred_chunk_size),
+    LUA_REG_REQ_GET_STR_FUNC(query_string),
+    LUA_REG_REQ_GET_STR_FUNC(remote_user),
+    LUA_REG_REQ_GET_STR_FUNC(scheme),
     LUA_REG_REQ_GET_STR_FUNC(upgrade),
     LUA_REG_REQ_GET_INT_FUNC(version),
-    LUA_REG_REQ_GET_INT_FUNC(bytes_sent),
-    LUA_REG_REQ_GET_INT_FUNC(http1_is_persistent),
+    LUA_REG_REQ_GET_STR_FUNC(remote_address),
+    LUA_REG_REQ_GET_INT_FUNC(remote_port),
+    LUA_REG_REQ_GET_INT_FUNC(res_is_delegated),
+    LUA_REG_REQ_SET_INT_FUNC(response_content_length),
+    LUA_REG_REQ_SET_STR_FUNC(response_reason),
+    LUA_REG_REQ_SET_INT_FUNC(response_status),
+    LUA_REG_REQ_GET_STR_FUNC(server_address),
+    LUA_REG_REQ_GET_INT_FUNC(server_port),
     {"header", lua_h2o_req_get_set_header},
     {"send", lua_h2o_req_send},
+    {"send_redirect", lua_h2o_req_send_redirect},
     {"console", lua_h2o_req_console},
+    {"reprocess_request", lua_h2o_req_reprocess_request},
     {"start_response", lua_h2o_req_start_response},
-    {"response_status", lua_h2o_req_set_int_response_status},
-    {"response_reason", lua_h2o_req_set_str_response_reason},
-    {"response_content_length", lua_h2o_req_set_int_response_content_length},
     { NULL, NULL }
 };
 
@@ -424,7 +532,7 @@ static int h2o_lua_call_with_context(h2o_context_t *_ctx, const char *func_name)
                 //write_error_message(conn, error_msg, error_len);
                 result = 0;
             } else {
-                result = lua_toboolean(L, -1) ? 1 : 0;
+                result = lua_tointeger(L, -1);
             }
         }
         lua_settop(L, saved_top);
