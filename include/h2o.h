@@ -1219,6 +1219,19 @@ struct h2o_req_t {
     {
         this->res.headers.add(&this->pool, key.base, key.len, 1, value.base, value.len);
     }
+
+    void addRequestHeader(const h2o_token_t *token, const char *value, size_t value_len)
+    {
+        this->headers.add(&this->pool, token, value, value_len);
+    }
+    void addRequestHeader(const h2o_token_t *token, const h2o_iovec_t value)
+    {
+        this->headers.add(&this->pool, token, value.base, value.len);
+    }
+    void addRequestHeader(const h2o_iovec_t key, const h2o_iovec_t value)
+    {
+        this->headers.add(&this->pool, key.base, key.len, 1, value.base, value.len);
+    }
     /**
      * logs an error
      */
