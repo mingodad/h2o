@@ -200,6 +200,7 @@
 			<Add directory="deps/golombset" />
 			<Add directory="../../../../local/luajit/include/luajit" />
 			<Add directory="../../../SquiLu/SquiLu/include" />
+			<Add directory="deps/brotli/enc" />
 		</Compiler>
 		<Linker>
 			<Add library="libressl-build/lib/libssl.a" />
@@ -217,6 +218,35 @@
 			<Add directory="../../../../local/luajit/lib" />
 			<Add directory="../../../SquiLu/SquiLu/bin" />
 		</Linker>
+		<Unit filename="deps/brotli/enc/backward_references.cc" />
+		<Unit filename="deps/brotli/enc/backward_references.h" />
+		<Unit filename="deps/brotli/enc/bit_cost.h" />
+		<Unit filename="deps/brotli/enc/block_splitter.cc" />
+		<Unit filename="deps/brotli/enc/block_splitter.h" />
+		<Unit filename="deps/brotli/enc/brotli_bit_stream.cc" />
+		<Unit filename="deps/brotli/enc/brotli_bit_stream.h" />
+		<Unit filename="deps/brotli/enc/compress_fragment.cc" />
+		<Unit filename="deps/brotli/enc/compress_fragment.h" />
+		<Unit filename="deps/brotli/enc/compress_fragment_two_pass.cc" />
+		<Unit filename="deps/brotli/enc/compress_fragment_two_pass.h" />
+		<Unit filename="deps/brotli/enc/dictionary.cc" />
+		<Unit filename="deps/brotli/enc/dictionary.h" />
+		<Unit filename="deps/brotli/enc/encode.cc" />
+		<Unit filename="deps/brotli/enc/encode.h" />
+		<Unit filename="deps/brotli/enc/entropy_encode.cc" />
+		<Unit filename="deps/brotli/enc/entropy_encode.h" />
+		<Unit filename="deps/brotli/enc/histogram.cc" />
+		<Unit filename="deps/brotli/enc/histogram.h" />
+		<Unit filename="deps/brotli/enc/literal_cost.cc" />
+		<Unit filename="deps/brotli/enc/literal_cost.h" />
+		<Unit filename="deps/brotli/enc/metablock.cc" />
+		<Unit filename="deps/brotli/enc/metablock.h" />
+		<Unit filename="deps/brotli/enc/static_dict.cc" />
+		<Unit filename="deps/brotli/enc/static_dict.h" />
+		<Unit filename="deps/brotli/enc/streams.cc" />
+		<Unit filename="deps/brotli/enc/streams.h" />
+		<Unit filename="deps/brotli/enc/utf8_util.cc" />
+		<Unit filename="deps/brotli/enc/utf8_util.h" />
 		<Unit filename="deps/cloexec/cloexec.c">
 			<Option compilerVar="CC" />
 		</Unit>
