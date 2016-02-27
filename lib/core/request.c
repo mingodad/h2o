@@ -444,16 +444,19 @@ void h2o_req_t::send_inline(const char *body, size_t len)
 {
     static h2o_generator_t generator = {NULL, NULL};
 
-    h2o_iovec_t buf = h2o_strdup(&this->pool, body, len);
-    /* the function intentionally does not set the content length, since it may be used for generating 304 response, etc. */
-    /* this->res.content_length = buf.len; */
-
     this->start_response(&generator);
 
     if (this->input.method.isEq("HEAD"))
+    {
         this->send(NULL, 0, 1);
+    }
     else
+    {
+        h2o_iovec_t buf = h2o_strdup(&this->pool, body, len);
+        /* the function intentionally does not set the content length, since it may be used for generating 304 response, etc. */
+        /* this->res.content_length = buf.len; */
         this->send(&buf, 1, 1);
+    }
 }
 
 void h2o_req_t::send_error(int status, const char *reason, const char *body, int flags)
