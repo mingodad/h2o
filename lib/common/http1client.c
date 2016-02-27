@@ -29,11 +29,11 @@
     #include <sys/un.h>
 #endif
 #include <sys/types.h>
+#include "picohttpparser.h"
 #include "h2o/string_.h"
 #include "h2o/hostinfo.h"
 #include "h2o/http1client.h"
 #include "h2o/url.h"
-#include "h2o/httpparser.h"
 
 struct h2o_http1client_private_t {
     h2o_http1client_t super;
@@ -224,7 +224,7 @@ static void on_head(h2o_socket_t *sock, int status)
     auto client = (h2o_http1client_private_t*)sock->data;
     int minor_version, http_status, rlen, is_eos;
     const char *msg;
-    PHR_HEADER headers[H2O_MAX_HEADERS];
+    struct phr_header headers[H2O_MAX_HEADERS];
     size_t msg_len, num_headers, i;
     h2o_socket_cb reader;
 
@@ -255,7 +255,7 @@ static void on_head(h2o_socket_t *sock, int status)
         auto &hdr = headers[i];
         h2o_phr_headertolower(hdr);
         if (h2o_phr_header_name_is_literal(hdr, "connection")) {
-            if (h2o_contains_token(PHR_HEADER_VALUE(hdr.), PHR_HEADER_VALUE_LEN(hdr.), H2O_STRLIT("keep-alive"), ',')) {
+            if (h2o_contains_token(hdr.value, hdr.value_len, H2O_STRLIT("keep-alive"), ',')) {
                 client->_can_keepalive = 1;
             } else {
                 client->_can_keepalive = 0;

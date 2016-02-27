@@ -21,7 +21,7 @@
  */
 #include <inttypes.h>
 #include <stdio.h>
-#include "h2o/httpparser.h"
+#include "picohttpparser.h"
 #include "h2o.h"
 
 #define FCGI_VERSION_1 1
@@ -470,7 +470,7 @@ static int _isdigit(int ch) {
     return '0' <= ch && ch <= '9';
 }
 
-static int fill_headers(h2o_req_t *req, PHR_HEADER *headers, size_t num_headers) {
+static int fill_headers(h2o_req_t *req, phr_header *headers, size_t num_headers) {
     size_t i;
 
     /* set the defaults */
@@ -481,7 +481,7 @@ static int fill_headers(h2o_req_t *req, PHR_HEADER *headers, size_t num_headers)
     for (i = 0; i != num_headers; ++i) {
         const h2o_token_t *token;
         h2o_phr_headertolower(headers[i]);
-        if ((token = h2o_lookup_token(PHR_HEADER_NAME(headers[i].), PHR_HEADER_NAME_LEN(headers[i].))) != NULL) {
+        if ((token = h2o_lookup_token(headers[i].name, headers[i].name_len)) != NULL) {
             if (token->proxy_should_drop) {
                 /* skip */
             } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
@@ -491,7 +491,7 @@ static int fill_headers(h2o_req_t *req, PHR_HEADER *headers, size_t num_headers)
                 }
                 if ((req->res.content_length = h2o_pht_header_value_tosize(headers[i])) == SIZE_MAX) {
                     req->log_error(MODULE_NAME, "failed to parse content-length header sent from fcgi: %.*s",
-                            (int) PHR_HEADER_VALUE_LEN(headers[i].), PHR_HEADER_VALUE(headers[i].));
+                            (int) headers[i].value_len, headers[i].value);
                     return -1;
                 }
             } else {
@@ -502,12 +502,12 @@ static int fill_headers(h2o_req_t *req, PHR_HEADER *headers, size_t num_headers)
                 RFC suggests abs-path-style Location headers should trigger an internal redirection, but is that how the web servers
                 work?
                  */
-                req->addResponseHeader(token, h2o_strdup(&req->pool, PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].)));
+                req->addResponseHeader(token, h2o_strdup(&req->pool, headers[i].value, headers[i].value_len));
                 if (token == H2O_TOKEN_LINK)
-                    req->puth_path_in_link_header(PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].));
+                    req->puth_path_in_link_header(headers[i].value, headers[i].value_len);
             }
         } else if (h2o_phr_header_name_is_literal(headers[i], "status")) {
-            h2o_iovec_t value = h2o_iovec_t::create(PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].));
+            h2o_iovec_t value = h2o_iovec_t::create(headers[i].value, headers[i].value_len);
             if (value.len < 3 || !(_isdigit(value.base[0]) && _isdigit(value.base[1]) && _isdigit(value.base[2])) ||
                     (value.len >= 4 && value.base[3] != ' ')) {
                 req->log_error(MODULE_NAME, "failed to parse Status header, got: %.*s", (int) value.len, value.base);
@@ -516,8 +516,8 @@ static int fill_headers(h2o_req_t *req, PHR_HEADER *headers, size_t num_headers)
             req->res.status = (value.base[0] - '0') * 100 + (value.base[1] - '0') * 10 + (value.base[2] - '0');
             req->res.reason = value.len >= 5 ? h2o_strdup(&req->pool, value.base + 4, value.len - 4).base : "OK";
         } else {
-            h2o_iovec_t name_duped = h2o_strdup(&req->pool, PHR_HEADER_NAME(headers[i].), PHR_HEADER_NAME_LEN(headers[i].)),
-                    value_duped = h2o_strdup(&req->pool, PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].));
+            h2o_iovec_t name_duped = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len),
+                    value_duped = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
             req->res.headers.add(&req->pool, name_duped.base, name_duped.len, 0, value_duped.base,
                     value_duped.len);
         }
@@ -542,7 +542,7 @@ static void append_content(fcgi_generator_t *generator, const void *src, size_t 
 
 static int handle_stdin_record(fcgi_generator_t *generator, fcgi_record_header_t *header) {
     h2o_buffer_t *input = generator->sock->input;
-    PHR_HEADER headers[H2O_MAX_HEADERS];
+    struct phr_header headers[H2O_MAX_HEADERS];
     size_t num_headers;
     int parse_result;
 

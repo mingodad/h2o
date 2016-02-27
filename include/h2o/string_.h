@@ -84,7 +84,7 @@ static int h2o_lcstris(const char *target, size_t target_len, const char *test, 
  * parses a positive number of return SIZE_MAX if failed
  */
 size_t h2o_strtosize(const char *s, size_t len);
-#define h2o_pht_header_value_tosize(pht_header) h2o_strtosize(PHR_HEADER_VALUE(pht_header.), PHR_HEADER_VALUE_LEN(pht_header.))
+#define h2o_pht_header_value_tosize(pht_header) h2o_strtosize(pht_header.value, pht_header.value_len)
 /**
  * parses first positive number contained in *s or return SIZE_MAX if failed.
  * *s will set to right after the number in string or right after the end of string.
@@ -181,7 +181,7 @@ inline void h2o_strtolower_n(char *s, size_t len)
         *s = h2o_tolower(*s);
 }
 #define h2o_strtolower(str) h2o_strtolower_n(str.base, str.len)
-#define h2o_phr_headertolower(header) h2o_strtolower_n((char*)PHR_HEADER_NAME(header.), PHR_HEADER_NAME_LEN(header.))
+#define h2o_phr_headertolower(header) h2o_strtolower_n((char*)header.name, header.name_len)
 
 inline int h2o_toupper(int ch)
 {

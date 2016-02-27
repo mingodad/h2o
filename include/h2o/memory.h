@@ -687,9 +687,9 @@ inline h2o_iovec_t h2o_buffer_reserve_resize(h2o_buffer_t **buffer, size_t len)
 }
 
 #define h2o_phr_header_name_cmp(phr_header_name1, phr_header_name2) \
-    h2o_memis(PHR_HEADER_NAME(phr_header_name1.), PHR_HEADER_NAME_LEN(phr_header_name1.), PHR_HEADER_NAME(phr_header_name2.), PHR_HEADER_NAME_LEN(phr_header_name2.))
-#define h2o_phr_header_name_is_literal(_target, literal) h2o_memis(PHR_HEADER_NAME(_target.), PHR_HEADER_NAME_LEN(_target.), H2O_STRLIT(literal))
-#define h2o_phr_header_value_is_literal(_target, literal) h2o_memis(PHR_HEADER_VALUE(_target.), PHR_HEADER_VALUE_LEN(_target.), H2O_STRLIT(literal))
+    h2o_memis(phr_header_name1.name, phr_header_name1.name_len, phr_header_name2.name, phr_header_name2.name_len)
+#define h2o_phr_header_name_is_literal(_target, literal) h2o_memis(_target.name, _target.name_len, H2O_STRLIT(literal))
+#define h2o_phr_header_value_is_literal(_target, literal) h2o_memis(_target.value, _target.value_len, H2O_STRLIT(literal))
 
 #if defined( __cplusplus) && !defined(__c_as_cpp)
 }

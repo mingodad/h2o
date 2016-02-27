@@ -27,7 +27,7 @@
     #include <netdb.h>
     #include <sys/socket.h>
 #endif
-#include "h2o/httpparser.h"
+#include "picohttpparser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http1client.h"
@@ -327,7 +327,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-          h2o_iovec_t msg, PHR_HEADER *headers, size_t num_headers)
+          h2o_iovec_t msg, phr_header *headers, size_t num_headers)
 {
     auto self = (rp_generator_t *)client->data;
     h2o_req_t *req = self->src_req;
@@ -344,7 +344,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     req->res.status = status;
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
-        const auto token = h2o_lookup_token(PHR_HEADER_NAME(headers[i].), PHR_HEADER_NAME_LEN(headers[i].));
+        const auto token = h2o_lookup_token(headers[i].name, headers[i].name_len);
         h2o_iovec_t name, value;
         if (token != NULL) {
             if (token->proxy_should_drop) {
@@ -363,30 +363,30 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 			   if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
 				   self->client = NULL;
 				   h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
-				   req->send_redirect_internal(method, PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].), 1);
+				   req->send_redirect_internal(method, headers[i].value, headers[i].value_len, 1);
 				   return NULL;
 			   }
 			   if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
 				   value =
-					   rewrite_location(&req->pool, PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].), req->overrides->location_rewrite.match,
+					   rewrite_location(&req->pool, headers[i].value, headers[i].value_len, req->overrides->location_rewrite.match,
 						req->input.scheme, req->input.authority, req->overrides->location_rewrite.path_prefix);
 				   if (value.base != NULL)
 					   goto AddHeader;
 			   }
 			   goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
-   				req->puth_path_in_link_header(PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].));
+   				req->puth_path_in_link_header(headers[i].value, headers[i].value_len);
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
-            value.strdup(&req->pool, PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].));
+            value.strdup(&req->pool, headers[i].value, headers[i].value_len);
         AddHeader:
             req->addResponseHeader(token, value);
         Skip:
             ;
         } else {
-            name.strdup(&req->pool, PHR_HEADER_NAME(headers[i].), PHR_HEADER_NAME_LEN(headers[i].));
-            value.strdup(&req->pool, PHR_HEADER_VALUE(headers[i].), PHR_HEADER_VALUE_LEN(headers[i].));
+            name.strdup(&req->pool, headers[i].name, headers[i].name_len);
+            value.strdup(&req->pool, headers[i].value, headers[i].value_len);
             req->res.headers.add(&req->pool, name.base, name.len, 0, value.base, value.len);
         }
     }

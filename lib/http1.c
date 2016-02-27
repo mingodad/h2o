@@ -23,7 +23,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "h2o/httpparser.h"
+#include "picohttpparser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
@@ -237,19 +237,19 @@ static int create_content_length_entity_reader(h2o_http1_conn_t *conn, size_t co
     return 0;
 }
 
-static int create_entity_reader(h2o_http1_conn_t *conn, const PHR_HEADER *entity_header)
+static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header *entity_header)
 {
     /* strlen("content-length") is unequal to sizeof("transfer-encoding"), and thus checking the length only is sufficient */
-    if (PHR_HEADER_NAME_LEN(entity_header->) == sizeof("transfer-encoding") - 1) {
+    if (entity_header->name_len == sizeof("transfer-encoding") - 1) {
         /* transfer-encoding */
-        if (!h2o_lcstris(PHR_HEADER_VALUE(entity_header->), PHR_HEADER_VALUE_LEN(entity_header->), H2O_STRLIT("chunked"))) {
+        if (!h2o_lcstris(entity_header->value, entity_header->value_len, H2O_STRLIT("chunked"))) {
             entity_read_send_error(conn, 400, "Invalid Request", "unknown transfer-encoding");
             return -1;
         }
         return create_chunked_entity_reader(conn);
     } else {
         /* content-length */
-        size_t content_length = h2o_strtosize(PHR_HEADER_VALUE(entity_header->), PHR_HEADER_VALUE_LEN(entity_header->));
+        size_t content_length = h2o_strtosize(entity_header->value, entity_header->value_len);
         if (content_length == SIZE_MAX) {
             entity_read_send_error(conn, 400, "Invalid Request", "broken content-length header");
             return -1;
@@ -264,7 +264,7 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const PHR_HEADER *entity
     return -1;
 }
 
-static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const PHR_HEADER *src, size_t len,
+static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const phr_header *src, size_t len,
                             h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect)
 {
     ssize_t entity_header_index = -1;
@@ -279,32 +279,32 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
             const h2o_token_t *name_token;
             /* convert to lower-case in-place */
             h2o_phr_headertolower(src[i]);
-            if ((name_token = h2o_lookup_token(PHR_HEADER_NAME(src[i].), PHR_HEADER_NAME_LEN(src[i].))) != NULL) {
+            if ((name_token = h2o_lookup_token(src[i].name, src[i].name_len)) != NULL) {
                 if (name_token->is_init_header_special) {
                     if (name_token == H2O_TOKEN_HOST) {
-                        host->base = (char *)PHR_HEADER_VALUE(src[i].);
-                        host->len = PHR_HEADER_VALUE_LEN(src[i].);
+                        host->base = (char *)src[i].value;
+                        host->len = src[i].value_len;
                     } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
                         if (entity_header_index == -1)
                             entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
                         entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_EXPECT) {
-                        expect->base = (char *)PHR_HEADER_VALUE(src[i].);
-                        expect->len = PHR_HEADER_VALUE_LEN(src[i].);
+                        expect->base = (char *)src[i].value;
+                        expect->len = src[i].value_len;
                     } else if (name_token == H2O_TOKEN_UPGRADE) {
-                        upgrade->base = (char *)PHR_HEADER_VALUE(src[i].);
-                        upgrade->len = PHR_HEADER_VALUE_LEN(src[i].);
+                        upgrade->base = (char *)src[i].value;
+                        upgrade->len = src[i].value_len;
                     } else {
                         assert(!"logic flaw");
                     }
                 } else {
-                    headers->add(pool, name_token, PHR_HEADER_VALUE(src[i].), PHR_HEADER_VALUE_LEN(src[i].));
+                    headers->add(pool, name_token, src[i].value, src[i].value_len);
                     if (name_token == H2O_TOKEN_CONNECTION)
                         *connection = headers->entries[headers->size - 1].value;
                 }
             } else {
-                headers->add(pool, PHR_HEADER_NAME(src[i].), PHR_HEADER_NAME_LEN(src[i].), 0, PHR_HEADER_VALUE(src[i].), PHR_HEADER_VALUE_LEN(src[i].));
+                headers->add(pool, src[i].name, src[i].name_len, 0, src[i].value, src[i].value_len);
             }
         }
     }
@@ -312,7 +312,7 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
     return entity_header_index;
 }
 
-static ssize_t fixup_request(h2o_http1_conn_t *conn, PHR_HEADER *headers, size_t num_headers, int minor_version,
+static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version,
                              h2o_iovec_t *expect)
 {
     ssize_t entity_header_index;
@@ -388,7 +388,7 @@ static void handle_incoming_request(h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
     int reqlen, minor_version;
-    PHR_HEADER headers[H2O_MAX_HEADERS];
+    struct phr_header headers[H2O_MAX_HEADERS];
     size_t num_headers = H2O_MAX_HEADERS;
     ssize_t entity_body_header_index;
     h2o_iovec_t expect;
