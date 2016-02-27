@@ -27,12 +27,11 @@
 #define BUF_SIZE 8192
 #endif
 
-struct st_compress_filter_t {
-    h2o_filter_t super;
+struct compress_filter_t : h2o_filter_t{
     h2o_compress_args_t args;
 };
 
-struct st_compress_encoder_t {
+struct compress_encoder_t {
     h2o_ostream_t super;
     h2o_compress_context_t *compressor;
 };
@@ -51,8 +50,8 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    struct st_compress_filter_t *self = (void *)_self;
-    struct st_compress_encoder_t *encoder;
+    auto self = (compress_filter_t *)_self;
+    compress_encoder_t *encoder;
     int compressible_types;
     h2o_compress_context_t *compressor;
     ssize_t i;
