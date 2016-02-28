@@ -26,14 +26,24 @@
 #include "../../../../lib/handler/compress/gzip.c"
 #include "../../../../lib/handler/compress.c"
 
+static void *talloc_cb(void *_notused, unsigned int cnt, unsigned int sz)
+{
+    return h2o_mem_alloc_for<char>(cnt * (size_t)sz);
+}
+
+static void tfree_cb(void *_notused, void *ptr)
+{
+    return h2o_mem_free(ptr);
+}
+
 static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expected, size_t expectedlen)
 {
     z_stream zs = {};
     size_t decbuf_size = (expectedlen+1);
     char decbuf[decbuf_size];
 
-    zs.zalloc = alloc_cb;
-    zs.zfree = free_cb;
+    zs.zalloc = talloc_cb;
+    zs.zfree = tfree_cb;
     zs.next_out = (Bytef *)decbuf;
     zs.avail_out = (unsigned)decbuf_size;
 

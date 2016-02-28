@@ -1491,7 +1491,7 @@ enum {
 /**
  * compressor context
  */
-typedef struct st_h2o_compress_context_t {
+struct h2o_compress_context_t {
     /**
      * name used in content-encoding header
      */
@@ -1499,9 +1499,9 @@ typedef struct st_h2o_compress_context_t {
     /**
      * compress
      */
-    void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
+    void (*compress)(h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
                      h2o_iovec_t **outbufs, size_t *outbufcnt);
-} h2o_compress_context_t;
+};
 
 struct h2o_compress_args_t {
     struct {

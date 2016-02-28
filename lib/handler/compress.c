@@ -31,8 +31,7 @@ struct compress_filter_t : h2o_filter_t{
     h2o_compress_args_t args;
 };
 
-struct compress_encoder_t {
-    h2o_ostream_t super;
+struct compress_encoder_t : h2o_ostream_t {
     h2o_compress_context_t *compressor;
 };
 
@@ -45,7 +44,7 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
     self->compressor->compress(self->compressor, inbufs, inbufcnt, is_final, &outbufs, &outbufcnt);
 
     /* send next */
-    req->send_next(&self->super, outbufs, outbufcnt, is_final);
+    req->send_next(self, outbufs, outbufcnt, is_final);
 }
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -116,8 +115,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 
     /* setup filter */
     encoder = (compress_encoder_t *)req->add_ostream(sizeof(*encoder), slot);
-    encoder->super.do_send = do_send;
-    slot = &encoder->super.next;
+    encoder->do_send = do_send;
+    slot = &encoder->next;
     encoder->compressor = compressor;
 
     /* adjust preferred chunk size (compress by 8192 bytes) */

@@ -32,16 +32,17 @@ namespace {
         brotli::BrotliCompressor *brotli_;
         brotli::BrotliParams params_;
         std::vector<h2o_iovec_t> bufs_; // all bufs_[nnn].base must be free(3)ed
+        h2o_mem_pool_t *pool_;
     public:
-        brotli_context(int quality, size_t estimated_content_length) : brotli_(NULL) {
+        brotli_context(h2o_mem_pool_t *pool, int quality, size_t estimated_content_length) : brotli_(NULL) {
             name = h2o_iovec_t::create(H2O_STRLIT("br"));
             compress = _compress;
             params_.quality = quality;
+            pool_ = pool;
             if (estimated_content_length != std::numeric_limits<size_t>::max())
                 _update_lgwin(params_, estimated_content_length);
         }
         ~brotli_context() {
-            _clear_bufs();
             delete brotli_;
         }
         static void dispose(void *_self) {
@@ -49,7 +50,6 @@ namespace {
             self->~brotli_context();
         }
     private:
-        void _clear_bufs();
         void _emit(bool is_last, bool force_flush);
         void _compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_final, h2o_iovec_t **outbufs, size_t *outbufcnt);
         static void _compress(h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
@@ -60,13 +60,6 @@ namespace {
     };
 }
 
-void brotli_context::_clear_bufs()
-{
-    for (std::vector<h2o_iovec_t>::iterator i = bufs_.begin(); i != bufs_.end(); ++i)
-        h2o_mem_free(i->base);
-    bufs_.clear();
-}
-
 void brotli_context::_emit(bool is_last, bool force_flush)
 {
     uint8_t *output;
@@ -74,7 +67,7 @@ void brotli_context::_emit(bool is_last, bool force_flush)
     bool ret = brotli_->WriteBrotliData(is_last, force_flush, &out_size, &output);
     assert(ret);
     if (out_size != 0)
-        bufs_.push_back(h2o_strdup(NULL, reinterpret_cast<const char *>(output), out_size));
+        bufs_.push_back(h2o_strdup(this->pool_, reinterpret_cast<const char *>(output), out_size));
 }
 
 void brotli_context::_compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_final, h2o_iovec_t **outbufs, size_t *outbufcnt)
@@ -90,7 +83,7 @@ void brotli_context::_compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_fina
         brotli_ = new brotli::BrotliCompressor(params_);
     }
 
-    _clear_bufs();
+    bufs_.clear();
 
     if (inbufcnt != 0) {
         size_t inbufindex = 0, offset = 0, block_space = brotli_->input_block_size();
@@ -130,6 +123,7 @@ void brotli_context::_update_lgwin(brotli::BrotliParams &params, size_t estimate
 
 h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_content_length)
 {
+    assert(pool != nullptr);
     auto ctx = pool->alloc_shared_for<brotli_context>(1, brotli_context::dispose);
-    return new (ctx) brotli_context(quality, estimated_content_length);
+    return new (ctx) brotli_context(pool, quality, estimated_content_length);
 }

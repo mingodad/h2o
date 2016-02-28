@@ -31,27 +31,29 @@
 
 typedef H2O_VECTOR<h2o_iovec_t> iovec_vector_t;
 
-struct gzip_context_t {
-    h2o_compress_context_t super;
+struct gzip_context_t : h2o_compress_context_t {
     z_stream zs;
     int zs_is_open;
     iovec_vector_t bufs;
+    h2o_mem_pool_t *pool;
 };
 
-static void *alloc_cb(void *_unused, unsigned int cnt, unsigned int sz)
+static void *alloc_cb(void *_self, unsigned int cnt, unsigned int sz)
 {
-    return h2o_mem_alloc(cnt * (size_t)sz);
+    auto self = (gzip_context_t *)_self;
+    return self->pool->alloc_for<char>(cnt * (size_t)sz);
 }
 
-static void free_cb(void *_unused, void *p)
+static void free_cb(void *_self, void *ptr)
 {
-    h2o_mem_free(p);
+    //does nothing we allocate everithing from pool
+    //we still need it because if not zlib will call free() directly
 }
 
-static void expand_buf(iovec_vector_t *bufs)
+static void expand_buf(h2o_mem_pool_t *pool, iovec_vector_t *bufs)
 {
-    auto buf = bufs->append_new(nullptr);
-    buf->base = h2o_mem_alloc_for<char>(BUF_SIZE);
+    auto buf = bufs->append_new(pool);
+    buf->base = pool->alloc_for<char>(BUF_SIZE);
     buf->len = 0;
 }
 
@@ -70,7 +72,7 @@ static size_t compress_chunk(gzip_context_t *self, const void *src, size_t len, 
         if (self->bufs.entries[bufindex].len + 32 > BUF_SIZE) {
             ++bufindex;
             if (bufindex == self->bufs.size)
-                expand_buf(&self->bufs);
+                expand_buf(self->pool, &self->bufs);
             self->bufs.entries[bufindex].len = 0;
         }
         self->zs.next_out = (Bytef *)self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len;
@@ -115,30 +117,26 @@ static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size
 static void do_free(void *_self)
 {
     auto self = (gzip_context_t*)_self;
-    size_t i;
 
     if (self->zs_is_open)
         deflateEnd(&self->zs);
-
-    for (i = 0; i != self->bufs.size; ++i)
-        h2o_mem_free(self->bufs.entries[i].base);
-    h2o_mem_free(self->bufs.entries);
 }
 
 h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality)
 {
     auto self = pool->alloc_shared_for<gzip_context_t>(1, do_free);
 
-    self->super.name = h2o_iovec_t::create(H2O_STRLIT("gzip"));
-    self->super.compress = do_compress;
+    self->name = h2o_iovec_t::create(H2O_STRLIT("gzip"));
+    self->compress = do_compress;
+    self->pool = pool;
     self->zs.zalloc = alloc_cb;
     self->zs.zfree = free_cb;
-    self->zs.opaque = NULL;
+    self->zs.opaque = self;
     /* Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual */
     deflateInit2(&self->zs, quality, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
     self->zs_is_open = 1;
     self->bufs = (iovec_vector_t){};
-    expand_buf(&self->bufs);
+    expand_buf(pool, &self->bufs);
 
-    return &self->super;
+    return self;
 }
