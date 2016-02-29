@@ -65,7 +65,7 @@ void h2o_pathconf_t::init(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf
     pathconf->global = globalconf;
     h2o_chunked_register(pathconf);
     if (path != NULL)
-        pathconf->path = h2o_strdup_slashed(NULL, path, SIZE_MAX);
+        pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
     h2o_mem_addref_shared(mimemap);
     pathconf->mimemap = mimemap;
 }
