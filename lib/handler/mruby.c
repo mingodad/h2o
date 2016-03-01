@@ -416,7 +416,9 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
 
     /* environment */
     set_env_mrb_str_new(H2O_MRUBY_LIT_REQUEST_METHOD, generator->req->method);
-    size_t confpath_len_wo_slash = generator->req->pathconf->path.len - 1;
+    size_t confpath_len_wo_slash = generator->req->pathconf->path.len;
+    if (generator->req->pathconf->path.base[generator->req->pathconf->path.len - 1] == '/')
+        --confpath_len_wo_slash;
     set_env_mrb_str_size(H2O_MRUBY_LIT_SCRIPT_NAME, generator->req->pathconf->path, confpath_len_wo_slash);
     set_env_mrb_str(H2O_MRUBY_LIT_PATH_INFO,
                  mrb_str_new(mrb, generator->req->path_normalized.base + confpath_len_wo_slash,
