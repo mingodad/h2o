@@ -39,8 +39,7 @@
 #define FIXED_PART_SIZE (sizeof("\r\n--") - 1 + BOUNDARY_SIZE + \
     sizeof("\r\nContent-Range: bytes=-/\r\nContent-Type: \r\n\r\n") - 1)
 
-struct h2o_sendfile_generator_t {
-    h2o_generator_t super;
+struct h2o_sendfile_generator_t : h2o_generator_t {
     struct {
         h2o_filecache_ref_t *ref;
         off_t off;
@@ -74,6 +73,18 @@ struct h2o_file_handler_t : h2o_handler_t {
     H2O_VECTOR<h2o_iovec_t> index_files;
 
     h2o_file_handler_t(): real_path({}), mimemap(nullptr), flags(0), max_index_file_len(0) {}
+
+    void on_context_init(h2o_context_t *ctx) override;
+    void on_context_dispose(h2o_context_t *ctx) override;
+    void dispose(h2o_base_handler_t *self) override;
+};
+
+struct h2o_specific_file_handler_t : h2o_handler_t {
+    h2o_iovec_t real_path;
+    h2o_mimemap_type_t *mime_type;
+    int flags;
+
+    h2o_specific_file_handler_t(): real_path({}), mime_type(nullptr), flags(0) {}
 
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
@@ -126,7 +137,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     if (rret == -1) {
         req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
         req->send(NULL, 0, 1);
-        do_close(&self->super, req);
+        do_close(self, req);
         return;
     }
     self->file.off += rret;
@@ -138,7 +149,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     vec.len = rret;
     req->send(&vec, 1, is_final);
     if (is_final)
-        do_close(&self->super, req);
+        do_close(self, req);
 }
 
 static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
@@ -187,13 +198,13 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
     }
     req->send(vec, vecarrsize, is_finished);
     if (is_finished)
-        do_close(&self->super, req);
+        do_close(self, req);
     return;
 
 Error:
     req->http1_is_persistent = 0;
     req->send(NULL, 0, 1);
-    do_close(&self->super, req);
+    do_close(self, req);
     return;
 }
 
@@ -218,7 +229,7 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
 
     if (self->bytesleft != 0)
         return 0;
-    do_close(&self->super, req);
+    do_close(self, req);
     return 1;
 }
 
@@ -260,8 +271,8 @@ Opened:
     }
 
     auto self = req->pool.alloc_for<h2o_sendfile_generator_t>();
-    self->super.proceed = do_proceed;
-    self->super.stop = do_close;
+    self->proceed = do_proceed;
+    self->stop = do_close;
     self->file.ref = fileref;
     self->file.off = 0;
     self->req = NULL;
@@ -326,12 +337,12 @@ static void do_send_file(h2o_sendfile_generator_t *self, h2o_req_t *req, int sta
         static h2o_generator_t generator = {NULL, NULL};
         req->start_response(&generator);
         req->send(NULL, 0, 1);
-        do_close(&self->super, req);
+        do_close(self, req);
         return;
     }
 
     /* send data */
-    req->start_response(&self->super);
+    req->start_response(self);
 
     if (self->ranged.range_count == 1)
         self->file.off = self->ranged.range_infos[0];
@@ -343,11 +354,11 @@ static void do_send_file(h2o_sendfile_generator_t *self, h2o_req_t *req, int sta
             bufsz = self->bytesleft;
         self->buf = req->pool.alloc_for<char>(bufsz);
         if (self->ranged.range_count < 2)
-            do_proceed(&self->super, req);
+            do_proceed(self, req);
         else {
             self->bytesleft = 0;
-            self->super.proceed = do_multirange_proceed;
-            do_multirange_proceed(&self->super, req);
+            self->proceed = do_multirange_proceed;
+            do_multirange_proceed(self, req);
         }
     }
 }
@@ -555,11 +566,10 @@ static void send_method_not_allowed(h2o_req_t *req)
 }
 
 static int serve_with_generator(h2o_sendfile_generator_t *generator, h2o_req_t *req, const char *rpath, size_t rpath_len,
-                                h2o_mimemap_t *mimemap)
+                                h2o_mimemap_type_t *mime_type)
 {
     int result = 0;
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
-    h2o_mimemap_type_t *mime_type;
     ssize_t if_modified_since_header_index, if_none_match_header_index;
     ssize_t range_header_index;
 
@@ -590,19 +600,16 @@ static int serve_with_generator(h2o_sendfile_generator_t *generator, h2o_req_t *
     }
 
     /* obtain mime type */
-    mime_type = h2o_mimemap_get_type_by_extension(mimemap, h2o_get_filext(rpath, rpath_len));
-    switch (mime_type->type) {
-    case H2O_MIMEMAP_TYPE_MIMETYPE:
-        break;
-    case H2O_MIMEMAP_TYPE_DYNAMIC:
-        do_close(&generator->super, req);
+    if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
+        do_close(generator, req);
         result = delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
         goto CleanAlloca;
     }
+    assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
 
     /* only allow GET or POST for static files */
     if (method_type == METHOD_IS_OTHER) {
-        do_close(&generator->super, req);
+        do_close(generator, req);
         send_method_not_allowed(req);
         goto CleanAlloca;
     }
@@ -680,7 +687,7 @@ NotModified:
     add_headers_unconditional(generator, req);
     req->send_inline(NULL, 0);
 Close:
-    do_close(&generator->super, req);
+    do_close(generator, req);
 CleanAlloca:
     h2o_mem_alloca_free(rpath);
     return result;
@@ -781,7 +788,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 
 Opened:
-    return serve_with_generator(generator, req, rpath, rpath_len, self->mimemap);
+    return serve_with_generator(generator, req, rpath, rpath_len,
+                                h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len)));
 }
 
 void h2o_file_handler_t::on_context_init(h2o_context_t *ctx)
@@ -848,4 +856,61 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf,
 h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler)
 {
     return handler->mimemap;
+}
+
+void h2o_specific_file_handler_t::on_context_init(h2o_context_t *ctx)
+{
+    if (this->mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC)
+        ctx->init_pathconf_context(&this->mime_type->data.dynamic.pathconf);
+}
+
+void h2o_specific_file_handler_t::on_context_dispose(h2o_context_t *ctx)
+{
+    if (this->mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC)
+        ctx->dispose_pathconf_context(&this->mime_type->data.dynamic.pathconf);
+}
+
+void h2o_specific_file_handler_t::dispose(h2o_base_handler_t *_self)
+{
+    auto self = (h2o_specific_file_handler_t *)_self;
+
+    h2o_mem_free(self->real_path.base);
+    h2o_mem_release_shared(self->mime_type);
+}
+
+static int specific_handler_on_req(h2o_handler_t *_self, h2o_req_t *req)
+{
+    auto self = (h2o_specific_file_handler_t *)_self;
+    struct h2o_sendfile_generator_t *generator;
+    int is_dir;
+
+    /* open file (or send error or return -1) */
+    if ((generator = create_generator(req, self->real_path.base, self->real_path.len, &is_dir, self->flags)) == NULL) {
+        if (is_dir) {
+            req->send_error(403, "Access Forbidden", "access forbidden", 0);
+        } else if (errno == ENOENT) {
+            return -1;
+        } else if (errno == ENFILE || errno == EMFILE) {
+            req->send_error(503, "Service Unavailable", "please try again later", 0);
+        } else {
+            req->send_error(403, "Access Forbidden", "access forbidden", 0);
+        }
+        return 0;
+    }
+
+    return serve_with_generator(generator, req, self->real_path.base, self->real_path.len, self->mime_type);
+}
+
+h2o_handler_t *h2o_file_register_file(h2o_pathconf_t *pathconf, const char *real_path, h2o_mimemap_type_t *mime_type, int flags)
+{
+    auto self = pathconf->create_handler<h2o_specific_file_handler_t>();
+
+    self->on_req = specific_handler_on_req;
+
+    self->real_path = h2o_strdup(NULL, real_path, SIZE_MAX);
+    h2o_mem_addref_shared(mime_type);
+    self->mime_type = mime_type;
+    self->flags = flags;
+
+    return self;
 }
