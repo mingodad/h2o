@@ -619,3 +619,31 @@ int h2o_get_address_info(h2o_socket_address &sa, h2o_conn_t *conn, h2o_get_addre
     return 0;
 }
 
+h2o_iovec_t h2o_req_t::build_destination_path(const char *prefix, size_t prefix_len)
+{
+    h2o_iovec_t parts[4];
+    size_t num_parts = 0;
+    int conf_ends_with_slash = this->pathconf->path.base[this->pathconf->path.len - 1] == '/';
+    int prefix_ends_with_slash = prefix[prefix_len - 1] == '/';
+
+    /* destination starts with given prefix */
+    parts[num_parts++] = h2o_iovec_t::create(prefix, prefix_len);
+
+    /* make adjustments depending on the trailing slashes */
+    if (conf_ends_with_slash != prefix_ends_with_slash) {
+        if (conf_ends_with_slash) {
+            parts[num_parts++] = h2o_iovec_t::create(H2O_STRLIT("/"));
+        } else {
+            if (this->path_normalized.len != this->pathconf->path.len)
+                parts[num_parts - 1].len -= 1;
+        }
+    }
+
+    /* append suffix path and query */
+    parts[num_parts++] = h2o_uri_escape(
+        &this->pool, this->path_normalized.base + this->pathconf->path.len, this->path_normalized.len - this->pathconf->path.len, "/@");
+    if (this->query_at != SIZE_MAX)
+        parts[num_parts++] = h2o_iovec_t::create(this->path.base + this->query_at, this->path.len - this->query_at);
+
+    return h2o_concat_list(&this->pool, parts, num_parts);
+}

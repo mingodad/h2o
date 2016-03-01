@@ -1271,6 +1271,10 @@ struct h2o_req_t {
         this->send_redirect_internal(method, url.base, url.len, preserve_overrides);
     }
     /**
+     * builds destination URL or path, by contatenating the prefix and path_info of the request
+     */
+    h2o_iovec_t build_destination_path(const char *prefix, size_t prefix_len);
+    /**
      * registers push path (if necessary) by parsing a Link header
      */
     int puth_path_in_link_header(const char *value, size_t value_len);
