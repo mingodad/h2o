@@ -67,10 +67,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     /* request reprocess */
-    h2o_iovec_t req_cat;
-    h2o_concat(req_cat, &req->pool, self->upstream.path, h2o_iovec_t::create(req->path.base + req->pathconf->path.len,
-                                                                req->path.len - req->pathconf->path.len));
-    req->reprocess_request(req->method, scheme, *authority, req_cat, overrides, 0);
+    req->reprocess_request(req->method, scheme, *authority,
+                          req->build_destination_path(self->upstream.path.base, self->upstream.path.len), overrides, 0);
 
     return 0;
 }
