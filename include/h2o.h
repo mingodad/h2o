@@ -1273,7 +1273,7 @@ struct h2o_req_t {
     /**
      * builds destination URL or path, by contatenating the prefix and path_info of the request
      */
-    h2o_iovec_t build_destination_path(const char *prefix, size_t prefix_len);
+    h2o_iovec_t build_destination(const char *prefix, size_t prefix_len);
     /**
      * registers push path (if necessary) by parsing a Link header
      */

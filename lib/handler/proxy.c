@@ -68,7 +68,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* request reprocess */
     req->reprocess_request(req->method, scheme, *authority,
-                          req->build_destination_path(self->upstream.path.base, self->upstream.path.len), overrides, 0);
+                          req->build_destination(self->upstream.path.base, self->upstream.path.len), overrides, 0);
 
     return 0;
 }
