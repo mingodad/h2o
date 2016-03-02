@@ -69,17 +69,17 @@ static size_t compress_chunk(gzip_context_t *self, const void *src, size_t len, 
      */
     do {
         /* expand buffer (note: in case of Z_SYNC_FLUSH we need to supply at least 6 bytes of output buffer) */
-        if (self->bufs.entries[bufindex].len + 32 > BUF_SIZE) {
+        if (self->bufs[bufindex].len + 32 > BUF_SIZE) {
             ++bufindex;
             if (bufindex == self->bufs.size)
                 expand_buf(self->pool, &self->bufs);
-            self->bufs.entries[bufindex].len = 0;
+            self->bufs[bufindex].len = 0;
         }
-        self->zs.next_out = (Bytef *)self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len;
-        self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[bufindex].len);
+        self->zs.next_out = (Bytef *)self->bufs[bufindex].base + self->bufs[bufindex].len;
+        self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs[bufindex].len);
         ret = deflate(&self->zs, flush);
         assert(ret == Z_OK || ret == Z_STREAM_END);
-        self->bufs.entries[bufindex].len = BUF_SIZE - self->zs.avail_out;
+        self->bufs[bufindex].len = BUF_SIZE - self->zs.avail_out;
     } while (self->zs.avail_out == 0 && ret != Z_STREAM_END);
 
     return bufindex;

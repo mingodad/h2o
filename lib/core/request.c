@@ -446,7 +446,7 @@ void h2o_req_t::send_inline(const char *body, size_t len)
 
     this->start_response(&generator);
 
-    if (this->input.method.isEq("HEAD"))
+    if (this->input.method.isEq("HEAD") || !len)
     {
         this->send(NULL, 0, 1);
     }
