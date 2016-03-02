@@ -66,6 +66,15 @@ static SQRESULT sq_getstr_and_size(HSQUIRRELVM v, SQInteger idx, h2o_iovec_t &de
     return rc;
 }
 
+/*
+static SQUserPointer sq_get_udptr(HSQUIRRELVM v, SQInteger idx)
+{
+	SQUserPointer o;
+	sq_getuserdata(v, idx, &o, nullptr);
+	return o;
+}
+*/
+
 static void sq_printfunc(HSQUIRRELVM v,const SQChar *s,...)
 {
 	va_list vl;
@@ -95,13 +104,19 @@ static void set_h2o_root(HSQUIRRELVM sq)
     sq_pop(sq, 1);
 }
 
-static inline void sq_create_delegate_table(HSQUIRRELVM vm, SQRegFunction *methods, HSQOBJECT *handle)
+/** Stores a delegate table on registry by key */
+static inline void sq_create_delegate_table(HSQUIRRELVM vm, SQRegFunction *methods, const SQChar *key)
 {
+    sq_pushstring(vm, key, -1);
     sq_newtable(vm);
     sq_insert_reg_funcs(vm, methods);
-    sq_resetobject(handle);
-    sq_getstackobj(vm, -1, handle);
-    sq_addref(vm, handle);
+    sq_setonregistrytable(vm);
+}
+
+static inline void sq_push_delegate_table(HSQUIRRELVM vm, const SQChar *key)
+{
+    sq_pushstring(vm, key, -1);
+    sq_getonregistrytable(vm);
 }
 
 #define SQ_H2O_PUSH_OBJECT(otype) \
@@ -110,7 +125,7 @@ static void sq_push_##otype(HSQUIRRELVM v, otype *obj)\
     SQUserPointer ptr = sq_newuserdata(v, sizeof (otype *));\
     *((otype**)ptr) = obj;\
     sq_settypetag(v, -1, (SQUserPointer)otype##_TAG);\
-    sq_pushobject(v, otype##_delegate_table);\
+    sq_push_delegate_table(v, otype##_TAG_MT);\
     sq_setdelegate(v, -2);\
 }
 
@@ -128,8 +143,7 @@ static otype *sq_get_##otype(HSQUIRRELVM v, SQInteger idx)\
 
 #define SQ_H2O_OBJECT(otype) \
 static const char otype##_TAG[] = "__" #otype; \
-/*one for each thread*/ \
-static __thread HSQOBJECT otype##_delegate_table; \
+static const char otype##_TAG_MT[] = "__" #otype "_mt"; \
 \
 SQ_H2O_PUSH_OBJECT(otype)\
 SQ_H2O_GET_OBJECT(otype)
@@ -226,10 +240,12 @@ static SQRegFunction sq_h2o_pathconf_t_methods[] =
 */
 
 ///Request
+/*
 struct sq_h2o_req_t {
     h2o_req_t *req;
     h2o_squilu_handler_t *req_handler;
 };
+*/
 
 SQ_H2O_OBJECT(h2o_req_t);
 #define GET_h2o_request_AT(v, idx) SQ_CHECK_H2O_OBJECT(v, idx, h2o_req_t, req)
@@ -241,7 +257,6 @@ SQ_H2O_OBJECT(h2o_req_t);
 
 sq_h2o_REQ_GET_IO_VEC(authority)
 sq_h2o_REQ_GET_IO_VEC(method)
-sq_h2o_REQ_GET_IO_VEC(path)
 sq_h2o_REQ_GET_IO_VEC(path_normalized)
 //sq_h2o_REQ_GET_STR(scheme)
 sq_h2o_REQ_GET_IO_VEC(entity)
@@ -314,6 +329,14 @@ static SQRESULT sq_h2o_req_t_default_port(HSQUIRRELVM v)
 {
     CHECK_H2O_REQUEST(v);
     sq_pushinteger(v, req->scheme->default_port);
+    return 1;
+}
+
+static SQRESULT sq_h2o_req_t_path(HSQUIRRELVM v)
+{
+    CHECK_H2O_REQUEST(v);
+    size_t size = req->query_at == SIZE_MAX ? req->path.len : req->query_at;
+    sq_pushstring(v, req->path.base, size);
     return 1;
 }
 
@@ -472,16 +495,16 @@ static SQRESULT sq_h2o_req_t_send(HSQUIRRELVM v)
     if(sq_gettype(v, 3) == OT_STRING)
     {
         h2o_iovec_t content_type;
-        sq_getstr_and_size(v, 2, content_type);
+        sq_getstr_and_size(v, 3, content_type);
         content_type.strdup(&req->pool, content_type);
         req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, content_type.base, content_type.len);
         req->res.content_length = body.len;
         req->res.status = 200;
         req->res.reason = "OK";
     } else {
-        if(sq_gettop(v) > 2)
+        if(sq_gettop(v) > 3)
         {
-            sq_getinteger(v, 3, &is_final);
+            sq_getinteger(v, 4, &is_final);
         }
     }
     if (!req->_generator) {
@@ -525,6 +548,23 @@ static SQRESULT sq_h2o_req_t_send_error(HSQUIRRELVM v)
 static SQRESULT sq_h2o_req_t_send_error_deferred(HSQUIRRELVM v)
 {
     return sq_h2o_req_t_send_error0(v, true);
+}
+
+static SQRESULT sq_h2o_req_t_send_inline(HSQUIRRELVM v)
+{
+    CHECK_H2O_REQUEST(v);
+    SQ_FUNC_VARS_NO_TOP(v);
+
+    SQ_GET_STRING(v, 2, body);
+    h2o_iovec_t iov;
+    if(body_size)
+    {
+        iov.strdup(&req->pool, body, body_size);
+    }
+    else iov = {};
+
+    req->send_inline(iov.base, iov.len);
+    return 0;
 }
 
 static SQRESULT sq_h2o_req_t_send_redirect(HSQUIRRELVM v)
@@ -583,7 +623,7 @@ static SQRESULT sq_h2o_req_t_delegate_request_deferred(HSQUIRRELVM v)
     req->delegate_request_deferred(req->handler);
     return 0;
 }
-*/
+
 static SQRESULT sq_h2o_req_t_reprocess_request(HSQUIRRELVM v)
 {
     CHECK_H2O_REQUEST(v);
@@ -591,6 +631,7 @@ static SQRESULT sq_h2o_req_t_reprocess_request(HSQUIRRELVM v)
     //req->reprocess_request();
     return 0;
 }
+*/
 
 static void do_squilu_generator_call(HSQUIRRELVM v, HSQOBJECT &cb, h2o_squilu_generator_t *generator, h2o_req_t *req)
 {
@@ -692,9 +733,17 @@ static SQRESULT sq_h2o_req_t_console(HSQUIRRELVM v)
     return 0;
 }
 
+static SQRESULT sq_h2o_req_t__tostring(HSQUIRRELVM v)
+{
+    CHECK_H2O_REQUEST(v);
+    sq_pushfstring(v, "sq_h2o_req_t: %p", req);
+    return 1;
+}
+
 #define _DECL_FUNC(name,nparams,tycheck) {_SC(#name),  sq_h2o_req_t_##name,nparams,tycheck}
 static SQRegFunction sq_h2o_req_t_methods[] =
 {
+	_DECL_FUNC(_tostring,  1, _SC("u")),
 	_DECL_FUNC(authority,  1, _SC("u")),
 	{_SC("host"),  sq_h2o_req_t_authority,  1, _SC("u")},
 	_DECL_FUNC(method,  1, _SC("u")),
@@ -719,7 +768,8 @@ static SQRegFunction sq_h2o_req_t_methods[] =
 	_DECL_FUNC(default_port,  1, _SC("u")),
 	_DECL_FUNC(query_string,  1, _SC("u")),
 	_DECL_FUNC(console,  -2, _SC("u.")),
-	_DECL_FUNC(send,  -2, _SC("u.")),
+	_DECL_FUNC(send,  -2, _SC("ussi")),
+	_DECL_FUNC(send_inline,  2, _SC("us")),
 	_DECL_FUNC(send_redirect,  4, _SC("uiss")),
 	_DECL_FUNC(send_redirect_internal,  4, _SC("ussi")),
 	_DECL_FUNC(send_error,  5, _SC("uissi")),
@@ -736,25 +786,120 @@ static SQRegFunction sq_h2o_req_t_methods[] =
 };
 #undef _DECL_FUNC
 
+static SQRESULT sq_mg_url_get_var(HSQUIRRELVM v)
+{
+    SQ_FUNC_VARS_NO_TOP(v);
+    SQ_GET_STRING(v, 2, data);
+    SQ_GET_STRING(v, 3, name);
+
+    const char *start;
+    size_t buffer_len;
+    int var_len = mg_find_var(data, data_size, name, &start);
+    if(var_len > 0){
+        buffer_len = var_len+1;
+        char *buffer = sq_getscratchpad(v,buffer_len);
+        if(buffer){
+            var_len = mg_url_decode(start, var_len, buffer, buffer_len, 1);
+            sq_pushstring(v, buffer, var_len);
+            return 1;
+        }
+    }
+    sq_pushnull(v);
+    return 1;
+}
+
+static SQRESULT sq_mg_url_decode_base(HSQUIRRELVM v, SQInteger is_form_url_encoded)
+{
+    SQ_FUNC_VARS_NO_TOP(v);
+    SQ_GET_STRING(v, 2, src);
+
+    int dst_len = src_size +1;
+    char *dst = sq_getscratchpad(v,dst_len);
+    dst_len = mg_url_decode(src, src_size, dst, dst_len, is_form_url_encoded);
+    sq_pushstring(v, dst, dst_len);
+    return 1;
+}
+
+static SQRESULT sq_mg_url_decode(HSQUIRRELVM v)
+{
+    return sq_mg_url_decode_base(v, 1);
+}
+
+static SQRESULT sq_mg_uri_decode(HSQUIRRELVM v)
+{
+    return sq_mg_url_decode_base(v, 0);
+}
+
+static SQRESULT sq_mg_url_encode(HSQUIRRELVM v)
+{
+    SQ_FUNC_VARS_NO_TOP(v);
+    SQ_GET_STRING(v, 2, src);
+
+    char *dst = mg_url_encode(src);
+
+    sq_pushstring(v, dst, -1);
+    free(dst);
+    return 1;
+}
+
+#define _DECL_FUNC(name,nparams,tycheck) {_SC(#name),  sq_mg_##name,nparams,tycheck}
+static SQRegFunction sq_mg_methods[] =
+{
+	_DECL_FUNC(url_get_var,  3, _SC(".ss")),
+	_DECL_FUNC(url_decode,  2, _SC(".s")),
+	_DECL_FUNC(uri_decode,  2, _SC(".s")),
+	_DECL_FUNC(url_encode,  2, _SC(".s")),
+	{0,0}
+};
+#undef _DECL_FUNC
+
 SQRESULT sqext_register_H2O(HSQUIRRELVM v)
 {
     //sq_create_delegate_table(v, sq_h2o_globalconf_t_methods, &h2o_globalconf_t_delegate_table);
-    sq_create_delegate_table(v, sq_h2o_req_t_methods, &h2o_req_t_delegate_table);
+    sq_create_delegate_table(v, sq_h2o_req_t_methods, h2o_req_t_TAG_MT);
+    sq_insert_reg_funcs(v, sq_mg_methods);
     return 0;
 }
 
-static HSQUIRRELVM open_squilu()
+extern "C" {
+SQRESULT sqext_register_mix (HSQUIRRELVM sqvm);
+SQRESULT sqext_register_SQLite3 (HSQUIRRELVM sqvm);
+SQRESULT sqext_register_base64(HSQUIRRELVM v);
+SQRESULT sqext_register_Sq_Fpdf(HSQUIRRELVM v);
+SQRESULT sqext_register_decimal(HSQUIRRELVM v);
+SQRESULT sqext_register_sq_slave_vm(HSQUIRRELVM v);
+SQRESULT sqext_register_sqfs(HSQUIRRELVM v);
+SQRESULT sqext_register_sq_socket(HSQUIRRELVM v);
+}
+
+static HSQUIRRELVM open_squilu(int debug)
 {
     HSQUIRRELVM sq = sq_open(1024);
     sq_setprintfunc(sq, sq_printfunc, sq_errorfunc);
+    sqstd_seterrorhandlers(sq);
     sq_pushroottable(sq);
-    set_h2o_root(sq);
 	sqstd_register_bloblib(sq);
 	sqstd_register_iolib(sq);
 	sqstd_register_systemlib(sq);
 	sqstd_register_mathlib(sq);
 	sqstd_register_stringlib(sq);
+	sqext_register_mix(sq);
+	sqext_register_SQLite3(sq);
+	sqext_register_base64(sq);
+	sqext_register_Sq_Fpdf(sq);
+	//sqext_register_decimal(sq);
+	sqext_register_sq_slave_vm(sq);
+	sqext_register_sqfs(sq);
+	sqext_register_sq_socket(sq);
+    set_h2o_root(sq);
 	sqext_register_H2O(sq);
+
+	sq_pushliteral(sq, "H2O_DEBUG");
+	sq_pushinteger(sq, debug);
+	sq_newslot(sq, -3, SQFalse);
+
+    assert(sq_gettop(sq) == 1);
+    sq_poptop(sq); //remove root table
 
     return sq;
 }
@@ -767,14 +912,24 @@ static int h2o_squilu_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
     SQInteger result = 0;
     if(v)
     {
+        if(handler->config.debug)
+        {
+            /*
+            !!! attention if debug is enabled use only one thread !!!
+            */
+            if(handler->reload_scripting_file((h2o_context_t*)sq_ctx))
+            {
+                return -1;
+            }
+        }
         int saved_top = sq_gettop(v);
-        sq_pushstring(v, "h2oHandleRequest", -1);
+        sq_pushstring(v, H2O_SCRIPTING_ENTRY_POINT, -1);
         if( (sq_getonroottable(v) == SQ_OK) && (sq_gettype(v, -1) == OT_CLOSURE))
         {
             sq_pushroottable(v);
             sq_push_h2o_req_t(v, req);
 
-            if (sq_call (v, 2, SQTrue, SQFalse) == SQ_OK) {
+            if (sq_call (v, 2, SQTrue, handler->config.debug != 0) == SQ_OK) {
               /* run OK? */
               sq_getinteger(v, -1, &result);
             }
@@ -784,7 +939,6 @@ static int h2o_squilu_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
                 result = -1;
             }
         }
-
         sq_settop(v, saved_top);
     }
 
@@ -795,7 +949,7 @@ struct squilu_configurator_t : h2o_scripting_configurator_t {
 
     squilu_configurator_t():h2o_scripting_configurator_t("squilu"){}
 
-    int compile_test(h2o_scripting_config_vars_t *config, char *errbuf) override;
+    int compile_test(h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size) override;
 
     h2o_scripting_handler_t *pathconf_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars) override
     {
@@ -803,29 +957,40 @@ struct squilu_configurator_t : h2o_scripting_configurator_t {
     }
 };
 
-int h2o_squilu_compile_code(HSQUIRRELVM sq, h2o_scripting_config_vars_t *config, char *errbuf)
+int h2o_squilu_handler_t::reload_scripting_file(h2o_context_t *ctx)
 {
+    auto sq_ctx = (h2o_squilu_context_t*)ctx;
+
+	sq_settop(sq_ctx->sq, 0);
+
+    return super::reload_scripting_file(ctx);
+}
+
+int h2o_squilu_compile_code(HSQUIRRELVM sq, h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
+{
+    int rc = -1;
     /* parse */
     if(SQ_SUCCEEDED(sq_compilebuffer(sq, config->source.base, config->source.len, config->path, SQTrue, SQTrue))) {
         int callargs = 1;
         sq_pushroottable(sq);
         if(SQ_SUCCEEDED(sq_call(sq, callargs,SQFalse, SQTrue))) {
-            return 0;
+            rc = 0;
         }
     }
+    if(rc) scsnprintf(errbuf, errbuf_size, "%s", sq_getlasterror_str(sq));
 
-    return -1;
+    return rc;
 }
 
-int squilu_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *errbuf)
+int squilu_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
 {
-    HSQUIRRELVM sq = open_squilu();
+    HSQUIRRELVM sq = open_squilu(0);
 
     if (sq == NULL) {
         fprintf(stderr, "%s: no memory\n", H2O_SQUILU_MODULE_NAME);
         abort();
     }
-    int ok = h2o_squilu_compile_code(sq, config, errbuf);
+    int ok = h2o_squilu_compile_code(sq, config, errbuf, errbuf_size);
     sq_close(sq);
 
     return ok;
@@ -837,6 +1002,7 @@ h2o_squilu_handler_t *h2o_squilu_register(h2o_pathconf_t *pathconf, h2o_scriptin
 
     handler->on_req = h2o_squilu_handle_request;
     handler->config.source.strdup(vars->source);
+    handler->config.debug = vars->debug;
     if (vars->path != NULL)
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
 
@@ -852,18 +1018,18 @@ void h2o_squilu_register_configurator(h2o_globalconf_t *conf)
 void h2o_squilu_handler_t::on_context_init(h2o_context_t *ctx)
 {
     auto handler_ctx = h2o_mem_calloc_for<h2o_squilu_context_t>();
+    char errbuf[1024];
 
     handler_ctx->handler = this;
 
     /* init squilu in every thread */
-    if ((handler_ctx->sq = open_squilu()) == NULL) {
+    if ((handler_ctx->sq = open_squilu(this->config.debug)) == NULL) {
         fprintf(stderr, "%s: no memory\n", H2O_SQUILU_MODULE_NAME);
         abort();
     }
 
     /* compile code (must be done for each thread) */
-    int rc = h2o_squilu_compile_code(handler_ctx->sq, &this->config, NULL);
-
+    /*int rc =*/ h2o_squilu_compile_code(handler_ctx->sq, &this->config, errbuf, sizeof(errbuf));
     ctx->set_handler_context(this, handler_ctx);
 }
 
@@ -876,5 +1042,12 @@ void h2o_squilu_handler_t::on_context_dispose(h2o_context_t *ctx)
 
     sq_close(handler_ctx->sq);
     h2o_mem_free(handler_ctx);
+}
+
+int h2o_squilu_handler_t::compile_code(h2o_context_t *ctx)
+{
+    char errbuf[1024];
+    auto handler_ctx = (h2o_squilu_context_t*)ctx;
+    return h2o_squilu_compile_code(handler_ctx->sq, &this->config, errbuf, sizeof(errbuf));
 }
 

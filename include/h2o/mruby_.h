@@ -72,6 +72,7 @@ struct h2o_mruby_handler_t : h2o_scripting_handler_t {
 
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
+    int compile_code(h2o_context_t *ctx) override;
 };
 
 struct h2o_mruby_context_t {

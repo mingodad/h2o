@@ -755,7 +755,7 @@ static int h2o_lua_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
         lua_pushcfunction(L, traceback);  /* push traceback function */
         int error_func = lua_gettop(L);
 
-        lua_getglobal(L, "h2oHandleRequest");
+        lua_getglobal(L, H2O_SCRIPTING_ENTRY_POINT);
         if(lua_isfunction(L,-1)) {
             *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
             luaL_getmetatable(L, H2O_REQUEST_METATABLE);
@@ -781,7 +781,7 @@ struct lua_configurator_t : h2o_scripting_configurator_t {
 
     lua_configurator_t():h2o_scripting_configurator_t("lua"){}
 
-    int compile_test(h2o_scripting_config_vars_t *config, char *errbuf) override;
+    int compile_test(h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size) override;
 
     h2o_scripting_handler_t *pathconf_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars) override
     {
@@ -798,7 +798,7 @@ static void set_h2o_root(lua_State *L)
     lua_setglobal(L, "H2O_ROOT");
 }
 
-int h2o_lua_compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char *errbuf)
+int h2o_lua_compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
 {
     set_h2o_root(L);
 
@@ -815,7 +815,7 @@ int h2o_lua_compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char
     return result;
 }
 
-int lua_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *errbuf)
+int lua_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
 {
     lua_State *L = lua_open();
 
@@ -824,7 +824,7 @@ int lua_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *
         abort();
     }
     h2o_lua_open_libs(L);
-    int ok = h2o_lua_compile_code(L, config, errbuf);
+    int ok = h2o_lua_compile_code(L, config, errbuf, errbuf_size);
     lua_close(L);
 
     return ok;
@@ -851,6 +851,7 @@ void h2o_lua_register_configurator(h2o_globalconf_t *conf)
 void h2o_lua_handler_t::on_context_init(h2o_context_t *ctx)
 {
     auto handler_ctx = h2o_mem_calloc_for<h2o_lua_context_t>();
+    char errbuf[1024];
 
     handler_ctx->handler = this;
 
@@ -863,7 +864,7 @@ void h2o_lua_handler_t::on_context_init(h2o_context_t *ctx)
     h2o_lua_open_libs(handler_ctx->L);
 
     /* compile code (must be done for each thread) */
-    int rc = h2o_lua_compile_code(handler_ctx->L, &this->config, NULL);
+    int rc = h2o_lua_compile_code(handler_ctx->L, &this->config, errbuf, sizeof(errbuf));
 
     ctx->set_handler_context(this, handler_ctx);
 }
@@ -877,4 +878,9 @@ void h2o_lua_handler_t::on_context_dispose(h2o_context_t *ctx)
 
     lua_close(handler_ctx->L);
     h2o_mem_free(handler_ctx);
+}
+
+int h2o_lua_handler_t::compile_code(h2o_context_t *ctx)
+{
+    return -1;
 }

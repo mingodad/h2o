@@ -29,7 +29,7 @@ struct mruby_configurator_t : h2o_scripting_configurator_t {
 
     mruby_configurator_t():h2o_scripting_configurator_t("mruby"){}
 
-    int compile_test(h2o_scripting_config_vars_t *config, char *errbuf) override;
+    int compile_test(h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size) override;
 
     h2o_scripting_handler_t *pathconf_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars) override
     {
@@ -37,7 +37,7 @@ struct mruby_configurator_t : h2o_scripting_configurator_t {
     }
 };
 
-int mruby_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *errbuf)
+int mruby_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
 {
     mrb_state *mrb;
 

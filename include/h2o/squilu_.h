@@ -29,11 +29,14 @@
 #define H2O_SQUILU_MODULE_NAME "h2o_squilu"
 
 struct h2o_squilu_handler_t : h2o_scripting_handler_t {
+    typedef h2o_scripting_handler_t super;
 
     h2o_squilu_handler_t():h2o_scripting_handler_t() {}
 
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
+    int compile_code(h2o_context_t *ctx) override;
+    int reload_scripting_file(h2o_context_t *ctx) override;
 };
 
 struct h2o_squilu_context_t {

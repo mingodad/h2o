@@ -859,3 +859,8 @@ int h2o_mruby_context_t::iterate_headers(mrb_value headers,
 
     return 0;
 }
+
+int h2o_mruby_handler_t::compile_code(h2o_context_t *ctx)
+{
+    return -1;
+}
