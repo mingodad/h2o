@@ -123,11 +123,11 @@ h2o_globalconf_t::h2o_globalconf_t()
     this->configurator_init_core();
 }
 
-h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname)
+h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
     auto pathconf = hostconf->paths.append_new(NULL);
 
-    h2o_pathconf_t::init(pathconf, hostconf->global, pathname, hostconf->mimemap);
+    h2o_pathconf_t::init(pathconf, hostconf->global, path, hostconf->mimemap);
 
     return pathconf;
 }
