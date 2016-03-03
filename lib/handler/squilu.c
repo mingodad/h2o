@@ -382,7 +382,7 @@ static SQRESULT sq_h2o_req_t_header(HSQUIRRELVM v)
             key.strdup(&req->pool, key);
 
             h2o_iovec_t value;
-            sq_getstr_and_size(v, 2, value);
+            sq_getstr_and_size(v, 3, value);
             value.strdup(&req->pool, value);
             req->addRequestHeader(key, value);
         }
@@ -434,7 +434,7 @@ static SQRESULT sq_h2o_req_t_response_header(HSQUIRRELVM v)
             key.strdup(&req->pool, key);
 
             h2o_iovec_t value;
-            sq_getstr_and_size(v, 2, value);
+            sq_getstr_and_size(v, 3, value);
             value.strdup(&req->pool, value);
             req->addResponseHeader(key, value);
         }
@@ -497,15 +497,14 @@ static SQRESULT sq_h2o_req_t_send(HSQUIRRELVM v)
         h2o_iovec_t content_type;
         sq_getstr_and_size(v, 3, content_type);
         content_type.strdup(&req->pool, content_type);
-        req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, content_type.base, content_type.len);
+        req->res.headers.add(&req->pool, H2O_TOKEN_CONTENT_TYPE, content_type);
         req->res.content_length = body.len;
         req->res.status = 200;
         req->res.reason = "OK";
-    } else {
-        if(sq_gettop(v) > 3)
-        {
-            sq_getinteger(v, 4, &is_final);
-        }
+    }
+    if(sq_gettop(v) > 3)
+    {
+        sq_getinteger(v, 4, &is_final);
     }
     if (!req->_generator) {
         req->start_response(&generator);
