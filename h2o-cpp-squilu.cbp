@@ -183,6 +183,7 @@
 			<Add option="-D_FILE_OFFSET_BITS=64" />
 			<Add option="-DPDF_USING_ZLIB=1" />
 			<Add option="-DWITH_UUID=1" />
+			<Add option="-DSC_USE_MKSTEMP=1" />
 			<Add directory="include" />
 			<Add directory="deps/picohttpparser" />
 			<Add directory="deps/yaml/include" />
@@ -198,6 +199,10 @@
 			<Add directory="../../../../local/luajit/include/luajit" />
 			<Add directory="../../../SquiLu/SquiLu/include" />
 			<Add directory="deps/brotli/enc" />
+			<Add directory="../../../SquiLu/SquiLu-ext" />
+			<Add directory="../../../SquiLu/SquiLu/sqstdlib" />
+			<Add directory="../../../SquiLu/SquiLu/squirrel" />
+			<Add directory="../../../SquiLu/minizip" />
 		</Compiler>
 		<Linker>
 			<Add option="-zmuldefs" />
@@ -209,13 +214,80 @@
 			<Add library="m" />
 			<Add library="dl" />
 			<Add library="z" />
-			<Add library="squilu-dbg" />
 			<Add library="uuid" />
+			<Add library="../../../SquiLu/SquiLu/obj/Debug-no-gui/SquiLu-ext/sqlite3.o" />
+			<Add library="../../../SquiLu/minizip/libminizip.a" />
 			<Add directory="libressl-build/lib" />
 			<Add directory="mruby/host/lib" />
 			<Add directory="../../../../local/luajit/lib" />
 			<Add directory="../../../SquiLu/SquiLu/bin" />
 		</Linker>
+		<Unit filename="../../../SquiLu/SquiLu-ext/HighResolutionTimer.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/HighResolutionTimer.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/dynamic_library.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/dynamic_library.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/fpdf.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/fpdf.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/lua_socket.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/lua_socket.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/pdf-font.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/pdf-font.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_base64.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_fpdf.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_fs.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_mix.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_slave_vm.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_socket.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_sqlite3.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_sqlite3.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sq_zlib.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sqfs.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/sqlite3.h" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/tinyxml2.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu-ext/tinyxml2.h" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdaux.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdblob.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdio.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdmath.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdrex.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdstream.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdstream.h" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdstring.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdsystem.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/lua-regex.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/lua-regex.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqapi.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqarray.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqbaselib.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqclass.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqclass.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqclosure.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqcompiler.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqcompiler.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqdebug.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqfuncproto.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqfuncstate.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqfuncstate.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqlexer.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqlexer.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqmem.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqobject.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqobject.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqopcodes.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqpcheader.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqstate.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqstate.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqstring.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqtable.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqtable.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/squserdata.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/squtils.h" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqvm.cpp" />
+		<Unit filename="../../../SquiLu/SquiLu/squirrel/sqvm.h" />
 		<Unit filename="deps/brotli/enc/backward_references.cc" />
 		<Unit filename="deps/brotli/enc/backward_references.h" />
 		<Unit filename="deps/brotli/enc/bit_cost.h" />

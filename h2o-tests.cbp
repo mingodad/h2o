@@ -137,13 +137,13 @@
 		<Unit filename="t/00unit/lib/core/util.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="t/00unit/lib/handler/compress.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="t/00unit/lib/handler/fastcgi.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="t/00unit/lib/handler/file.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="t/00unit/lib/handler/gzip.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="t/00unit/lib/handler/headers.c">
