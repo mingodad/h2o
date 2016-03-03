@@ -619,7 +619,7 @@ int h2o_get_address_info(h2o_socket_address &sa, h2o_conn_t *conn, h2o_get_addre
     return 0;
 }
 
-h2o_iovec_t h2o_req_t::build_destination_path(const char *prefix, size_t prefix_len)
+h2o_iovec_t h2o_req_t::build_destination(const char *prefix, size_t prefix_len)
 {
     h2o_iovec_t parts[4];
     size_t num_parts = 0;
