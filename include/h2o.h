@@ -707,7 +707,7 @@ struct  h2o_headers_t : H2O_VECTOR<h2o_header_t>
      */
     ssize_t find(const h2o_token_t *token, size_t cursor);
     /**
-     * searches for a header of given name (slow, by comparing strings)
+     * searches for a header of given name (slow, by comparing strings case insensitive)
      * @param headers header list
      * @param name name of the header to search for
      * @param name_len length of the name
@@ -730,7 +730,7 @@ struct  h2o_headers_t : H2O_VECTOR<h2o_header_t>
     void add_token(h2o_mem_pool_t *pool, const h2o_token_t *token, const char *value,
                               size_t value_len);
     /**
-     * adds a header to list
+     * adds a header to list (name should be lowercase to be a valid http2 header)
      */
     void add(h2o_mem_pool_t *pool, const char *name, size_t name_len, int maybe_token,
                                const char *value, size_t value_len);
@@ -745,7 +745,7 @@ struct  h2o_headers_t : H2O_VECTOR<h2o_header_t>
     void set(h2o_mem_pool_t *pool, const h2o_token_t *token, const char *value, size_t value_len,
                         int overwrite_if_exists);
     /**
-     * adds or replaces a header into the list
+     * adds or replaces a header into the list (name should be lowercase to be a valid http2 header)
      */
     void set(h2o_mem_pool_t *pool, const char *name, size_t name_len, int maybe_token,
                                const char *value, size_t value_len, int overwrite_if_exists);
