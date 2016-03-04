@@ -364,7 +364,7 @@ static SQRESULT sq_h2o_req_t_header(HSQUIRRELVM v)
     case 2: //get header
         {
             SQ_GET_STRING(v, 2, key);
-            size_t header_index = req->headers.find(key, key_size, -1);
+            size_t header_index = req->headers.find(key, key_size, SIZE_MAX);
             if(header_index != SIZE_MAX)
             {
                 h2o_iovec_t *slot = &(req->headers[header_index].value);
@@ -416,7 +416,7 @@ static SQRESULT sq_h2o_req_t_response_header(HSQUIRRELVM v)
     case 2: //get header
         {
             SQ_GET_STRING(v, 2, key);
-            size_t header_index = req->res.headers.find(key, key_size, -1);
+            size_t header_index = req->res.headers.find(key, key_size, SIZE_MAX);
             if(header_index != SIZE_MAX)
             {
                 h2o_iovec_t *slot = &(req->res.headers[header_index].value);
