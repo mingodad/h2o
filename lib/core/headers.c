@@ -49,7 +49,7 @@ ssize_t h2o_headers_t::find(const char *name, size_t name_len, size_t cursor)
 {
     for (++cursor; cursor < this->size; ++cursor) {
         auto t = this->entries[cursor];
-        if (t.name->isEq(name, name_len)) {
+        if (h2o_lcstris(t.name->base, t.name->len, name, name_len)) {
             return cursor;
         }
     }
