@@ -22,7 +22,6 @@
 #include <string.h>
 #include "../../test.h"
 #include "../../../../lib/core/util.c"
-#include "../../../../lib/core/request.c"
 
 static void test_parse_proxy_line(void)
 {
