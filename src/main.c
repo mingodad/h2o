@@ -1501,6 +1501,10 @@ static void setup_configurators(void)
 #if H2O_USE_SQUILU
     register_configurator(squilu);
 #endif
+#ifdef TEST_IMG_SEND
+    extern void h2o_imgtest_register_configurator(h2o_globalconf_t *conf);
+    register_configurator(imgtest);
+#endif
 #undef register_configurator
 }
 

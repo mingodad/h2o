@@ -133,8 +133,10 @@ struct h2o_base_handler_t {
  * basic structure of a handler (an object that MAY generate a response)
  * The handlers should register themselves to h2o_context_t::handlers.
  */
+struct h2o_handler_t;
+typedef int (*h2o_handler_t_on_req_fn)(h2o_handler_t *self, h2o_req_t *req);
 struct h2o_handler_t : h2o_base_handler_t {
-    int (*on_req)(h2o_handler_t *self, h2o_req_t *req);
+    h2o_handler_t_on_req_fn on_req;
 };
 
 /**
