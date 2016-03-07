@@ -45,7 +45,7 @@ struct h2o_squilu_context_t {
 };
 
 struct h2o_squilu_generator_t : h2o_generator_t {
-    h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
+    //h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     HSQUIRRELVM sq;
     HSQOBJECT /*h2o_generator,*/
         h2o_generator_squilu_cb_proceed,

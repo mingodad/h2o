@@ -240,20 +240,66 @@ static SQRegFunction sq_h2o_pathconf_t_methods[] =
 */
 
 ///Request
-/*
+
 struct sq_h2o_req_t {
     h2o_req_t *req;
-    h2o_squilu_handler_t *req_handler;
+    h2o_squilu_handler_t *handler;
 };
-*/
 
-SQ_H2O_OBJECT(h2o_req_t);
-#define GET_h2o_request_AT(v, idx) SQ_CHECK_H2O_OBJECT(v, idx, h2o_req_t, req)
+static const char h2o_req_t_TAG[] = "__h2o_req_t";
+static const char h2o_req_t_TAG_MT[] = "__h2o_req_t_mt";
+
+static void sq_push_h2o_req_t(HSQUIRRELVM v, h2o_squilu_handler_t *handler, h2o_req_t *req)
+{
+    auto ptr = (sq_h2o_req_t*)sq_newuserdata(v, sizeof(sq_h2o_req_t));
+    ptr->req = req;
+    ptr->handler = handler;
+    sq_settypetag(v, -1, (SQUserPointer)h2o_req_t_TAG);
+    sq_push_delegate_table(v, h2o_req_t_TAG_MT);
+    sq_setdelegate(v, -2);
+}
+
+static sq_h2o_req_t *sq_get_h2o_req_t(HSQUIRRELVM v, SQInteger idx)
+{
+    SQUserPointer obj, utag;
+    SQInteger rc = sq_getuserdata(v, idx, &obj, &utag);
+    if( (rc == SQ_OK) && (utag == h2o_req_t_TAG) )
+    {
+        return (sq_h2o_req_t*)obj;
+    }
+    return nullptr;
+}
+
+#define GET_h2o_request_AT(vm, idx) \
+    sq_h2o_req_t *self = sq_get_h2o_req_t(v, idx); \
+    if(!self) return SQ_ERROR; \
+    h2o_req_t *req = self->req;
+
 #define CHECK_H2O_REQUEST(v) GET_h2o_request_AT(v, 1)
 
-#define sq_h2o_REQ_GET_STR(key) SQ_H2O_OBJECT_GET_STR(h2o_req_t, req, key)
-#define sq_h2o_REQ_GET_IO_VEC(key) SQ_H2O_OBJECT_GET_IO_VEC(h2o_req_t, req, key)
-#define sq_h2o_REQ_GET_INT(key) SQ_H2O_OBJECT_GET_INT(h2o_req_t, req, key)
+#define sq_h2o_REQ_GET_STR(key) \
+static SQRESULT sq_h2o_req_t_##key(HSQUIRRELVM v) \
+{\
+    CHECK_H2O_REQUEST(v);\
+    sq_pushstring(v, req->key, -1);\
+    return 1;\
+}
+
+#define sq_h2o_REQ_GET_IO_VEC(key) \
+static SQRESULT sq_h2o_req_t_##key(HSQUIRRELVM v) \
+{\
+    CHECK_H2O_REQUEST(v);\
+    sq_pushstring(v, req->key.base, req->key.len);\
+    return 1;\
+}
+
+#define sq_h2o_REQ_GET_INT(key) \
+static SQRESULT sq_h2o_req_t_##key(HSQUIRRELVM v) \
+{\
+    CHECK_H2O_REQUEST(v);\
+    sq_pushinteger(v, req->key);\
+    return 1;\
+}
 
 sq_h2o_REQ_GET_IO_VEC(authority)
 sq_h2o_REQ_GET_IO_VEC(method)
@@ -354,20 +400,32 @@ static SQRESULT sq_h2o_req_t_query_string(HSQUIRRELVM v)
     return 1;
 }
 
-static SQRESULT sq_h2o_req_t_header(HSQUIRRELVM v)
+static SQRESULT sq_h2o_req_t_headers0(HSQUIRRELVM v, h2o_req_t *req, h2o_headers_t &headers)
 {
-    CHECK_H2O_REQUEST(v);
     SQ_FUNC_VARS(v);
-
     switch(_top_)
     {
+    case 1: //all headers
+        {
+            size_t header_count = headers.size;
+            sq_newtableex(v, header_count);
+            for(size_t i=0; i < header_count; ++i)
+            {
+                const auto &hdr = headers[i];
+                sq_pushstring(v, hdr.name->base, hdr.name->len);
+                sq_pushstring(v, hdr.value.base, hdr.value.len);
+                sq_newslot(v, -3, SQTrue);
+            }
+            return 1;
+        }
+    break;
     case 2: //get header
         {
             SQ_GET_STRING(v, 2, key);
-            size_t header_index = req->headers.find(key, key_size, SIZE_MAX);
+            size_t header_index = headers.find(key, key_size, SIZE_MAX);
             if(header_index != SIZE_MAX)
             {
-                h2o_iovec_t *slot = &(req->headers[header_index].value);
+                h2o_iovec_t *slot = &(headers[header_index].value);
                 sq_pushstring(v, slot->base, slot->len);
             } else {
                 sq_pushnull(v);
@@ -384,63 +442,23 @@ static SQRESULT sq_h2o_req_t_header(HSQUIRRELVM v)
             h2o_iovec_t value;
             sq_getstr_and_size(v, 3, value);
             value.strdup(&req->pool, value);
-            req->addRequestHeader(key, value);
+            headers.set(&req->pool, &key, 1, &value, 1);
         }
         break;
     }
     return 0;
 }
 
-static SQRESULT sq_h2o_req_t_headers_all(HSQUIRRELVM v)
+static SQRESULT sq_h2o_req_t_headers(HSQUIRRELVM v)
 {
     CHECK_H2O_REQUEST(v);
-    size_t header_count = req->headers.size;
-    sq_newtableex(v, header_count);
-    for(size_t i=0; i < header_count; ++i)
-    {
-        const auto &hdr = req->headers[i];
-        sq_pushstring(v, hdr.name->base, hdr.name->len);
-        sq_pushstring(v, hdr.value.base, hdr.value.len);
-        sq_newslot(v, -3, SQTrue);
-    }
-    return 1;
+    return sq_h2o_req_t_headers0(v, req, req->headers);
 }
 
-static SQRESULT sq_h2o_req_t_response_header(HSQUIRRELVM v)
+static SQRESULT sq_h2o_req_t_response_headers(HSQUIRRELVM v)
 {
     CHECK_H2O_REQUEST(v);
-    SQ_FUNC_VARS(v);
-
-    switch(_top_)
-    {
-    case 2: //get header
-        {
-            SQ_GET_STRING(v, 2, key);
-            size_t header_index = req->res.headers.find(key, key_size, SIZE_MAX);
-            if(header_index != SIZE_MAX)
-            {
-                h2o_iovec_t *slot = &(req->res.headers[header_index].value);
-                sq_pushstring(v, slot->base, slot->len);
-            } else {
-                sq_pushnull(v);
-            }
-            return 1;
-        }
-        break;
-    case 3: //set header
-        {
-            h2o_iovec_t key;
-            sq_getstr_and_size(v, 2, key);
-            key.strdup(&req->pool, key);
-
-            h2o_iovec_t value;
-            sq_getstr_and_size(v, 3, value);
-            value.strdup(&req->pool, value);
-            req->addResponseHeader(key, value);
-        }
-        break;
-    }
-    return 0;
+    return sq_h2o_req_t_headers0(v, req, req->res.headers);
 }
 
 static SQRESULT sq_h2o_req_t_response_status(HSQUIRRELVM v)
@@ -606,23 +624,22 @@ static SQRESULT sq_h2o_req_t_puth_path_in_link_header(HSQUIRRELVM v)
     req->puth_path_in_link_header(path, path_size);
     return 0;
 }
-/*
+
 static SQRESULT sq_h2o_req_t_delegate_request(HSQUIRRELVM v)
 {
     CHECK_H2O_REQUEST(v);
+    SQ_FUNC_VARS(v);
 
-    req->delegate_request(req->handler);
+    if(self->handler == nullptr) return sq_throwerror(v, _SC("the request handler is empty !"));
+
+    SQ_OPT_BOOL(v, 2, isDeferred, false);
+
+    if(isDeferred) req->delegate_request_deferred(self->handler);
+    else req->delegate_request(self->handler);
     return 0;
 }
 
-static SQRESULT sq_h2o_req_t_delegate_request_deferred(HSQUIRRELVM v)
-{
-    CHECK_H2O_REQUEST(v);
-
-    req->delegate_request_deferred(req->handler);
-    return 0;
-}
-
+/*
 static SQRESULT sq_h2o_req_t_reprocess_request(HSQUIRRELVM v)
 {
     CHECK_H2O_REQUEST(v);
@@ -640,7 +657,7 @@ static void do_squilu_generator_call(HSQUIRRELVM v, HSQOBJECT &cb, h2o_squilu_ge
 
     if(sq_gettype(v,-1) == OT_CLOSURE) {
         sq_pushroottable(v);
-        sq_push_h2o_req_t(v, req);
+        sq_push_h2o_req_t(v, nullptr, req);
 
         bool hasCbData = sq_type(generator->h2o_generator_squilu_cb_data) != OT_NULL;
         if(hasCbData)
@@ -677,7 +694,7 @@ static void on_generator_dispose(void *_generator)
 {
     auto generator = (h2o_squilu_generator_t *)_generator;
 
-    generator->req = NULL;
+    //generator->req = NULL;
     //sq_release(generator->sq, &generator->h2o_generator);
     sq_release(generator->sq, &generator->h2o_generator_squilu_cb_proceed);
     sq_release(generator->sq, &generator->h2o_generator_squilu_cb_stop);
@@ -715,7 +732,7 @@ static SQRESULT sq_h2o_req_t_start_response(HSQUIRRELVM v)
 
 static SQRESULT sq_h2o_req_t_console(HSQUIRRELVM v)
 {
-    CHECK_H2O_REQUEST(v);
+    //CHECK_H2O_REQUEST(v);
     const SQChar *str;
     SQInteger nargs=sq_gettop(v);
     for(int i=2; i<=nargs; ++i){
@@ -742,45 +759,45 @@ static SQRESULT sq_h2o_req_t__tostring(HSQUIRRELVM v)
 #define _DECL_FUNC(name,nparams,tycheck) {_SC(#name),  sq_h2o_req_t_##name,nparams,tycheck}
 static SQRegFunction sq_h2o_req_t_methods[] =
 {
-	_DECL_FUNC(_tostring,  1, _SC("u")),
 	_DECL_FUNC(authority,  1, _SC("u")),
+	_DECL_FUNC(bytes_sent,  1, _SC("u")),
+	_DECL_FUNC(console,  -2, _SC("u.")),
+	_DECL_FUNC(content_length,  1, _SC("u")),
+	_DECL_FUNC(default_port,  1, _SC("u")),
+	_DECL_FUNC(delegate_request,  -1, _SC("ub")),
+	_DECL_FUNC(entity,  1, _SC("u")),
+	_DECL_FUNC(headers,  -1, _SC("uss")),
 	{_SC("host"),  sq_h2o_req_t_authority,  1, _SC("u")},
+	_DECL_FUNC(http1_is_persistent,  1, _SC("u")),
 	_DECL_FUNC(method,  1, _SC("u")),
-	_DECL_FUNC(scheme,  1, _SC("u")),
+	_DECL_FUNC(num_delegated,  1, _SC("u")),
+	_DECL_FUNC(num_reprocessed,  1, _SC("u")),
 	_DECL_FUNC(path,  1, _SC("u")),
 	_DECL_FUNC(path_normalized,  1, _SC("u")),
-	_DECL_FUNC(entity,  1, _SC("u")),
-	_DECL_FUNC(upgrade,  1, _SC("u")),
-	_DECL_FUNC(remote_user,  1, _SC("u")),
-	_DECL_FUNC(content_length,  1, _SC("u")),
-	_DECL_FUNC(version,  1, _SC("u")),
-	_DECL_FUNC(bytes_sent,  1, _SC("u")),
-	_DECL_FUNC(num_reprocessed,  1, _SC("u")),
-	_DECL_FUNC(num_delegated,  1, _SC("u")),
-	_DECL_FUNC(http1_is_persistent,  1, _SC("u")),
-	_DECL_FUNC(res_is_delegated,  1, _SC("u")),
 	_DECL_FUNC(preferred_chunk_size,  1, _SC("u")),
+	_DECL_FUNC(puth_path_in_link_header,  2, _SC("us")),
+	_DECL_FUNC(query_string,  1, _SC("u")),
 	_DECL_FUNC(remote_address,  1, _SC("u")),
 	_DECL_FUNC(remote_port,  1, _SC("u")),
-	_DECL_FUNC(server_address,  1, _SC("u")),
-	_DECL_FUNC(server_port,  1, _SC("u")),
-	_DECL_FUNC(default_port,  1, _SC("u")),
-	_DECL_FUNC(query_string,  1, _SC("u")),
-	_DECL_FUNC(console,  -2, _SC("u.")),
+	_DECL_FUNC(remote_user,  1, _SC("u")),
+	_DECL_FUNC(res_is_delegated,  1, _SC("u")),
+	_DECL_FUNC(response_content_length,  -1, _SC("ui")),
+	_DECL_FUNC(response_headers,  -1, _SC("uss")),
+	_DECL_FUNC(response_reason,  -1, _SC("us")),
+	_DECL_FUNC(response_status,  -1, _SC("ui")),
+	_DECL_FUNC(scheme,  1, _SC("u")),
 	_DECL_FUNC(send,  -2, _SC("ussi")),
+	_DECL_FUNC(send_error,  5, _SC("uissi")),
+	_DECL_FUNC(send_error_deferred,  5, _SC("uissi")),
 	_DECL_FUNC(send_inline,  2, _SC("us")),
 	_DECL_FUNC(send_redirect,  4, _SC("uiss")),
 	_DECL_FUNC(send_redirect_internal,  4, _SC("ussi")),
-	_DECL_FUNC(send_error,  5, _SC("uissi")),
-	_DECL_FUNC(send_error_deferred,  5, _SC("uissi")),
+	_DECL_FUNC(server_address,  1, _SC("u")),
+	_DECL_FUNC(server_port,  1, _SC("u")),
 	_DECL_FUNC(start_response,  -3, _SC("ucc.")),
-	_DECL_FUNC(response_content_length,  -1, _SC("ui")),
-	_DECL_FUNC(response_status,  -1, _SC("ui")),
-	_DECL_FUNC(response_reason,  -1, _SC("us")),
-	_DECL_FUNC(header,  -2, _SC("uss")),
-	_DECL_FUNC(headers_all,  -2, _SC("u")),
-	_DECL_FUNC(response_header,  -2, _SC("uss")),
-	_DECL_FUNC(puth_path_in_link_header,  2, _SC("us")),
+	_DECL_FUNC(_tostring,  1, _SC("u")),
+	_DECL_FUNC(upgrade,  1, _SC("u")),
+	_DECL_FUNC(version,  1, _SC("u")),
 	{0,0}
 };
 #undef _DECL_FUNC
@@ -837,7 +854,7 @@ static SQRESULT sq_mg_url_encode(HSQUIRRELVM v)
     char *dst = mg_url_encode(src);
 
     sq_pushstring(v, dst, -1);
-    free(dst);
+    h2o_mem_free(dst);
     return 1;
 }
 
@@ -926,7 +943,7 @@ static int h2o_squilu_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
         if( (sq_getonroottable(v) == SQ_OK) && (sq_gettype(v, -1) == OT_CLOSURE))
         {
             sq_pushroottable(v);
-            sq_push_h2o_req_t(v, req);
+            sq_push_h2o_req_t(v, handler, req);
 
             if (sq_call (v, 2, SQTrue, handler->config.debug != 0) == SQ_OK) {
               /* run OK? */

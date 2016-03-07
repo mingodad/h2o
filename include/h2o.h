@@ -766,6 +766,11 @@ struct  h2o_headers_t : H2O_VECTOR<h2o_header_t>
      */
     void set(h2o_mem_pool_t *pool, const char *name, size_t name_len, int maybe_token,
                                const char *value, size_t value_len, int overwrite_if_exists);
+    void set(h2o_mem_pool_t *pool, h2o_iovec_t *name, int maybe_token,
+                               h2o_iovec_t *value, int overwrite_if_exists)
+    {
+       this->set(pool, name->base, name->len, maybe_token, value->base, value->len, overwrite_if_exists);
+    }
 };
 
 /**

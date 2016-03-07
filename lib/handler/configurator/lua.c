@@ -26,50 +26,9 @@
 #include <stdlib.h>
 #include "h2o/lua_.h"
 
-#if 0
-typedef int (*on_req_handler_ptr)(h2o_handler_t *, h2o_req_t *);
-
-int register_handler_on_host(h2o_hostconf_t *hostconf, const char *path, on_req_handler_ptr on_req)
-{
-    size_t j, i;
-    //printf("register_handler_on_host : %s : %s\n", hostconf->authority.host.base, path);
-    //first check if it already exists
-    for (j = 0; j != hostconf->paths.size; ++j) {
-        auto pc = hostconf->paths[j];
-        if(strcmp(path, pc.path.base) == 0)
-        {
-            for (i = 0; i != pc.handlers.size; ++i) {
-                if(pc.handlers[i]->on_req == on_req)
-                {
-                    return 0; //already exists
-                }
-            }
-
-        }
-    }
-    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
-    auto handler = pathconf->create_handler<h2o_handler_t>();
-    handler->on_req = on_req;
-    return 1;
-}
-
-int register_handler_global(h2o_globalconf_t *globalconf, const char *path, on_req_handler_ptr on_req)
-{
-    size_t i;
-    int result = 0;
-    for (i = 0; globalconf->hosts[i] != NULL; ++i) {
-        result += register_handler_on_host(globalconf->hosts[i], path, on_req);
-    }
-    //printf("register_handler : %s : %d\n", path, (uint)i);
-    return result;
-}
-
-//register custom global handlers after reading the config file
-//register_handler_global(&conf.globalconf, "/C/", my_h2o_c_handler);
-#endif
-
 static pthread_mutex_t h2o_lua_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/*
 static void check_h2o_lua_mutex_isLocked(lua_State *L)
 {
     if(pthread_mutex_trylock(&h2o_lua_mutex) == 0)
@@ -78,6 +37,107 @@ static void check_h2o_lua_mutex_isLocked(lua_State *L)
         luaL_error(L, "You should aquire h2olib.mutex_[try]lock to use this function !");
     }
 }
+*/
+
+static int lua_h2o_lua_mutex_trylock(lua_State *L)
+{
+    lua_pushinteger(L, pthread_mutex_trylock(&h2o_lua_mutex));
+    return 1;
+}
+
+static int lua_h2o_lua_mutex_lock(lua_State *L)
+{
+    lua_pushinteger(L, pthread_mutex_lock(&h2o_lua_mutex));
+    return 1;
+}
+
+static int lua_h2o_lua_mutex_unlock(lua_State *L)
+{
+    lua_pushinteger(L, pthread_mutex_unlock(&h2o_lua_mutex));
+    return 1;
+}
+
+static int lua_h2o_usleep(lua_State *L)
+{
+    unsigned int usec = luaL_checkinteger(L, 1);
+    lua_pushinteger(L, usleep(usec));
+    return 1;
+}
+
+static int lua_mg_url_get_var(lua_State *L)
+{
+    size_t data_size = 0;
+    const char *data = luaL_checklstring(L, 2, &data_size);
+
+    size_t name_size = 0;
+    const char *name = luaL_checklstring(L, 3, &name_size);
+
+    const char *start;
+    size_t buffer_len;
+    int var_len = mg_find_var(data, data_size, name, &start);
+    if(var_len > 0){
+        buffer_len = var_len+1;
+        char *buffer = h2o_mem_alloc_for<char>(buffer_len);
+        if(buffer){
+            var_len = mg_url_decode(start, var_len, buffer, buffer_len, 1);
+            lua_pushlstring(L, buffer, var_len);
+            h2o_mem_free(buffer);
+            return 1;
+        }
+    }
+    lua_pushnil(L);
+    return 1;
+}
+
+static int lua_mg_url_decode_base(lua_State *L, int is_form_url_encoded)
+{
+    size_t src_size = 0;
+    const char *src = luaL_checklstring(L, 2, &src_size);
+
+    int dst_len = src_size +1;
+    char *dst = h2o_mem_alloc_for<char>(dst_len);
+    dst_len = mg_url_decode(src, src_size, dst, dst_len, is_form_url_encoded);
+    lua_pushlstring(L, dst, dst_len);
+    h2o_mem_free(dst);
+    return 1;
+}
+
+static int lua_mg_url_decode(lua_State *L)
+{
+    return lua_mg_url_decode_base(L, 1);
+}
+
+static int lua_mg_uri_decode(lua_State *L)
+{
+    return lua_mg_url_decode_base(L, 0);
+}
+
+static int lua_mg_url_encode(lua_State *L)
+{
+    size_t src_size = 0;
+    const char *src = luaL_checklstring(L, 2, &src_size);
+
+    char *dst = mg_url_encode(src);
+
+    lua_pushlstring(L, dst, strlen(dst));
+    h2o_mem_free(dst);
+    return 1;
+}
+
+static const luaL_reg h2o_lib[] =
+{
+	{"url_get_var",	lua_mg_url_get_var},
+	{"url_decode",	lua_mg_url_decode},
+	{"url_encode",	lua_mg_url_encode},
+	{"uri_decode",	lua_mg_uri_decode},
+	{"mutex_trylock",	lua_h2o_lua_mutex_trylock},
+	{"mutex_trylock",	lua_h2o_lua_mutex_trylock},
+	{"mutex_lock",	    lua_h2o_lua_mutex_lock},
+	{"mutex_unlock",	lua_h2o_lua_mutex_unlock},
+	{"usleep",      	lua_h2o_usleep},
+	{NULL,	NULL}
+};
+
 
 static const char H2O_REQUEST_METATABLE[] = "__h2o_request";
 #define CHECK_H2O_REQUEST() \
@@ -217,22 +277,35 @@ static int lua_h2o_req_get_str_query_string(lua_State *L)
     return 1;
 }
 
-static int lua_h2o_req_get_set_header(lua_State *L)
+static int lua_h2o_req_get_set_headers0(lua_State *L, h2o_req_t *req, h2o_headers_t &headers)
 {
-    CHECK_H2O_REQUEST();
     int argc = lua_gettop(L);
     size_t len;
     const char *key;
 
     switch(argc)
     {
+    case 1: //all headers
+        {
+            size_t header_count = headers.size;
+            lua_createtable (L, 0, header_count);
+            for(size_t i=0; i < header_count; ++i)
+            {
+                const auto &hdr = headers[i];
+                lua_pushlstring(L, hdr.name->base, hdr.name->len);
+                lua_pushlstring(L, hdr.value.base, hdr.value.len);
+                lua_settable (L, -3);
+            }
+            return 1;
+        }
+    break;
     case 2: //get header
         {
             key = lua_tolstring(L, 2, &len);
-            size_t header_index = req->headers.find(key, len, -1);
+            size_t header_index = headers.find(key, len, SIZE_MAX);
             if(header_index != SIZE_MAX)
             {
-                h2o_iovec_t *slot = &(req->headers[header_index].value);
+                h2o_iovec_t *slot = &(headers[header_index].value);
                 lua_pushlstring(L, slot->base, slot->len);
             } else {
                 lua_pushnil(L);
@@ -249,14 +322,26 @@ static int lua_h2o_req_get_set_header(lua_State *L)
             h2o_iovec_t value;
             value.base = (char*)lua_tolstring(L, 3, &value.len);
             value.strdup(&req->pool, value);
-            req->addResponseHeader(key, value);
+            headers.set(&req->pool, &key, 1, &value, 1);
             return 0;
         }
         break;
     default:
-        luaL_error(L, "at least one parameter is required for req:header function");
+        luaL_error(L, "between 0 and 2 parameters expected for headers function");
     }
     return 0;
+}
+
+static int lua_h2o_req_get_set_headers(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    return lua_h2o_req_get_set_headers0(L, req, req->headers);
+}
+
+static int lua_h2o_req_get_set_response_headers(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    return lua_h2o_req_get_set_headers0(L, req, req->res.headers);
 }
 
 static int lua_h2o_req_set_int_response_status(lua_State *L)
@@ -285,7 +370,7 @@ static int lua_h2o_req_set_int_response_content_length(lua_State *L)
 
 static int lua_h2o_req_console(lua_State *L)
 {
-    CHECK_H2O_REQUEST();
+    //CHECK_H2O_REQUEST();
     int top = lua_gettop(L);
     for(int i=2; i <= top; ++i)
     {
@@ -336,6 +421,72 @@ static int lua_h2o_req_send_redirect(lua_State *L)
     const char *url = luaL_checklstring(L, 4, &url_len);
 
     req->send_redirect(status, h2o_strdup(&req->pool, reason, reason_len).base, h2o_strdup(&req->pool, url, url_len));
+    return 0;
+}
+
+static int lua_h2o_req_send_error0(lua_State *L, bool isDeferrered)
+{
+    CHECK_H2O_REQUEST();
+
+    int status = luaL_checkint(L, 2);
+    size_t reason_len = 0;
+    const char *reason = luaL_checklstring(L, 3, &reason_len);
+    size_t body_len = 0;
+    const char *body = luaL_checklstring(L, 4, &body_len);
+    int flags = luaL_checkint(L, 5);
+
+    h2o_iovec_t iov_reason, iov_body;
+    iov_reason.strdup(&req->pool, reason, reason_len);
+    iov_body.strdup(&req->pool, body, body_len);
+
+    if(isDeferrered)
+    {
+        req->send_error_deferred(status, iov_reason.base, iov_body.base, flags);
+    }
+    else
+    {
+        req->send_error(status, iov_reason.base, iov_body.base, flags);
+    }
+
+    return 0;
+}
+
+static int lua_h2o_req_send_error(lua_State *L)
+{
+    return lua_h2o_req_send_error0(L, false);
+}
+
+static int lua_h2o_req_send_error_deferred(lua_State *L)
+{
+    return lua_h2o_req_send_error0(L, true);
+}
+
+static int lua_h2o_req_send_inline(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+
+    size_t body_len = 0;
+    const char *body = luaL_checklstring(L, 2, &body_len);
+
+    h2o_iovec_t iov;
+    if(body_len)
+    {
+        iov.strdup(&req->pool, body, body_len);
+    }
+    else iov = {};
+
+    req->send_inline(iov.base, iov.len);
+    return 0;
+}
+
+static int lua_h2o_req_puth_path_in_link_header(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+
+    size_t path_size = 0;
+    const char *path = luaL_checklstring(L, 2, &path_size);
+
+    req->puth_path_in_link_header(path, path_size);
     return 0;
 }
 
@@ -472,12 +623,14 @@ static int lua_h2o_req_reprocess_request(lua_State *L)
 #define LUA_REG_REQ_SET_INT_FUNC(name) { #name, lua_h2o_req_set_int_##name }
 
 static const luaL_reg reqFunctions[] = {
-    {"host", lua_h2o_req_get_str_authority},
     LUA_REG_REQ_GET_STR_FUNC(authority),
     LUA_REG_REQ_GET_INT_FUNC(bytes_sent),
+    {"console", lua_h2o_req_console},
     LUA_REG_REQ_GET_INT_FUNC(content_length),
     LUA_REG_REQ_GET_INT_FUNC(default_port),
     LUA_REG_REQ_GET_STR_FUNC(entity),
+    {"headers", lua_h2o_req_get_set_headers},
+    {"host", lua_h2o_req_get_str_authority},
     LUA_REG_REQ_GET_INT_FUNC(http1_is_persistent),
     LUA_REG_REQ_GET_STR_FUNC(method),
     LUA_REG_REQ_GET_INT_FUNC(num_delegated),
@@ -485,25 +638,28 @@ static const luaL_reg reqFunctions[] = {
     LUA_REG_REQ_GET_STR_FUNC(path),
     LUA_REG_REQ_GET_STR_FUNC(path_normalized),
     LUA_REG_REQ_GET_INT_FUNC(preferred_chunk_size),
+    {"puth_path_in_link_header", lua_h2o_req_puth_path_in_link_header},
     LUA_REG_REQ_GET_STR_FUNC(query_string),
-    LUA_REG_REQ_GET_STR_FUNC(remote_user),
-    LUA_REG_REQ_GET_STR_FUNC(scheme),
-    LUA_REG_REQ_GET_STR_FUNC(upgrade),
-    LUA_REG_REQ_GET_INT_FUNC(version),
     LUA_REG_REQ_GET_STR_FUNC(remote_address),
     LUA_REG_REQ_GET_INT_FUNC(remote_port),
+    LUA_REG_REQ_GET_STR_FUNC(remote_user),
     LUA_REG_REQ_GET_INT_FUNC(res_is_delegated),
     LUA_REG_REQ_SET_INT_FUNC(response_content_length),
+    {"response_headers", lua_h2o_req_get_set_response_headers},
     LUA_REG_REQ_SET_STR_FUNC(response_reason),
     LUA_REG_REQ_SET_INT_FUNC(response_status),
+    LUA_REG_REQ_GET_STR_FUNC(scheme),
+    {"send", lua_h2o_req_send},
+    {"send_error", lua_h2o_req_send_error},
+    {"send_error_deferred", lua_h2o_req_send_error_deferred},
+    {"send_inline", lua_h2o_req_send_inline},
+    {"send_redirect", lua_h2o_req_send_redirect},
+    {"reprocess_request", lua_h2o_req_reprocess_request},
     LUA_REG_REQ_GET_STR_FUNC(server_address),
     LUA_REG_REQ_GET_INT_FUNC(server_port),
-    {"header", lua_h2o_req_get_set_header},
-    {"send", lua_h2o_req_send},
-    {"send_redirect", lua_h2o_req_send_redirect},
-    {"console", lua_h2o_req_console},
-    {"reprocess_request", lua_h2o_req_reprocess_request},
     {"start_response", lua_h2o_req_start_response},
+    LUA_REG_REQ_GET_STR_FUNC(upgrade),
+    LUA_REG_REQ_GET_INT_FUNC(version),
     { NULL, NULL }
 };
 
@@ -611,40 +767,6 @@ static const luaL_reg contextFunctions[] = {
 };
 #endif
 
-static int lua_h2o_lua_mutex_trylock(lua_State *L)
-{
-    lua_pushinteger(L, pthread_mutex_trylock(&h2o_lua_mutex));
-    return 1;
-}
-
-static int lua_h2o_lua_mutex_lock(lua_State *L)
-{
-    lua_pushinteger(L, pthread_mutex_lock(&h2o_lua_mutex));
-    return 1;
-}
-
-static int lua_h2o_lua_mutex_unlock(lua_State *L)
-{
-    lua_pushinteger(L, pthread_mutex_unlock(&h2o_lua_mutex));
-    return 1;
-}
-
-static int lua_h2o_usleep(lua_State *L)
-{
-    unsigned int usec = luaL_checkinteger(L, 1);
-    lua_pushinteger(L, usleep(usec));
-    return 1;
-}
-
-static const luaL_reg h2o_lib[] =
-{
-	{"mutex_trylock",	lua_h2o_lua_mutex_trylock},
-	{"mutex_lock",	    lua_h2o_lua_mutex_lock},
-	{"mutex_unlock",	lua_h2o_lua_mutex_unlock},
-	{"usleep",      	lua_h2o_usleep},
-	{NULL,	NULL}
-};
-
 int
 #if defined(_WIN32)
 __declspec(dllexport)
@@ -732,6 +854,7 @@ static void h2o_lua_open_libs(lua_State *L) {
     }
 }
 
+/*
 static void h2o_lua_close_libs(h2o_context_t *_ctx) {
     auto lua_ctx = (h2o_lua_context_t*)_ctx;
     lua_State *L = lua_ctx->L;
@@ -741,7 +864,7 @@ static void h2o_lua_close_libs(h2o_context_t *_ctx) {
         lua_close(L);
     }
 }
-
+*/
 
 static int h2o_lua_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
 {
@@ -864,7 +987,7 @@ void h2o_lua_handler_t::on_context_init(h2o_context_t *ctx)
     h2o_lua_open_libs(handler_ctx->L);
 
     /* compile code (must be done for each thread) */
-    int rc = h2o_lua_compile_code(handler_ctx->L, &this->config, errbuf, sizeof(errbuf));
+    /*int rc =*/ h2o_lua_compile_code(handler_ctx->L, &this->config, errbuf, sizeof(errbuf));
 
     ctx->set_handler_context(this, handler_ctx);
 }
