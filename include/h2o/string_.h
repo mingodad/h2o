@@ -201,6 +201,11 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
     return h2o__lcstris_core(target, test, test_len);
 }
 
+inline int h2o_is_ws(int ch)
+{
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
+
 #define h2o_io_vector_lcis(io_vec1, io_vec2) h2o_lcstris(io_vec1.base, io_vec1.len, io_vec2.base, io_vec2.len)
 #define h2o_io_vector_literal_lcis(io_vec1, literal) h2o_lcstris(io_vec1.base, io_vec1.len, H2O_STRLIT(literal))
 
