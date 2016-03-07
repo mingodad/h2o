@@ -22,11 +22,19 @@
 #include <fcntl.h>
 #include "cloexec.h"
 
+#ifdef _WIN32
+#define pipe(x) _pipe(x, 8192, _O_BINARY)
+#endif // _WIN32
+
 pthread_mutex_t cloexec_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static int set_cloexec(int fd)
 {
+#ifdef _WIN32
+    return SetHandleInformation((HANDLE)(intptr_t)fd, HANDLE_FLAG_INHERIT, 0) ? 0 : -1;
+#else
     return fcntl(fd, F_SETFD, FD_CLOEXEC) != -1 ? 0 : -1;
+#endif // _WIN32
 }
 
 /*
