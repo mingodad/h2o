@@ -28,6 +28,8 @@
     #include <pthread.h>
 #endif
 
+static pthread_mutex_t contexts_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 void h2o_context_t::init_pathconf_context(h2o_pathconf_t *pathconf)
 {
     /* add pathconf to the inited list (or return if already inited) */
@@ -116,8 +118,7 @@ void h2o_context_t::init(h2o_loop_t *loop, h2o_globalconf_t *config)
 
     this->_module_configs = h2o_mem_calloc_for<void *>(config->_num_config_slots);
 
-    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&contexts_mutex);
     for (i = 0; config->hosts[i] != NULL; ++i) {
         auto hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
@@ -126,7 +127,7 @@ void h2o_context_t::init(h2o_loop_t *loop, h2o_globalconf_t *config)
         }
         this->init_pathconf_context(&hostconf->fallback_path);
     }
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&contexts_mutex);
 }
 
 //void h2o_context_t::dispose(h2o_context_t *ctx)
@@ -137,6 +138,7 @@ h2o_context_t::~h2o_context_t()
         auto config = this->globalconf;
         size_t i, j;
 
+        pthread_mutex_lock(&contexts_mutex);
         for (i = 0; config->hosts[i] != NULL; ++i) {
             auto hostconf = config->hosts[i];
             for (j = 0; j != hostconf->paths.size; ++j) {
@@ -145,6 +147,8 @@ h2o_context_t::~h2o_context_t()
             }
             this->dispose_pathconf_context(&hostconf->fallback_path);
         }
+        pthread_mutex_unlock(&contexts_mutex);
+
 		this->_pathconfs_inited.clear_free();
         h2o_mem_free(this->_module_configs);
         h2o_timeout_t::dispose(this->loop, &this->zero_timeout);
