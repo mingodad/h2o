@@ -123,16 +123,16 @@ h2o_globalconf_t::h2o_globalconf_t()
     this->configurator_init_core();
 }
 
-h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
+h2o_pathconf_t *h2o_hostconf_t::register_path(const char *path, int flags)
 {
-    auto pathconf = hostconf->paths.append_new(NULL);
+    auto pathconf = this->paths.append_new(NULL);
 
-    h2o_pathconf_t::init(pathconf, hostconf->global, path, hostconf->mimemap);
+    h2o_pathconf_t::init(pathconf, this->global, path, this->mimemap);
 
     return pathconf;
 }
 
-h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)
+h2o_hostconf_t *h2o_globalconf_t::register_host(h2o_iovec_t host, uint16_t port)
 {
     h2o_hostconf_t *hostconf = NULL;
     h2o_iovec_t host_lc;
@@ -145,14 +145,14 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
 
     { /* return NULL if given authority is already registered */
         h2o_hostconf_t **p;
-        for (p = config->hosts; *p != NULL; ++p)
+        for (p = this->hosts; *p != NULL; ++p)
             if ((*p)->authority.host.isEq(host_lc) &&
                 (*p)->authority.port == port)
                 goto Exit;
     }
 
     /* create hostconf */
-    hostconf = create_hostconf(config);
+    hostconf = create_hostconf(this);
     hostconf->authority.host = host_lc;
     hostconf->authority.port = port;
     if (hostconf->authority.port == H2O_PORT_NOT_SET) {
@@ -168,7 +168,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
     }
 
     /* append to the list */
-    h2o_append_to_null_terminated_list((void ***)&config->hosts, hostconf);
+    h2o_append_to_null_terminated_list((void ***)&this->hosts, hostconf);
 
 Exit:
     if(!hostconf) {
@@ -190,4 +190,79 @@ h2o_globalconf_t::~h2o_globalconf_t()
 
     h2o_mem_release_shared(this->mimemap);
     this->dispose_configurators();
+}
+
+typedef int (*qs_compar_t)(const void *, const void*);
+
+static int sort_from_longer_paths(const h2o_pathconf_t *x, const h2o_pathconf_t *y)
+{
+    size_t xlen = x->path.len, ylen = y->path.len;
+    if (xlen < ylen)
+        return 1;
+    else if (xlen > ylen)
+        return -1;
+    /* apply strcmp for stable sort */
+    return strcmp(x->path.base, y->path.base);
+}
+
+int h2o_hostconf_t::register_handler(const char *path, h2o_handler_t_on_req_fn on_req)
+{
+    size_t j, i;
+    //printf("register_handler_on_host : %s : %s\n", hostconf->authority.host.base, path);
+    //first check if it already exists
+    for (j = 0; j != this->paths.size; ++j) {
+        auto pc = this->paths[j];
+        if(strcmp(path, pc.path.base) == 0)
+        {
+            for (i = 0; i != pc.handlers.size; ++i) {
+                if(pc.handlers[i]->on_req == on_req)
+                {
+                    return 0; //already exists
+                }
+            }
+
+        }
+    }
+    h2o_pathconf_t *pathconf = this->register_path(path, 0);
+    auto handler = pathconf->create_handler<h2o_handler_t>();
+    handler->on_req = on_req;
+    return 1;
+}
+
+int h2o_globalconf_t::register_handler_on_host_by_host(
+                                    const char *host, const char *path, h2o_handler_t_on_req_fn on_req)
+{
+    int result = 0;
+    size_t i;
+    for (i = 0; this->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = this->hosts[i];
+        if(strcmp(host, hostconf->authority.host.base) == 0)
+        {
+            result = hostconf->register_handler(path, on_req);
+            break;
+        }
+    }
+    return result;
+}
+
+int h2o_globalconf_t::register_handler_globally(const char *path, h2o_handler_t_on_req_fn on_req)
+{
+    size_t i;
+    int result = 0;
+    for (i = 0; this->hosts[i] != NULL; ++i) {
+        result += this->hosts[i]->register_handler(path, on_req);
+    }
+    //printf("register_handler : %s : %d\n", path, (uint)i);
+    return result;
+}
+
+void h2o_globalconf_t::sort_handlers()
+{
+    size_t i;
+    //printf("register_handler : %s : %d\n", path, (uint)globalconf->hosts.size);
+    for (i = 0; this->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = this->hosts[i];
+        qsort(hostconf->paths.entries, hostconf->paths.size, sizeof(hostconf->paths.entries[0]),
+        (qs_compar_t)sort_from_longer_paths);
+    }
 }

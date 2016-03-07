@@ -130,7 +130,7 @@ static void test_loopback(void)
     h2o_context_t ctx;
     h2o_loopback_conn_t *conn;
 
-    h2o_config_register_host(&conf, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
+    conf.register_host(h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
     ctx.init(test_loop, &conf);
 
     conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);

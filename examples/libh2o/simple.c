@@ -37,7 +37,7 @@
 
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
-    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path, 0);
+    h2o_pathconf_t *pathconf = hostconf->register_path(path, 0);
     auto handler = pathconf->create_handler<h2o_handler_t>();
     handler->on_req = on_req;
     return pathconf;
@@ -179,6 +179,20 @@ static int create_listener(void)
 
 #endif
 
+/**Without this web browsers will not accept conections*/
+static void setup_ecc_key(SSL_CTX *ssl_ctx)
+{
+    int nid = NID_X9_62_prime256v1;
+    EC_KEY *key = EC_KEY_new_by_curve_name(nid);
+    if (key == NULL) {
+        fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
+        return;
+    }
+
+    SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
+    EC_KEY_free(key);
+}
+
 static int setup_ssl(const char *cert_file, const char *key_file)
 {
     SSL_load_error_strings();
@@ -194,6 +208,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
         h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
     }
 
+    setup_ecc_key(accept_ctx.ssl_ctx);
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
@@ -221,11 +236,11 @@ int main(int argc, char **argv)
 
     signal(SIGPIPE, SIG_IGN);
 
-    hostconf = h2o_config_register_host(&config, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
-    register_handler(hostconf, "/post-test", post_test);
-    register_handler(hostconf, "/chunked-test", chunked_test);
+    hostconf = config.register_host(h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
+    hostconf->register_handler("/post-test", post_test);
+    hostconf->register_handler("/chunked-test", chunked_test);
     h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
-    h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "examples/doc_root", NULL, NULL, 0);
+    h2o_file_register(hostconf->register_path("/", 0), "examples/doc_root", NULL, NULL, 0);
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;

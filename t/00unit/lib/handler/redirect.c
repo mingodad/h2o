@@ -40,8 +40,8 @@ void test_lib__handler__redirect_c()
     h2o_hostconf_t *hostconf;
     h2o_pathconf_t *pathconf;
 
-    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
-    pathconf = h2o_config_register_path(hostconf, "/", 0);
+    hostconf = globalconf.register_host(h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
+    pathconf = hostconf->register_path("/", 0);
     h2o_redirect_register(pathconf, 0, 301, "https://example.com/bar/");
 
     test_ctx.init(test_loop, &globalconf);

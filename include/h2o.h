@@ -285,6 +285,11 @@ struct h2o_hostconf_t {
          */
         h2o_casper_conf_t casper;
     } http2;
+
+    /**Add a path handler*/
+    int register_handler(const char *path, h2o_handler_t_on_req_fn on_req);
+    /**Create a path config*/
+    h2o_pathconf_t *register_path(const char *path, int flags);
 };
 
 struct h2o_protocol_callbacks_t {
@@ -414,6 +419,16 @@ struct h2o_globalconf_t {
      * @return 0 if successful, -1 if not
      */
     int configurator_apply(yoml_t *node, int dry_run);
+    /**
+     * registers a host context
+     */
+    h2o_hostconf_t *register_host(h2o_iovec_t host, uint16_t port);
+    /**Register a handler to a host config searching by host*/
+    int register_handler_on_host_by_host(const char *host, const char *path, h2o_handler_t_on_req_fn on_req);
+    /**Register a handler on all hosts*/
+    int register_handler_globally(const char *path, h2o_handler_t_on_req_fn on_req);
+    /**Sort all hosts hanlders by longest path*/
+    void sort_handlers();
 };
 
 /**
@@ -1393,10 +1408,7 @@ extern uint64_t h2o_connection_id;
 
 /* config */
 
-/**
- * registers a host context
- */
-h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port);
+
 /**
  * registers a path context
  * @param hostconf host-level configuration that the path-level configuration belongs to

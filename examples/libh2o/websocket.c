@@ -120,8 +120,8 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-    hostconf = h2o_config_register_host(&config, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
-    pathconf = h2o_config_register_path(hostconf, "/", 0);
+    hostconf = config.register_host(h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
+    pathconf = hostconf->register_path("/", 0);
     pathconf->create_handler<h2o_handler_t>()->on_req = on_req;
 
     ctx.init(loop, &config);

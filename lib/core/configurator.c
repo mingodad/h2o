@@ -234,7 +234,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         auto key = node->data.mapping.elements[i].key;
         auto value = node->data.mapping.elements[i].value;
         auto path_ctx = *ctx;
-        path_ctx.pathconf = h2o_config_register_path(path_ctx.hostconf, key->data.scalar, 0);
+        path_ctx.pathconf = path_ctx.hostconf->register_path(key->data.scalar, 0);
         path_ctx.mimemap = &path_ctx.pathconf->mimemap;
         path_ctx.parent = ctx;
         if (path_ctx.apply_commands(value, H2O_CONFIGURATOR_FLAG_PATH, NULL) != 0)
@@ -273,7 +273,7 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             return -1;
         }
         h2o_configurator_context_t host_ctx = *ctx;
-        if ((host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port)) == NULL) {
+        if ((host_ctx.hostconf = host_ctx.globalconf->register_host(hostname, port)) == NULL) {
             cmd->errprintf(key, "duplicate host entry");
             return -1;
         }

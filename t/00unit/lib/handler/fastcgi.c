@@ -171,8 +171,8 @@ void test_lib__handler__fastcgi_c()
     //h2o_pathconf_t *pathconf;
 
     globalconf.server_name = h2o_iovec_t::create(H2O_STRLIT("h2o/1.2.1-alpha1"));
-    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
-    /*pathconf =*/ h2o_config_register_path(hostconf, "/", 0);
+    hostconf = globalconf.register_host(h2o_iovec_t::create(H2O_STRLIT("default")), 65535);
+    /*pathconf =*/ hostconf->register_path("/", 0);
 
     test_ctx.init(test_loop, &globalconf);
     ctx = &test_ctx;
