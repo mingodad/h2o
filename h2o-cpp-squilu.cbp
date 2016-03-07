@@ -184,6 +184,7 @@
 			<Add option="-DPDF_USING_ZLIB=1" />
 			<Add option="-DWITH_UUID=1" />
 			<Add option="-DSC_USE_MKSTEMP=1" />
+			<Add option="-DTEST_IMG_SEND=1" />
 			<Add directory="include" />
 			<Add directory="deps/picohttpparser" />
 			<Add directory="deps/yaml/include" />
@@ -247,6 +248,15 @@
 		<Unit filename="../../../SquiLu/SquiLu-ext/sqlite3.h" />
 		<Unit filename="../../../SquiLu/SquiLu-ext/tinyxml2.cpp" />
 		<Unit filename="../../../SquiLu/SquiLu-ext/tinyxml2.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/sqconfig.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/sqstdaux.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/sqstdblob.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/sqstdio.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/sqstdmath.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/sqstdstring.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/sqstdsystem.h" />
+		<Unit filename="../../../SquiLu/SquiLu/include/squilu.hpp" />
+		<Unit filename="../../../SquiLu/SquiLu/include/squirrel.h" />
 		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdaux.cpp" />
 		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdblob.cpp" />
 		<Unit filename="../../../SquiLu/SquiLu/sqstdlib/sqstdio.cpp" />
@@ -584,6 +594,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/hello.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/handler/img-test.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="lib/handler/mimemap.c">

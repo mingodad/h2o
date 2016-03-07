@@ -137,7 +137,32 @@
 					<Add option="-g" />
 					<Add option="-fpermissive" />
 					<Add option="-std=c++1y" />
+					<Add option="-DH2O_USE_POLL=1" />
 					<Add directory="deps/win32" />
+				</Compiler>
+			</Target>
+			<Target title="libh2o-evloop-example Debug">
+				<Option output="libh2o-evloop-example" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_as_g" />
+				<Option parameters="--conf=examples/h2o_squilu/h2o-dad.conf" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-fpermissive" />
+					<Add option="-std=c++1y" />
+				</Compiler>
+			</Target>
+			<Target title="websocket Debug">
+				<Option output="websocket-example" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gnu_gcc_compiler_as_g" />
+				<Option parameters="--conf=examples/h2o_squilu/h2o-dad.conf" />
+				<Compiler>
+					<Add option="-g" />
+					<Add option="-fpermissive" />
+					<Add option="-std=c++1y" />
 				</Compiler>
 			</Target>
 		</Build>
@@ -329,6 +354,14 @@
 		<Unit filename="deps/yaml/src/yaml_private.h" />
 		<Unit filename="deps/yoml/yoml-parser.h" />
 		<Unit filename="deps/yoml/yoml.h" />
+		<Unit filename="examples/libh2o/simple.cpp">
+			<Option target="libh2o-evloop-example Debug" />
+			<Option target="websocket Debug" />
+		</Unit>
+		<Unit filename="examples/libh2o/websocket.c">
+			<Option compilerVar="CC" />
+			<Option target="websocket Debug" />
+		</Unit>
 		<Unit filename="include/h2o.h" />
 		<Unit filename="include/h2o/configurator.h" />
 		<Unit filename="include/h2o/ctest_.h" />
@@ -567,9 +600,27 @@
 		</Unit>
 		<Unit filename="src/main.c">
 			<Option compilerVar="CC" />
+			<Option target="Debug" />
+			<Option target="Release Simple" />
+			<Option target="Release" />
+			<Option target="Profile" />
+			<Option target="Release sanitize address" />
+			<Option target="Debug GCC 4.9" />
+			<Option target="Debug sanitize address" />
+			<Option target="Debug sanitize thread" />
+			<Option target="Debug Windows" />
 		</Unit>
 		<Unit filename="src/ssl.c">
 			<Option compilerVar="CC" />
+			<Option target="Debug" />
+			<Option target="Release Simple" />
+			<Option target="Release" />
+			<Option target="Profile" />
+			<Option target="Release sanitize address" />
+			<Option target="Debug GCC 4.9" />
+			<Option target="Debug sanitize address" />
+			<Option target="Debug sanitize thread" />
+			<Option target="Debug Windows" />
 		</Unit>
 		<Unit filename="src/standalone.h" />
 		<Extensions>
