@@ -138,11 +138,25 @@ static const luaL_reg h2o_lib[] =
 	{NULL,	NULL}
 };
 
+struct lua_h2o_req_t {
+    h2o_req_t *req;
+    h2o_lua_handler_t *handler;
+};
 
 static const char H2O_REQUEST_METATABLE[] = "__h2o_request";
 #define CHECK_H2O_REQUEST() \
-    h2o_req_t *req = *(h2o_req_t **) \
-    luaL_checkudata(L, 1, H2O_REQUEST_METATABLE)
+    lua_h2o_req_t *self = (lua_h2o_req_t *) luaL_checkudata(L, 1, H2O_REQUEST_METATABLE);\
+    h2o_req_t *req = self->req
+
+static void lua_push_h2o_req_t(lua_State *L, h2o_lua_handler_t *handler, h2o_req_t *req)
+{
+    auto ptr = (lua_h2o_req_t*)lua_newuserdata(L, sizeof(lua_h2o_req_t));
+    ptr->req = req;
+    ptr->handler = handler;
+
+    luaL_getmetatable(L, H2O_REQUEST_METATABLE);
+    lua_setmetatable(L, -2);
+}
 
 static const char H2O_CONTEXT_METATABLE[] = "__h2o_context";
 #define CHECK_H2O_CONTEXT() \
@@ -180,7 +194,6 @@ static int traceback (lua_State *L) {
 
 LUA_H2O_REQ_GET_STR(authority)
 LUA_H2O_REQ_GET_STR(method)
-LUA_H2O_REQ_GET_STR(path)
 LUA_H2O_REQ_GET_STR(path_normalized)
 //LUA_H2O_REQ_GET_STR(scheme)
 LUA_H2O_REQ_GET_STR(entity)
@@ -260,6 +273,14 @@ static int lua_h2o_req_get_int_default_port(lua_State *L)
 {
     CHECK_H2O_REQUEST();
     lua_pushinteger(L, req->scheme->default_port);
+    return 1;
+}
+
+static int lua_h2o_req_get_str_path(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    size_t size = req->query_at == SIZE_MAX ? req->path.len : req->query_at;
+    lua_pushlstring(L, req->path.base, size);
     return 1;
 }
 
@@ -424,6 +445,49 @@ static int lua_h2o_req_send_redirect(lua_State *L)
     return 0;
 }
 
+static int lua_h2o_req_send_redirect_internal(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+
+    size_t method_len = 0;
+    const char *method = luaL_checklstring(L, 2, &method_len);
+    size_t url_len = 0;
+    const char *url = luaL_checklstring(L, 3, &url_len);
+    int preserve_overrides = luaL_checkint(L, 4);
+
+    h2o_iovec_t iov_method, iov_url;
+    iov_method.strdup(&req->pool, method, method_len);
+    iov_url.strdup(&req->pool, url, url_len);
+
+    req->send_redirect_internal(iov_method, iov_url, preserve_overrides);
+    return 0;
+}
+/*
+static int lua_h2o_req_reprocess_request(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+
+    size_t method_len = 0;
+    const char *method = luaL_checklstring(L, 2, &method_len);
+    size_t scheme_name_len = 0;
+    const char *scheme_name = luaL_checklstring(L, 3, &scheme_name_len);
+    int scheme_port = luaL_checkint(L, 4);
+    size_t authority_len = 0;
+    const char *authority = luaL_checklstring(L, 5, &authority_len);
+    size_t path_len = 0;
+    const char *path = luaL_checklstring(L, 6, &path_len);
+    int is_delegated = luaL_checkint(L, 7);
+
+    h2o_iovec_t iov_method, iov_authority;
+    iov_method.strdup(&req->pool, method, method_len);
+    iov_authority.strdup(&req->pool, authority, authority_len);
+
+
+    req->reprocess_request(iov_method, const h2o_url_scheme_t *scheme, iov_authority,
+                               h2o_iovec_t path, h2o_req_overrides_t *overrides, is_delegated);
+    return 0;
+}
+*/
 static int lua_h2o_req_send_error0(lua_State *L, bool isDeferrered)
 {
     CHECK_H2O_REQUEST();
@@ -504,9 +568,7 @@ static void do_lua_generator_proceed(h2o_generator_t *generator, h2o_req_t *req)
         lua_rawgeti(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_proceed_idx);
 
         if(lua_isfunction(L,-1)) {
-            *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
-            luaL_getmetatable(L, H2O_REQUEST_METATABLE);
-            lua_setmetatable(L, -2);
+            lua_push_h2o_req_t(L, nullptr, req);
 
             if(self->h2o_generator_lua_cb_data_idx)
             {
@@ -538,9 +600,7 @@ static void do_lua_generator_stop(h2o_generator_t *generator, h2o_req_t *req)
         lua_rawgeti(L, LUA_REGISTRYINDEX, self->h2o_generator_lua_cb_stop_idx);
 
         if(lua_isfunction(L,-1)) {
-            *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
-            luaL_getmetatable(L, H2O_REQUEST_METATABLE);
-            lua_setmetatable(L, -2);
+            lua_push_h2o_req_t(L, nullptr, req);
 
             if(self->h2o_generator_lua_cb_data_idx)
             {
@@ -610,13 +670,6 @@ static int lua_h2o_req_start_response(lua_State *L)
     return 0;
 }
 
-static int lua_h2o_req_reprocess_request(lua_State *L)
-{
-    CHECK_H2O_REQUEST();
-
-    return 0;
-}
-
 #define LUA_REG_REQ_GET_STR_FUNC(name) { #name, lua_h2o_req_get_str_##name }
 #define LUA_REG_REQ_GET_INT_FUNC(name) { #name, lua_h2o_req_get_int_##name }
 #define LUA_REG_REQ_SET_STR_FUNC(name) { #name, lua_h2o_req_set_str_##name }
@@ -654,7 +707,8 @@ static const luaL_reg reqFunctions[] = {
     {"send_error_deferred", lua_h2o_req_send_error_deferred},
     {"send_inline", lua_h2o_req_send_inline},
     {"send_redirect", lua_h2o_req_send_redirect},
-    {"reprocess_request", lua_h2o_req_reprocess_request},
+    {"send_redirect_internal", lua_h2o_req_send_redirect_internal},
+    //{"reprocess_request", lua_h2o_req_reprocess_request},
     LUA_REG_REQ_GET_STR_FUNC(server_address),
     LUA_REG_REQ_GET_INT_FUNC(server_port),
     {"start_response", lua_h2o_req_start_response},
@@ -874,15 +928,24 @@ static int h2o_lua_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
     int result = 0;
     if(L)
     {
+        if(handler->config.debug)
+        {
+            /*
+            !!! attention if debug is enabled use only one thread !!!
+            */
+            if(handler->reload_scripting_file(lua_ctx, nullptr))
+            {
+                return -1;
+            }
+        }
+
         int saved_top = lua_gettop(L);
         lua_pushcfunction(L, traceback);  /* push traceback function */
         int error_func = lua_gettop(L);
 
         lua_getglobal(L, H2O_SCRIPTING_ENTRY_POINT);
         if(lua_isfunction(L,-1)) {
-            *(h2o_req_t **)lua_newuserdata(L, sizeof (h2o_req_t *)) = req;
-            luaL_getmetatable(L, H2O_REQUEST_METATABLE);
-            lua_setmetatable(L, -2);
+            lua_push_h2o_req_t(L, handler, req);
 
             if(lua_pcall(L, 1, 1, error_func)) {
                 size_t error_len;
@@ -919,6 +982,21 @@ static void set_h2o_root(lua_State *L)
         root = H2O_TO_STR(H2O_ROOT);
     lua_pushstring(L, root);
     lua_setglobal(L, "H2O_ROOT");
+}
+
+int h2o_lua_handler_t::reload_scripting_file(void *ctx, h2o_scripting_config_vars_t *config_var)
+{
+    auto lua_ctx = (h2o_lua_context_t*)ctx;
+
+	lua_settop(lua_ctx->L, 0);
+
+	//make a prvate copy to allow work with multi threads
+    h2o_scripting_config_vars_t config_debug = {};
+    //we only care for debug and path
+    config_debug.debug = 1;
+    config_debug.path = this->config.path;
+
+    return super::reload_scripting_file(ctx, &config_debug);
 }
 
 int h2o_lua_compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
@@ -1005,5 +1083,7 @@ void h2o_lua_handler_t::on_context_dispose(h2o_context_t *ctx)
 
 int h2o_lua_handler_t::compile_code(void *ctx, h2o_scripting_config_vars_t *config_var)
 {
-    return -1;
+    char errbuf[1024];
+    auto handler_ctx = (h2o_lua_context_t*)ctx;
+    return h2o_lua_compile_code(handler_ctx->L, config_var, errbuf, sizeof(errbuf));
 }
