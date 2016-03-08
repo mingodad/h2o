@@ -35,8 +35,8 @@ struct h2o_squilu_handler_t : h2o_scripting_handler_t {
 
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
-    int compile_code(h2o_context_t *ctx) override;
-    int reload_scripting_file(h2o_context_t *ctx) override;
+    int compile_code(void *ctx, h2o_scripting_config_vars_t *config_var) override;
+    int reload_scripting_file(void *ctx, h2o_scripting_config_vars_t *config_var) override;
 };
 
 struct h2o_squilu_context_t {

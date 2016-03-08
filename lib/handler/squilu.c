@@ -933,7 +933,7 @@ static int h2o_squilu_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
             /*
             !!! attention if debug is enabled use only one thread !!!
             */
-            if(handler->reload_scripting_file((h2o_context_t*)sq_ctx))
+            if(handler->reload_scripting_file(sq_ctx, nullptr))
             {
                 return -1;
             }
@@ -973,13 +973,19 @@ struct squilu_configurator_t : h2o_scripting_configurator_t {
     }
 };
 
-int h2o_squilu_handler_t::reload_scripting_file(h2o_context_t *ctx)
+int h2o_squilu_handler_t::reload_scripting_file(void *ctx, h2o_scripting_config_vars_t *config_var)
 {
     auto sq_ctx = (h2o_squilu_context_t*)ctx;
 
 	sq_settop(sq_ctx->sq, 0);
 
-    return super::reload_scripting_file(ctx);
+	//make a prvate copy to allow work with multi threads
+    h2o_scripting_config_vars_t config_debug = {};
+    //we only care for debug and path
+    config_debug.debug = 1;
+    config_debug.path = this->config.path;
+
+    return super::reload_scripting_file(ctx, &config_debug);
 }
 
 int h2o_squilu_compile_code(HSQUIRRELVM sq, h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
@@ -993,7 +999,7 @@ int h2o_squilu_compile_code(HSQUIRRELVM sq, h2o_scripting_config_vars_t *config,
             rc = 0;
         }
     }
-    if(rc) scsnprintf(errbuf, errbuf_size, "%s", sq_getlasterror_str(sq));
+    if(rc) scsprintf(errbuf, errbuf_size, "%s", sq_getlasterror_str(sq));
 
     return rc;
 }
@@ -1012,15 +1018,15 @@ int squilu_configurator_t::compile_test(h2o_scripting_config_vars_t *config, cha
     return ok;
 }
 
-h2o_squilu_handler_t *h2o_squilu_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars)
+h2o_squilu_handler_t *h2o_squilu_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *config_var)
 {
     auto handler = pathconf->create_handler<h2o_squilu_handler_t>();
 
     handler->on_req = h2o_squilu_handle_request;
-    handler->config.source.strdup(vars->source);
-    handler->config.debug = vars->debug;
-    if (vars->path != NULL)
-        handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
+    handler->config.source.strdup(config_var->source);
+    handler->config.debug = config_var->debug;
+    if (config_var->path != NULL)
+        handler->config.path = h2o_strdup(NULL, config_var->path, SIZE_MAX).base;
 
     return handler;
 }
@@ -1060,10 +1066,10 @@ void h2o_squilu_handler_t::on_context_dispose(h2o_context_t *ctx)
     h2o_mem_free(handler_ctx);
 }
 
-int h2o_squilu_handler_t::compile_code(h2o_context_t *ctx)
+int h2o_squilu_handler_t::compile_code(void *ctx, h2o_scripting_config_vars_t *config_var)
 {
     char errbuf[1024];
     auto handler_ctx = (h2o_squilu_context_t*)ctx;
-    return h2o_squilu_compile_code(handler_ctx->sq, &this->config, errbuf, sizeof(errbuf));
+    return h2o_squilu_compile_code(handler_ctx->sq, config_var, errbuf, sizeof(errbuf));
 }
 

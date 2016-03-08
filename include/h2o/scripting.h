@@ -41,8 +41,8 @@ struct h2o_scripting_handler_t : h2o_handler_t {
     h2o_scripting_handler_t(): config({}) {}
 
     void dispose(h2o_base_handler_t *self) override;
-    virtual int compile_code(h2o_context_t *ctx) = 0;
-    virtual int reload_scripting_file(h2o_context_t *ctx);
+    virtual int compile_code(void *ctx, h2o_scripting_config_vars_t *config_var) = 0;
+    virtual int reload_scripting_file(void *ctx, h2o_scripting_config_vars_t *config_var);
 };
 
 struct h2o_scripting_configurator_t : h2o_configurator_t {

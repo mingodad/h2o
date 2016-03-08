@@ -862,7 +862,7 @@ int h2o_mruby_context_t::iterate_headers(mrb_value headers,
     return 0;
 }
 
-int h2o_mruby_handler_t::compile_code(h2o_context_t *ctx)
+int h2o_mruby_handler_t::compile_code(void *ctx, h2o_scripting_config_vars_t *config_var)
 {
     return -1;
 }

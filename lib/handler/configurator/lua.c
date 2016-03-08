@@ -1003,7 +1003,7 @@ void h2o_lua_handler_t::on_context_dispose(h2o_context_t *ctx)
     h2o_mem_free(handler_ctx);
 }
 
-int h2o_lua_handler_t::compile_code(h2o_context_t *ctx)
+int h2o_lua_handler_t::compile_code(void *ctx, h2o_scripting_config_vars_t *config_var)
 {
     return -1;
 }

@@ -185,15 +185,15 @@ void h2o_scripting_configurator_t::register_configurator(h2o_scripting_configura
     #undef CMD_NAME
 }
 
-int h2o_scripting_handler_t::reload_scripting_file(h2o_context_t *ctx)
+int h2o_scripting_handler_t::reload_scripting_file(void *ctx, h2o_scripting_config_vars_t *config_var)
 {
     int ret = -1;
 
-    if(load_scripting_handler_file(&config))
+    if(load_scripting_handler_file(config_var))
         goto Exit;
 
     /* check if there is any error in source */
-    if (this->compile_code(ctx)) {
+    if (this->compile_code(ctx, config_var)) {
         if(!config.debug) goto Exit;
     }
 

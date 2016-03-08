@@ -70,7 +70,7 @@ struct h2o_lua_handler_t : h2o_scripting_handler_t {
 
     void on_context_init(h2o_context_t *ctx) override;
     void on_context_dispose(h2o_context_t *ctx) override;
-    int compile_code(h2o_context_t *ctx) override;
+    int compile_code(void *ctx, h2o_scripting_config_vars_t *config_var) override;
 };
 
 struct h2o_lua_context_t {
