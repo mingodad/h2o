@@ -985,7 +985,11 @@ int h2o_squilu_handler_t::reload_scripting_file(void *ctx, h2o_scripting_config_
     config_debug.debug = 1;
     config_debug.path = this->config.path;
 
-    return super::reload_scripting_file(ctx, &config_debug);
+    int rc = super::reload_scripting_file(ctx, &config_debug);
+
+    h2o_mem_free(config_debug.source.base);
+
+    return rc;
 }
 
 int h2o_squilu_compile_code(HSQUIRRELVM sq, h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)

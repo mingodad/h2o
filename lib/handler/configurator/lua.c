@@ -996,7 +996,11 @@ int h2o_lua_handler_t::reload_scripting_file(void *ctx, h2o_scripting_config_var
     config_debug.debug = 1;
     config_debug.path = this->config.path;
 
-    return super::reload_scripting_file(ctx, &config_debug);
+    int rc = super::reload_scripting_file(ctx, &config_debug);
+
+    h2o_mem_free(config_debug.source.base);
+
+    return rc;
 }
 
 int h2o_lua_compile_code(lua_State *L, h2o_scripting_config_vars_t *config, char *errbuf, size_t errbuf_size)
@@ -1031,14 +1035,15 @@ int lua_configurator_t::compile_test(h2o_scripting_config_vars_t *config, char *
     return ok;
 }
 
-h2o_lua_handler_t *h2o_lua_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *vars)
+h2o_lua_handler_t *h2o_lua_register(h2o_pathconf_t *pathconf, h2o_scripting_config_vars_t *config_var)
 {
     auto handler = pathconf->create_handler<h2o_lua_handler_t>();
 
     handler->on_req = h2o_lua_handle_request;
-    handler->config.source.strdup(vars->source);
-    if (vars->path != NULL)
-        handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
+    handler->config.source.strdup(config_var->source);
+    handler->config.debug = config_var->debug;
+    if (config_var->path != NULL)
+        handler->config.path = h2o_strdup(NULL, config_var->path, SIZE_MAX).base;
 
     return handler;
 }
