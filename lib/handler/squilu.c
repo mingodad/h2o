@@ -31,6 +31,7 @@
 #include <sqstdmath.h>
 #include <sqstdstring.h>
 #include <sqstdaux.h>
+#include <openssl/md5.h>
 
 #ifdef SQUNICODE
 #define scfprintf fwprintf
@@ -461,6 +462,45 @@ static SQRESULT sq_h2o_req_t_response_headers(HSQUIRRELVM v)
     return sq_h2o_req_t_headers0(v, req, req->res.headers);
 }
 
+static SQRESULT sq_h2o_req_t_cookies0(HSQUIRRELVM v, h2o_req_t *req, h2o_headers_t &headers)
+{
+    SQ_FUNC_VARS(v);
+    switch(_top_)
+    {
+    case 1: //all cookies
+        {
+            return 0;
+        }
+    break;
+    case 2: //get cookie
+        {
+            SQ_GET_STRING(v, 2, cookie);
+            const char *start;
+            int var_len = mg_find_cookie(req, cookie, &start);
+            if(var_len > 0){
+                sq_pushstring(v, start, var_len);
+                return 1;
+            }
+            sq_pushnull(v);
+            return 1;
+        }
+        break;
+    }
+    return 0;
+}
+
+static SQRESULT sq_h2o_req_t_cookies(HSQUIRRELVM v)
+{
+    CHECK_H2O_REQUEST(v);
+    return sq_h2o_req_t_cookies0(v, req, req->headers);
+}
+
+static SQRESULT sq_h2o_req_t_response_cookies(HSQUIRRELVM v)
+{
+    CHECK_H2O_REQUEST(v);
+    return sq_h2o_req_t_cookies0(v, req, req->res.headers);
+}
+
 static SQRESULT sq_h2o_req_t_response_status(HSQUIRRELVM v)
 {
     CHECK_H2O_REQUEST(v);
@@ -767,6 +807,7 @@ static SQRegFunction sq_h2o_req_t_methods[] =
 	_DECL_FUNC(delegate_request,  -1, _SC("ub")),
 	_DECL_FUNC(entity,  1, _SC("u")),
 	_DECL_FUNC(headers,  -1, _SC("uss")),
+	_DECL_FUNC(cookies,  -1, _SC("uss")),
 	{_SC("host"),  sq_h2o_req_t_authority,  1, _SC("u")},
 	_DECL_FUNC(http1_is_persistent,  1, _SC("u")),
 	_DECL_FUNC(method,  1, _SC("u")),
@@ -783,6 +824,7 @@ static SQRegFunction sq_h2o_req_t_methods[] =
 	_DECL_FUNC(res_is_delegated,  1, _SC("u")),
 	_DECL_FUNC(response_content_length,  -1, _SC("ui")),
 	_DECL_FUNC(response_headers,  -1, _SC("uss")),
+	_DECL_FUNC(response_cookies,  -1, _SC("uss")),
 	_DECL_FUNC(response_reason,  -1, _SC("us")),
 	_DECL_FUNC(response_status,  -1, _SC("ui")),
 	_DECL_FUNC(scheme,  1, _SC("u")),
@@ -858,9 +900,31 @@ static SQRESULT sq_mg_url_encode(HSQUIRRELVM v)
     return 1;
 }
 
+static SQRESULT
+sq_mg_crypto_get_md5(HSQUIRRELVM v)
+{
+	SQ_FUNC_VARS(v);
+
+    char buf[32 + 1];
+    unsigned char hash[16];
+    MD5_CTX ctx;
+    MD5_Init(&ctx);
+
+    for (int i = 2; i <= _top_; ++i) {
+        SQ_GET_STRING(v, i, p);
+        MD5_Update(&ctx, (const void *) p, p_size);
+    }
+
+    MD5_Final(hash, &ctx);
+    mg_bin2str(buf, hash, sizeof(hash));
+    sq_pushstring(v, buf, -1);
+    return 1;
+}
+
 #define _DECL_FUNC(name,nparams,tycheck) {_SC(#name),  sq_mg_##name,nparams,tycheck}
 static SQRegFunction sq_mg_methods[] =
 {
+	_DECL_FUNC(crypto_get_md5,  -2, _SC(".s")),
 	_DECL_FUNC(url_get_var,  3, _SC(".ss")),
 	_DECL_FUNC(url_decode,  2, _SC(".s")),
 	_DECL_FUNC(uri_decode,  2, _SC(".s")),

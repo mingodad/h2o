@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "h2o/lua_.h"
+#include <openssl/md5.h>
 
 static pthread_mutex_t h2o_lua_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -124,8 +125,31 @@ static int lua_mg_url_encode(lua_State *L)
     return 1;
 }
 
+static int
+lua_mg_crypto_get_md5(lua_State *L)
+{
+    int top = lua_gettop(L);
+    char buf[32 + 1];
+    unsigned char hash[16];
+    MD5_CTX ctx;
+    MD5_Init(&ctx);
+
+    for (int i = 2; i <= top; ++i) {
+        size_t src_size = 0;
+        const char *src = luaL_checklstring(L, i, &src_size);
+
+        MD5_Update(&ctx, (const void *) src, src_size);
+    }
+
+    MD5_Final(hash, &ctx);
+    mg_bin2str(buf, hash, sizeof(hash));
+    lua_pushstring(L, buf);
+    return 1;
+}
+
 static const luaL_reg h2o_lib[] =
 {
+	{"crypto_get_md5",	lua_mg_crypto_get_md5},
 	{"url_get_var",	lua_mg_url_get_var},
 	{"url_decode",	lua_mg_url_decode},
 	{"url_encode",	lua_mg_url_encode},
@@ -363,6 +387,46 @@ static int lua_h2o_req_get_set_response_headers(lua_State *L)
 {
     CHECK_H2O_REQUEST();
     return lua_h2o_req_get_set_headers0(L, req, req->res.headers);
+}
+
+static int lua_h2o_req_get_cookies0(lua_State *L, h2o_req_t *req, h2o_headers_t &headers)
+{
+    int argc = lua_gettop(L);
+    switch(argc)
+    {
+    case 1: //all cookies
+        {
+            return 0;
+        }
+    break;
+    case 2: //get cookie
+        {
+            size_t len;
+            const char *cookie = lua_tolstring(L, 2, &len);
+            const char *start;
+            int var_len = mg_find_cookie(req, cookie, &start);
+            if(var_len > 0){
+                lua_pushlstring(L, start, var_len);
+                return 1;
+            }
+            lua_pushnil(L);
+            return 1;
+        }
+        break;
+    }
+    return 0;
+}
+
+static int lua_h2o_req_get_cookies(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    return lua_h2o_req_get_cookies0(L, req, req->headers);
+}
+
+static int lua_h2o_req_get_response_cookies(lua_State *L)
+{
+    CHECK_H2O_REQUEST();
+    return lua_h2o_req_get_cookies0(L, req, req->res.headers);
 }
 
 static int lua_h2o_req_set_int_response_status(lua_State *L)
@@ -679,6 +743,7 @@ static const luaL_reg reqFunctions[] = {
     LUA_REG_REQ_GET_STR_FUNC(authority),
     LUA_REG_REQ_GET_INT_FUNC(bytes_sent),
     {"console", lua_h2o_req_console},
+    {"cookies", lua_h2o_req_get_cookies},
     LUA_REG_REQ_GET_INT_FUNC(content_length),
     LUA_REG_REQ_GET_INT_FUNC(default_port),
     LUA_REG_REQ_GET_STR_FUNC(entity),
@@ -698,6 +763,7 @@ static const luaL_reg reqFunctions[] = {
     LUA_REG_REQ_GET_STR_FUNC(remote_user),
     LUA_REG_REQ_GET_INT_FUNC(res_is_delegated),
     LUA_REG_REQ_SET_INT_FUNC(response_content_length),
+    {"response_cookies", lua_h2o_req_get_response_cookies},
     {"response_headers", lua_h2o_req_get_set_response_headers},
     LUA_REG_REQ_SET_STR_FUNC(response_reason),
     LUA_REG_REQ_SET_INT_FUNC(response_status),

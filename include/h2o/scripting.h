@@ -110,10 +110,14 @@ int mg_get_var(const char *data, size_t data_len,
 //   On error, -1 (either "Cookie:" header is not present at all, or the
 //   requested parameter is not found, or destination buffer is too small
 //   to hold the value).
-int mg_get_cookie(const struct mg_connection *,
-    const char *cookie_name, char *buf, size_t buf_len);
-int mg_find_cookie(const struct mg_connection *,
-    const char *cookie_name, const char **start);
+int mg_get_cookie(const char *buf, size_t buf_len, const char *cookie_name,
+                  char *dst, size_t dst_size);
+int mg_find_cookie(h2o_req_t *req, const char *cookie_name,
+                  const char **start);
+int mg_find_cookie(const char *buf, size_t buf_len, const char *cookie_name,
+                  const char **start);
+int mg_get_cookie(h2o_req_t *req, const char *cookie_name,
+                  char *dst, size_t dst_size);
 // URL-decode input buffer into destination buffer.
 // 0-terminate the destination buffer. Return the length of decoded data.
 // form-url-encoded data differs from URI encoding in a way that it
@@ -124,5 +128,6 @@ size_t mg_url_decode(const char *src, size_t src_len, char *dst,
 
 const char * mg_url_encode_to(const char *src, char *dst, size_t dst_len);
 char * mg_url_encode(const char *src);
+void mg_bin2str(char *to, const unsigned char *p, size_t len);
 
 #endif // H20_SCRIPTING_H

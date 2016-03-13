@@ -433,19 +433,14 @@ int mg_get_var(const char *buf, size_t buf_len, const char *name,
   return len;
 }
 
-int mg_find_cookie(h2o_req_t *req, const char *cookie_name,
+int mg_find_cookie(const char *buf, size_t buf_len, const char *cookie_name,
                   const char **start) {
   const char *s, *p, *end;
   int name_len, len = -1;
-  ssize_t idx = req->headers.find(H2O_TOKEN_COOKIE, SIZE_MAX);
-
-  if (idx <= 0) {
-    return -1;
-  }
-  s = req->headers[idx].value.base;
+  s = buf;
 
   name_len = (int) strlen(cookie_name);
-  end = s + strlen(s);
+  end = s + buf_len;
 
   for (; (s = strstr(s, cookie_name)) != NULL; s += name_len)
     if (s[name_len] == '=') {
@@ -458,12 +453,39 @@ int mg_find_cookie(h2o_req_t *req, const char *cookie_name,
         s++;
         p--;
       }
-      len = (p - s) + 1;
+      len = (p - s);
       *start = s;
       break;
     }
 
   return len;
+}
+
+int mg_get_cookie(const char *buf, size_t buf_len, const char *cookie_name,
+                  char *dst, size_t dst_size) {
+  const char *start;
+  int len;
+
+  len = mg_find_cookie(buf, buf_len, cookie_name, &start);
+
+  if( (len > 0) && (size_t(len) < dst_size) ) {
+      mg_strlcpy(dst, start, (size_t)len);
+      dst[len+1] = '\0';
+  } else dst[0] = '\0';
+
+  return len;
+}
+
+int mg_find_cookie(h2o_req_t *req, const char *cookie_name,
+                  const char **start) {
+  ssize_t idx = req->headers.find(H2O_TOKEN_COOKIE, SIZE_MAX);
+
+  if (idx <= 0) {
+    return -1;
+  }
+  h2o_header_t &hdr = req->headers[idx];
+
+  return mg_find_cookie(hdr.value.base, hdr.value.len, cookie_name, start);
 }
 
 int mg_get_cookie(h2o_req_t *req, const char *cookie_name,
@@ -475,7 +497,7 @@ int mg_get_cookie(h2o_req_t *req, const char *cookie_name,
 
   if( (len > 0) && (size_t(len) < dst_size) ) {
       mg_strlcpy(dst, start, (size_t)len);
-      dst[len] = '\0';
+      dst[len+1] = '\0';
   } else dst[0] = '\0';
 
   return len;
@@ -516,4 +538,16 @@ char *mg_url_encode(const char *src) {
         }
     }
     return dst;
+}
+
+// Stringify binary data. Output buffer must be twice as big as input,
+// because each byte takes 2 bytes in string representation
+void mg_bin2str(char *to, const unsigned char *p, size_t len) {
+  static const char *hex = "0123456789abcdef";
+
+  for (; len--; p++) {
+    *to++ = hex[p[0] >> 4];
+    *to++ = hex[p[0] & 0x0f];
+  }
+  *to = '\0';
 }
