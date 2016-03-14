@@ -263,44 +263,50 @@ void do_dispose_socket(h2o_socket_t *_sock)
 void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     auto sock = (h2o_evloop_socket_t *)_sock;
-    h2o_iovec_t *bufs;
-    WITH_MEM_ALLOCA_FREE(h2o_iovec_t *bufs_allocated);
+    if( (sock->super._cb.write == NULL) && (sock->_wreq.cnt == 0))
+    {
+        h2o_iovec_t *bufs;
+        WITH_MEM_ALLOCA_FREE(h2o_iovec_t *bufs_allocated);
 
-    assert(sock->super._cb.write == NULL);
-    assert(sock->_wreq.cnt == 0);
-    sock->super._cb.write = cb;
+        sock->super._cb.write = cb;
 
-    //write_core changes bufs so we store it twice
-    size_t sz = sizeof(*bufs) * bufcnt;
-    WITH_MEM_ALLOCA_FREE(bufs_allocated =) bufs = (h2o_iovec_t*)h2o_mem_alloca(sz);
-    memcpy(bufs, _bufs, sz);
+        //write_core changes bufs so we store it twice
+        size_t sz = sizeof(*bufs) * bufcnt;
+        WITH_MEM_ALLOCA_FREE(bufs_allocated =) bufs = (h2o_iovec_t*)h2o_mem_alloca(sz);
+        memcpy(bufs, _bufs, sz);
 
-    /* try to write now */
-    if (write_core(sock->fd, &bufs, &bufcnt) != 0) {
-        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
-        link_to_pending(sock);
-        goto CleanAlloca;
-    }
-    if (bufcnt == 0) {
-        /* write complete, schedule the callback */
-        link_to_pending(sock);
-        goto CleanAlloca;
-    }
+        /* try to write now */
+        if (write_core(sock->fd, &bufs, &bufcnt) != 0) {
+            sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+            link_to_pending(sock);
+            goto CleanAlloca;
+        }
+        if (bufcnt == 0) {
+            /* write complete, schedule the callback */
+            link_to_pending(sock);
+            goto CleanAlloca;
+        }
 
-    /* setup the buffer to send pending data */
-    if (bufcnt <= sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
-        sock->_wreq.bufs = sock->_wreq.smallbufs;
-    } else {
-        sock->_wreq.bufs = h2o_mem_alloc_for<h2o_iovec_t>(bufcnt);
-        sock->_wreq.alloced_ptr = sock->_wreq.bufs = sock->_wreq.bufs;
-    }
-    memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_iovec_t) * bufcnt);
-    sock->_wreq.cnt = bufcnt;
+        /* setup the buffer to send pending data */
+        if (bufcnt <= sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
+            sock->_wreq.bufs = sock->_wreq.smallbufs;
+        } else {
+            sock->_wreq.bufs = h2o_mem_alloc_for<h2o_iovec_t>(bufcnt);
+            sock->_wreq.alloced_ptr = sock->_wreq.bufs = sock->_wreq.bufs;
+        }
+        memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_iovec_t) * bufcnt);
+        sock->_wreq.cnt = bufcnt;
 
-    /* schedule the write */
-    link_to_statechanged(sock);
+        /* schedule the write */
+        link_to_statechanged(sock);
 CleanAlloca:
-    h2o_mem_alloca_free(bufs_allocated);
+        h2o_mem_alloca_free(bufs_allocated);
+    }
+    else
+    {
+        //FIXME: we need an error log/return something to indicate we had a problem
+        fprintf(stderr, "Trying to send a response more than once !\n");
+    }
 }
 
 void do_read_start(h2o_socket_t *_sock)
