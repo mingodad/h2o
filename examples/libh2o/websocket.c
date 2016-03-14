@@ -75,6 +75,23 @@ static void on_connect(uv_stream_t *server, int status)
     h2o_accept(&accept_ctx, sock);
 }
 
+/**Without this web browsers will not accept conections*/
+static void setup_ecc_key(SSL_CTX *ssl_ctx)
+{
+#ifdef SSL_CTX_set_ecdh_auto
+    SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
+#else
+    int nid = NID_X9_62_prime256v1;
+    EC_KEY *key = EC_KEY_new_by_curve_name(nid);
+    if (key == NULL) {
+        fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
+        return;
+    }
+    SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
+    EC_KEY_free(key);
+#endif
+}
+
 static int setup_ssl(const char *cert_file, const char *key_file)
 {
     SSL_load_error_strings();
@@ -84,6 +101,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     accept_ctx.ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
+    setup_ecc_key(accept_ctx.ssl_ctx);
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
