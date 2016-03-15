@@ -1025,6 +1025,29 @@ static int h2o_squilu_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
     return result;
 }
 
+static int h2o_squilu_call_func(HSQUIRRELVM v, const char *func_name)
+{
+    SQInteger result = 0;
+    int saved_top = sq_gettop(v);
+    sq_pushstring(v, func_name, -1);
+    if( (sq_getonroottable(v) == SQ_OK) && (sq_gettype(v, -1) == OT_CLOSURE))
+    {
+        sq_pushroottable(v);
+
+        if (sq_call (v, 1, SQTrue, SQTrue) == SQ_OK) {
+          /* run OK? */
+          sq_getinteger(v, -1, &result);
+        }
+        else
+        {
+            sq_errorfunc(v, "sq_call failed %d\n%s", __LINE__, sq_getlasterror_str(v));
+            result = -1;
+        }
+    }
+    sq_settop(v, saved_top);
+    return result;
+}
+
 struct squilu_configurator_t : h2o_scripting_configurator_t {
 
     squilu_configurator_t():h2o_scripting_configurator_t("squilu"){}
@@ -1120,6 +1143,10 @@ void h2o_squilu_handler_t::on_context_init(h2o_context_t *ctx)
 
     /* compile code (must be done for each thread) */
     /*int rc =*/ h2o_squilu_compile_code(handler_ctx->sq, &this->config, errbuf, sizeof(errbuf));
+
+    /* call script function to do initialization if exists */
+    h2o_squilu_call_func(handler_ctx->sq, "h2oContextInit");
+
     ctx->set_handler_context(this, handler_ctx);
 }
 
@@ -1129,6 +1156,9 @@ void h2o_squilu_handler_t::on_context_dispose(h2o_context_t *ctx)
 
     if (handler_ctx == NULL)
         return;
+
+    /* call script function to do deinitialization if exists */
+    h2o_squilu_call_func(handler_ctx->sq, "h2oContextDispose");
 
     sq_close(handler_ctx->sq);
     h2o_mem_free(handler_ctx);

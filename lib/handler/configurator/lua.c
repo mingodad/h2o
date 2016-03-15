@@ -1029,6 +1029,31 @@ static int h2o_lua_handle_request(h2o_handler_t *_handler, h2o_req_t *req)
     return result;
 }
 
+static int h2o_lua_call_func(lua_State *L, const char *func_name)
+{
+    int result = 0;
+    int saved_top = lua_gettop(L);
+    lua_pushcfunction(L, traceback);  /* push traceback function */
+    int error_func = lua_gettop(L);
+
+    lua_getglobal(L, func_name);
+    if(lua_isfunction(L,-1)) {
+
+        if(lua_pcall(L, 0, 1, error_func)) {
+            size_t error_len;
+            const char *error_msg = lua_tolstring(L, -1, &error_len);
+            if(show_errors_on_stdout) printf("%s\n", error_msg);
+            //write_error_message(conn, error_msg, error_len);
+            result = 0;
+        } else {
+            result = lua_tointeger(L, -1);
+        }
+    };
+    lua_settop(L, saved_top);
+
+    return result;
+}
+
 struct lua_configurator_t : h2o_scripting_configurator_t {
 
     lua_configurator_t():h2o_scripting_configurator_t("lua"){}
@@ -1138,6 +1163,9 @@ void h2o_lua_handler_t::on_context_init(h2o_context_t *ctx)
     /* compile code (must be done for each thread) */
     /*int rc =*/ h2o_lua_compile_code(handler_ctx->L, &this->config, errbuf, sizeof(errbuf));
 
+    /* call script function to do initialization if exists */
+    h2o_lua_call_func(handler_ctx->L, "h2oContextInit");
+
     ctx->set_handler_context(this, handler_ctx);
 }
 
@@ -1147,6 +1175,9 @@ void h2o_lua_handler_t::on_context_dispose(h2o_context_t *ctx)
 
     if (handler_ctx == NULL)
         return;
+
+    /* call script function to do deinitialization if exists */
+    h2o_lua_call_func(handler_ctx->L, "h2oContextDispose");
 
     lua_close(handler_ctx->L);
     h2o_mem_free(handler_ctx);
