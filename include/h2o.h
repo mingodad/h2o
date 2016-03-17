@@ -294,6 +294,7 @@ struct h2o_hostconf_t {
 
 struct h2o_protocol_callbacks_t {
     void (*request_shutdown)(h2o_context_t *ctx);
+    int (*foreach_request)(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 };
 
 struct h2o_globalconf_t {
