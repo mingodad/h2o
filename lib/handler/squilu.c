@@ -846,7 +846,7 @@ static SQRegFunction sq_h2o_req_t_methods[] =
 
 static SQRESULT sq_mg_url_get_var(HSQUIRRELVM v)
 {
-    SQ_FUNC_VARS_NO_TOP(v);
+    SQ_FUNC_VARS(v);
     SQ_GET_STRING(v, 2, data);
     SQ_GET_STRING(v, 3, name);
 
@@ -862,7 +862,11 @@ static SQRESULT sq_mg_url_get_var(HSQUIRRELVM v)
             return 1;
         }
     }
-    sq_pushnull(v);
+    else if(_top_ == 3)
+    {
+        sq_pushnull(v);
+    }
+    //else the 4th optional parameter is returned
     return 1;
 }
 
@@ -925,7 +929,7 @@ sq_mg_crypto_get_md5(HSQUIRRELVM v)
 static SQRegFunction sq_mg_methods[] =
 {
 	_DECL_FUNC(crypto_get_md5,  -2, _SC(".s")),
-	_DECL_FUNC(url_get_var,  3, _SC(".ss")),
+	_DECL_FUNC(url_get_var,  -3, _SC(".ss s|n")),
 	_DECL_FUNC(url_decode,  2, _SC(".s")),
 	_DECL_FUNC(uri_decode,  2, _SC(".s")),
 	_DECL_FUNC(url_encode,  2, _SC(".s")),
